@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img" aria-label="VEMO logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0d5f57"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="188" height="188" rx="42" fill="url(#bg)"/>
+  <!-- faint mosaic: vemödalen, the sea of identical snapshots VEMO governs -->
+  <g fill="#ffffff" opacity="0.12">
+    <rect x="138" y="24" width="13" height="13" rx="3"/><rect x="157" y="24" width="13" height="13" rx="3"/>
+    <rect x="138" y="43" width="13" height="13" rx="3"/><rect x="157" y="43" width="13" height="13" rx="3"/>
+  </g>
+  <!-- the gate / checkpoint -->
+  <path d="M58 154 V90 a42 42 0 0 1 84 0 V154" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round"/>
+  <!-- governed: a passing check -->
+  <path d="M74 116 l16 18 l38 -44" fill="none" stroke="#bbf7d0" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

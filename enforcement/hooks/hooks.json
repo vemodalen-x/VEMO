@@ -1,0 +1,33 @@
+{
+  "_comment": "VEMO enforcement hooks for Claude Code. Registered into .claude/settings.json by enforcement/install.sh. These run deterministic code in the agent loop — they 'cannot hallucinate'. Exit code 2 = block the action and feed stderr back to the agent.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "bash enforcement/hooks/guard-scope.sh",  "timeout": 5 },
+          { "type": "command", "command": "bash enforcement/hooks/guard-secret.sh",  "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "bash enforcement/hooks/guard-command.sh", "timeout": 5 }
+        ]
+      },
+      {
+        "matcher": "*",
+        "_comment": "v1.3 run-budget stop rule — counts every tool call; hard-stops a runaway only when auto mode is ON",
+        "hooks": [
+          { "type": "command", "command": "bash enforcement/hooks/guard-budget.sh", "timeout": 5 }
+        ]
+      }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "bash enforcement/hooks/check-acceptance.sh", "timeout": 8 } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "command": "bash enforcement/hooks/record-judge.sh", "timeout": 8 } ] }
+    ]
+  }
+}

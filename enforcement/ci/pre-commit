@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# VEMO authoritative backstop (v1.1) — safety.spec rules 1,2,3,5 + risk-tier integrity + R2 judge.
+# Installed as .git/hooks/pre-commit AND mirrored in CI. Does NOT depend on the agent: even a
+# human or a hookless agent hits it. CI re-runs it server-side so `--no-verify` cannot ship to main.
+#
+# v1.1 closes two v1.0 loopholes:
+#   * self-classification: the agent could label an R2 change "R0" to skip gates. Now the REQUIRED
+#     tier is computed from the staged paths and a downgrade is blocked.
+#   * skipped judge: R2 now requires judge.verdict == pass, mechanically.
+set -euo pipefail
+SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SELF/../.." && pwd)"
+export VEMO_ROOT="$ROOT"
+V="python3 $ROOT/enforcement/validators/task_state.py"
+staged="$(git diff --cached --name-only)"
+[ -z "$staged" ] && exit 0
+
+fail=0; note(){ echo "  ✗ $1"; fail=1; }
+rank(){ case "$1" in R2*) echo 3;; R1*) echo 2;; *) echo 1;; esac; }
+
+# Rule 2: plan-before-commit for any staged source file
+if echo "$staged" | grep -qE '\.(c|cc|cpp|h|hpp|py|ts|js|go|rs|java)$'; then
+  [ "$($V gate-check --gate plan-before-commit 2>/dev/null)" = "ok" ] || \
+    note "plan-before-commit: no active task plan for staged code (safety.spec#2)"
+fi
+
+# Rule 1: scope containment — every staged file inside the active task's scope_in
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  case "$($V scope-check --path "$ROOT/$f" 2>/dev/null)" in
+    in-scope|"") : ;;
+    out-of-scope)   note "scope: '$f' is outside the active task scope_in (safety.spec#1)";;
+    no-active-task) note "scope: no active task declares scope_in (safety.spec#1)";;
+  esac
+done <<< "$staged"
+
+# v1.1 — risk-tier integrity: REQUIRED tier (from staged paths) must not exceed the DECLARED tier
+required="$($V tier-required --paths $staged 2>/dev/null || echo R0)"
+declared="$($V get --field risk 2>/dev/null || echo R0)"; declared="${declared:-R0}"
+if [ "$(rank "$declared")" -lt "$(rank "$required")" ]; then
+  note "risk-tier downgrade: staged files require $required but the task declares $declared — no self-downgrade (safety.spec#tier)"
+fi
+
+# v1.1 — R2 must be independently judged
+if [ "$(rank "$required")" -eq 3 ] || [ "$(rank "$declared")" -eq 3 ]; then
+  v="$($V get --field judge.verdict 2>/dev/null || echo null)"
+  [ "$v" = "pass" ] || note "R2 requires governance-judge verdict=pass (got '$v') — see agents/governance-judge.md"
+fi
+
+# Rule 5: no secrets
+if git diff --cached -U0 | grep -iqE '(api[_-]?key|secret|password|token)["'"'"' ]*[:=]["'"'"' ]*[A-Za-z0-9/_+-]{16,}|BEGIN (RSA|OPENSSH) PRIVATE KEY'; then
+  note "secret-scan: possible credential in staged diff (safety.spec#5)"
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "[VEMO] commit blocked by enforcement backstop. Fix the cause above; do not --no-verify around it (CI re-checks)." >&2
+  exit 1
+fi
+exit 0

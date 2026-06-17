@@ -1,0 +1,141 @@
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ VEMO config — the ONE file you edit. Grouped by how often you touch it       │
+# │ (progressive disclosure — you can stop reading early):                       │
+# │   ESSENTIAL  (set these; `vemo init --preset` fills most):                   │
+# │              capability.tier · paths.build/smoke · risk_tiers.*.match_paths  │
+# │   COMMON     (sometimes): model_routing · auto_mode · run_budget             │
+# │   ADVANCED   (defaults are fine): enforcement · concurrency · observability  │
+# │ New here? run `vemo init --preset <python|node|cpp|docs>` and skip the rest. │
+# │ Learn the model: docs/MENTAL_MODEL.md · all verbs: `vemo help`               │
+# └───────────────────────────────────────────────────────────────────────────┘
+
+vemo:
+  version: "1.8.0"
+  upstream: ""            # optional: a VEMO upstream repo for sync/contribute/release
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CAPABILITY TIER — the knob that scales the framework to model strength.
+# ─────────────────────────────────────────────────────────────────────────────
+capability:
+  tier: high             # frontier | high | medium | low
+  # CAPABILITY-MONOTONIC RULE (specs/capability.spec.md): as tier ↑, PRESCRIPTION shrinks but
+  # VERIFICATION + BOUNDARIES + AUDIT hold/tighten — never the reverse. Stronger model = less
+  # hand-holding AND more independent, executed-ground-truth verification (the verifier problem).
+  # frontier → Mythos-class (e.g. Fable 5): trust long-horizon self-planning + self-tests; minimal
+  #            prescription; BUT pair with run_budget stop rules and keep the independent judge.
+  # high   → terse handshakes, model self-plans/self-verifies, JIT reads, judge on R2 only
+  # medium → explicit handshakes, judge on R1(critical paths)+R2
+  # low    → full handshakes, fuller reads, judge on R1+R2, smaller autonomous steps
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODEL ROUTING — which model handles which phase (cf. Kiro Auto router + pinning).
+# ─────────────────────────────────────────────────────────────────────────────
+model_routing:
+  long_horizon: fable-5  # multi-day / large-migration / R2 explore-and-build (Mythos-class). 2x cost — reserve it.
+  plan:        opus      # planning / architecture / decomposition
+  implement:   sonnet    # mechanical edits, refactors
+  judge:       opus      # independent verification (agents/governance-judge.md) — keep separate from frontier worker
+  mechanical:  haiku     # grep / build index / scan logs (cheap subagents)
+  default:     sonnet
+  # Cost rule (from Fable 5 analysis): route frontier ONLY to long-horizon/R2 where autonomy IS the product.
+  # Never send R0/R1 to a Mythos-class model ("renting a truck to deliver a letter").
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VERIFICATION — scales UP with capability (the verifier problem). v1.6.
+# ─────────────────────────────────────────────────────────────────────────────
+verification:
+  ground_truth_required: true   # a 'passed' acceptance needs a REAL run (exit codes + evidence log), not a claim
+  require_intent_narration: true # the agent must narrate intent; missing narration is a red flag (CoT monitoring)
+  independent_verifiers:        # judge panel size by capability tier for R2 (combats same-class blind spots)
+    frontier: 3
+    high: 2
+    medium: 1
+    low: 1
+  check_authorship_provenance: true  # block re-authoring agent work as human to dodge review (observed in Mythos 5)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RISK TIERS — ceremony scales with blast radius. Default to the lowest that fits.
+# ─────────────────────────────────────────────────────────────────────────────
+risk_tiers:
+  R0_trivial:
+    match_paths:  ["**/*.md", "docs/**", "*.txt", "**/*.json"]
+    gates:        [plan_inline]
+    judge:        false
+  R1_standard:
+    match_paths:  ["src/**", "lib/**", "app/**"]
+    gates:        [plan, acceptance]
+    judge:        "tier<=medium OR path:critical"
+  R2_critical:
+    match_paths:  ["src/core/**", "**/migrations/**", "**/auth/**", "infra/**"]
+    gates:        [plan, human_review, acceptance, procedure]
+    judge:        true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENFORCEMENT — gates are mechanism, not prose. Defense in depth.
+# ─────────────────────────────────────────────────────────────────────────────
+enforcement:
+  mode:         enforce  # v1.7: enforce | monitor  (monitor = observe-only: log, don't block — for onboarding, then flip)
+  hooks:        true     # client-side: fast feedback inside the agent loop
+  ci_backstop:  true     # server-side: authoritative; survives `git commit --no-verify`
+  block_on:
+    - scope_violation        # editing files outside the active task's Scope (In)
+    - missing_task_plan      # commit without a task file plan
+    - unverified_push        # push before acceptance passes
+    - destructive_command    # rm -rf / git reset --hard / out-of-repo writes
+    - secret_in_diff         # credentials/keys in a staged change
+  safety_invariant_of_capability: true  # v1.6: scope/destructive/secret/irreversible + run_budget NEVER relax as capability.tier rises
+  # Safety-critical guards FAIL CLOSED if the validator/python is unavailable (a missing guard is not a safe guard):
+  degrade_gracefully: false
+  fail_closed:
+    - scope_violation
+    - destructive_command
+    - secret_in_diff
+  enforce_risk_tier: true    # CI computes required tier from staged paths; blocks self-downgrade
+  require_judge_on_R2: true  # R2 push requires judge.verdict == pass
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATHS / RUNTIME
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+  tasks:        "tasks"
+  task_archive: "tasks/Archive"
+  specs:        "specs"
+  repo_root:    "."
+  test_entry:   []         # e.g. ["tests/smoke.sh"]
+  build:        ""         # full build command (R1/R2 acceptance)
+  smoke:        ""         # runtime smoke command
+
+concurrency:
+  stale_threshold_hours: 4   # kept from Wildpanda — multi-session takeover protocol
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RUN BUDGET / STOP RULES — Mythos-class models "run until the harness cuts them off".
+# Hard-stop when unattended (auto on); advisory when a human is present. v1.3/v1.6.
+# ─────────────────────────────────────────────────────────────────────────────
+run_budget:
+  enabled: true
+  max_tool_calls: 300
+  max_files_touched: 100
+  max_wall_clock_min: 240      # cap unattended runs at HOURS not days (Fable 5/Mythos analysis)
+  checkpoint_every_calls: 25
+  reanchor_every_calls: 50     # periodically re-state the original task intent (long runs drift / stop early)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTO MODE — full-auto / unattended. Removes human-APPROVAL pauses (auto-decide + record);
+# NEVER relaxes the mechanical guards or the judge. OFF by default (state in .vemo/auto_mode.json,
+# flipped only by `enforcement/automation/vemo-auto on|off`). See specs/automation.spec.md.
+# ─────────────────────────────────────────────────────────────────────────────
+auto_mode:
+  default_max_auto_tier: R1     # auto-approve up to here; R2 needs explicit --allow-r2
+  default_ttl_hours: 8          # auto-expire; 0 = never (discouraged)
+  require_judge: true           # judge MUST pass on every auto-approved R1+/R2 (replaces the human reviewer)
+  keep_mechanical_guards: true  # scope/destructive/secret guards ALWAYS fire, even in auto mode
+  preauthorized_commands: []    # destructive cmds allowed unattended (default none — explicit opt-in only)
+  record_to: ".vemo/auto_decisions.jsonl"
+
+observability:
+  telemetry: gate_events     # off | gate_events | full — logs gate hit/miss to .vemo/telemetry.jsonl
+  eval_on_release: true      # run eval/ conformance before cutting a release
+
+exclusions:
+  third_party: ["3rdparty/**", "vendor/**", "node_modules/**"]
