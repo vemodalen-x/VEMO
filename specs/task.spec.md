@@ -44,7 +44,7 @@ heartbeat: 2026-06-16T14:55
 Rationale: a stronger model needs *outcomes + verification*, not step-by-step prescription. As you upgrade
 the model, raise the tier and the framework gets lighter automatically.
 
-**`tier=frontier` (Mythos-class, e.g. Fable 5, v1.3):** the lightest prescription of all — trust long-horizon
+**`tier=frontier` (Mythos-class, e.g. Fable 5):** the lightest prescription of all — trust long-horizon
 self-planning and the model's own tests/self-checks. But autonomy raises the value of guardrails, not lowers
 it, so frontier work **must** run under `run_budget` stop rules (these models "run until the harness cuts
 them off") and still gets the independent judge on R2. Route frontier models (`model_routing.long_horizon`)

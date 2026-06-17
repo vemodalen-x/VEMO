@@ -31,10 +31,14 @@ Auto mode must not touch any of these — they are mechanism, not human-approval
 2. **Risk-tier integrity** — diff-derived tier; no self-downgrade.
 3. **Independent judge** — on every auto-approved R1+/R2, `judge.verdict == pass` is **required**; a `fail` blocks even in auto mode. The judge replaces the absent human reviewer, so auto mode makes it *more* mandatory, not less.
 4. **Acceptance-before-push** — measurable criteria must pass; auto mode does not fabricate a pass.
-5. **Run budget / stop rules (v1.3)** — an unattended run must be bounded: `run_budget.enabled: true` is
+5. **Run budget / stop rules** — an unattended run must be bounded: `run_budget.enabled: true` is
    required for auto mode, and `vemo-auto on` resets the counter. `enforcement/hooks/guard-budget.sh`
    **hard-stops** the run (exit 2) when a budget limit is hit while auto mode is ON — this is the mechanical
    answer to a Mythos-class model that would otherwise "run until cut off" with no human watching.
+
+6. **Rule of Two / lethal trifecta** — a task touching all 3 of {private_data, untrusted_content,
+   external_comms} (`trifecta-check` = 3/3) is **not auto-approvable**: auto mode stops and requires explicit
+   human approval, regardless of risk tier (OWASP ASI01 — prompt-injection goal hijack).
 
 ## 4. Risk ceiling (safe defaults)
 - `auto_mode.max_auto_tier` default **R1**: auto-proceed on R0/R1; **R2 still needs a human** unless enabled with `--allow-r2` (which requires an explicit confirmation token and is recorded as a high-trust grant).

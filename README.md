@@ -8,16 +8,13 @@
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.8.0-0d9488?style=for-the-badge)
-![conformance](https://img.shields.io/badge/conformance-9%2F9-16a34a?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.0.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
-![deps](https://img.shields.io/badge/core%20deps-none-0891b2?style=for-the-badge)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-7c3aed?style=for-the-badge)](https://github.com/vemodalen-x/VEMO/pulls)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
 [Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
-<img src="assets/demo.svg" alt="vemo eval → 9/9 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
+<img src="assets/demo.svg" alt="vemo eval → 11/11 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
 
 </div>
 
@@ -151,7 +148,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |
-| Threat model · roadmap · the 3-round critique | [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) · [docs/CRITIQUE_LOG.md](docs/CRITIQUE_LOG.md) |
+| Threat model · roadmap | [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) |
 | Look up config / changes | [vemo.config.yaml](vemo.config.yaml) · [CHANGELOG.md](CHANGELOG.md) |
 
 ## 🌱 Credits
@@ -165,7 +162,7 @@ long-horizon model safety. It openly credits the best practices it stands on:
 - **[Diátaxis](https://diataxis.fr/)** — docs organized by user need.
 - Fable 5 / Mythos analysis (2026) — the run-budget stop rules and the evidence-completeness judge check.
 
-> See [docs/FABLE5_MYTHOS_OPTIMIZATION.md](docs/FABLE5_MYTHOS_OPTIMIZATION.md) for the model-scaling trail, including notes on which sources are speculative.
+> See [docs/SCALING.md](docs/SCALING.md) for why VEMO holds up — and gets *more* useful — as models get stronger.
 
 ## 🤝 Contributing
 
@@ -185,7 +182,7 @@ If a governance framework that *proves* it works (and tells you where it doesn't
 
 ## ⚠️ Status
 
-**v1.8.0 — active.** VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
+**Status.** VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
 `vemo.config.yaml`. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) reflect 2026 Anthropic
 releases — swap them freely for whatever you run.
 

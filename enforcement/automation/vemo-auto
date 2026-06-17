@@ -70,7 +70,7 @@ def cmd_on(a):
     print(f"[vemo-auto] AUTO MODE ON — max_auto_tier={a.max_tier} allow_r2={bool(a.allow_r2)} "
           f"expires={st['expires_at'] or 'never'} by={st['enabled_by']}")
     print("  Reminder: mechanical safety guards (scope/destructive/secret) + the R2 judge STILL apply.")
-    # v1.3: reset the run-budget counter so this unattended run is bounded from zero
+    # reset the run-budget counter so this unattended run is bounded from zero
     json.dump({"started": now.isoformat(timespec="minutes"), "tool_calls": 0, "files": []},
               open(os.path.join(ROOT, ".vemo", "run.json"), "w", encoding="utf-8"), indent=2)
     print("  Run-budget counter reset. Ensure run_budget.enabled:true in vemo.config.yaml — Mythos-class "

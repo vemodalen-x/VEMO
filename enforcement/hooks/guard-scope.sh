@@ -19,7 +19,7 @@ target="$(printf '%s' "$payload" | python3 -c 'import sys,json;d=json.load(sys.s
 [ -z "$target" ] && exit 0   # nothing to check
 
 if ! command -v python3 >/dev/null 2>&1 || [ ! -f "$VALIDATOR" ]; then
-  # v1.1: scope is safety-critical → FAIL CLOSED unless the project explicitly opts into fail-open.
+  # scope is safety-critical → FAIL CLOSED unless the project explicitly opts into fail-open.
   log scope_guard_degraded "$target"
   if grep -qiE 'degrade_gracefully:[[:space:]]*true' "$ROOT/vemo.config.yaml" 2>/dev/null; then
     echo "[VEMO] scope guard degraded (validator unavailable) — degrade_gracefully=true, allowing + logging." >&2

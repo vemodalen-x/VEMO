@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VEMO PreToolUse(all tools) hook — RUN BUDGET / STOP RULES (v1.3, from the Fable 5 analysis).
+# VEMO PreToolUse(all tools) hook — RUN BUDGET / STOP RULES.
 # Mythos-class models "run until the harness cuts them off." This counts tool calls / files / wall-clock
 # per run and stops a runaway. Enforcement is asymmetric by who is watching:
 #   * AUTO MODE ON (unattended) -> HARD stop (exit 2): no human is there to catch a runaway.

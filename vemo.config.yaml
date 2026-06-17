@@ -10,7 +10,7 @@
 # └───────────────────────────────────────────────────────────────────────────┘
 
 vemo:
-  version: "1.8.0"
+  version: "1.0.0"
   upstream: ""            # optional: a VEMO upstream repo for sync/contribute/release
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ risk_tiers:
 # ENFORCEMENT — gates are mechanism, not prose. Defense in depth.
 # ─────────────────────────────────────────────────────────────────────────────
 enforcement:
-  mode:         enforce  # v1.7: enforce | monitor  (monitor = observe-only: log, don't block — for onboarding, then flip)
+  mode:         enforce  # enforce | monitor  (monitor = observe-only: log, don't block — for onboarding, then flip)
   hooks:        true     # client-side: fast feedback inside the agent loop
   ci_backstop:  true     # server-side: authoritative; survives `git commit --no-verify`
   block_on:
@@ -83,7 +83,7 @@ enforcement:
     - unverified_push        # push before acceptance passes
     - destructive_command    # rm -rf / git reset --hard / out-of-repo writes
     - secret_in_diff         # credentials/keys in a staged change
-  safety_invariant_of_capability: true  # v1.6: scope/destructive/secret/irreversible + run_budget NEVER relax as capability.tier rises
+  safety_invariant_of_capability: true  # scope/destructive/secret/irreversible + run_budget NEVER relax as capability.tier rises
   # Safety-critical guards FAIL CLOSED if the validator/python is unavailable (a missing guard is not a safe guard):
   degrade_gracefully: false
   fail_closed:
@@ -92,6 +92,9 @@ enforcement:
     - secret_in_diff
   enforce_risk_tier: true    # CI computes required tier from staged paths; blocks self-downgrade
   require_judge_on_R2: true  # R2 push requires judge.verdict == pass
+  rule_of_two: true          # v1.9 (OWASP ASI01 / Meta "Rule of Two"): a task touching all 3 lethal-trifecta
+                             # properties {private_data, untrusted_content, external_comms} needs explicit human
+                             # approval; unattended auto mode must STOP. Declare per-task via the `trifecta:` field.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PATHS / RUNTIME

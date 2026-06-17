@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """vemo — one command for the whole framework.
 
-Usability layer (v1.4): wraps the enforcement scripts behind friendly verb subcommands so users type
+Usability layer: wraps the enforcement scripts behind friendly verb subcommands so users type
 `vemo status` instead of `python3 enforcement/validators/task_state.py auto-status`. Convention over
 configuration + progressive disclosure: `vemo` alone prints the map; `vemo explain <topic>` teaches a
 concept in one plain sentence. Pure stdlib; resolves its own repo root, so it works wherever VEMO is dropped.

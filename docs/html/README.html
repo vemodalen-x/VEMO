@@ -1,0 +1,378 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VEMO · VEMO</title><style>
+:root{--teal:#0d9488;--teal-d:#0f766e;--accent:#14b8a6;--bg:#f8fafc;--panel:#fff;--ink:#1e293b;
+--muted:#64748b;--line:#e2e8f0;--code:#f1f5f9;--codeink:#0f172a}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+color:var(--ink);background:var(--bg)}
+a{color:var(--teal-d);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:flex;min-height:100vh;max-width:1200px;margin:0 auto}
+nav.side{width:262px;flex:0 0 262px;background:var(--panel);border-right:1px solid var(--line);
+padding:22px 16px;position:sticky;top:0;height:100vh;overflow:auto}
+nav.side .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:var(--teal-d);
+margin:0 6px 4px;letter-spacing:.3px}
+nav.side .brand img{width:30px;height:30px}
+nav.side .tag{color:var(--muted);font-size:11.5px;margin:0 6px 16px;line-height:1.45}
+nav.side .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+margin:18px 6px 6px;font-weight:700}
+nav.side a.item{display:block;padding:5px 10px;border-radius:7px;color:var(--ink);font-size:14px}
+nav.side a.item:hover{background:var(--code);text-decoration:none}
+nav.side a.item.active{background:var(--teal);color:#fff;font-weight:600}
+nav.side a.guide{display:block;margin:4px 6px 8px;padding:8px 10px;border-radius:8px;background:linear-gradient(135deg,var(--teal),var(--accent));color:#fff;font-weight:600;font-size:13.5px}
+main{flex:1;min-width:0;padding:42px 52px 80px}
+.content{max-width:820px}
+h1,h2,h3,h4{line-height:1.25;font-weight:700;margin:1.6em 0 .5em}
+h1{font-size:2em;margin-top:.2em;padding-bottom:.3em;border-bottom:2px solid var(--line)}
+h2{font-size:1.45em;padding-bottom:.25em;border-bottom:1px solid var(--line)}
+h3{font-size:1.18em}
+p,li{color:#27313f}
+code{background:var(--code);color:var(--codeink);padding:.15em .4em;border-radius:5px;font-size:.88em;
+font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:10px;overflow:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;color:inherit;padding:0}
+blockquote{margin:1em 0;padding:.4em 1.1em;border-left:4px solid var(--accent);background:#f0fdfa;
+color:#334155;border-radius:0 8px 8px 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:14.5px;display:block;overflow:auto}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:700}
+tr:nth-child(even) td{background:#fcfdfe}
+hr{border:none;border-top:1px solid var(--line);margin:2em 0}
+img{max-width:100%}
+.topbar{display:none}
+.footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+@media(max-width:860px){.layout{display:block}nav.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line)}main{padding:24px 20px 60px}}
+</style></head><body>
+<div class="layout">
+<nav class="side">
+<div class="brand"><img src="../../assets/logo.svg" alt="">VEMO</div>
+<div class="tag">Velocity-first · Enforced · Model-aware Orchestration</div>
+<a class="guide" href="../GUIDE.html">🖼️ Visual guide &amp; diagrams</a>
+<a class="item" href="index.html">Home</a>
+<div class="grp">Get started</div>
+<a class="item active" href="README.html">VEMO</a>
+<a class="item" href="QUICKSTART.html">Quickstart (5 minutes)</a>
+<a class="item" href="MENTAL_MODEL.html">VEMO in 5 ideas (the mental model)</a>
+<div class="grp">Understand</div>
+<a class="item" href="SCALING.html">Why VEMO works *better*, not worse, as models get stronger</a>
+<a class="item" href="COMPLIANCE.html">VEMO controls ↔ 2026 governance standards</a>
+<a class="item" href="OWASP_AGENTIC_TOP10.html">VEMO ↔ OWASP Top 10 for Agentic Security (ASI01–ASI10)</a>
+<a class="item" href="AGENTS.html">AGENTS.md — VEMO entry (thin router)</a>
+<div class="grp">Reference</div>
+<a class="item" href="guide-index.html">VEMO docs — index (organized by what you're trying to do)</a>
+<a class="item" href="CHANGELOG.html">Changelog</a>
+<a class="item" href="ROADMAP.html">VEMO roadmap</a>
+<a class="item" href="SECURITY.html">Security & threat model</a>
+<a class="item" href="CONTRIBUTING.html">Contributing to VEMO</a>
+<a class="item" href="CONTRIBUTORS.html">Contributors</a>
+<div class="grp">Announcement</div>
+<a class="item" href="ANNOUNCEMENT.html">VEMO — governance your AI agent can't talk its way out of</a>
+<div class="grp">Specs</div>
+<a class="item" href="safety.spec.html">safety.spec — Non-negotiables (MECHANICALLY ENFORCED)</a>
+<a class="item" href="task.spec.html">task.spec — Risk-tiered lifecycle (velocity engine)</a>
+<a class="item" href="verify.spec.html">verify.spec — Acceptance + independent verification</a>
+<a class="item" href="capability.spec.html">capability.spec — Capability-monotonic governance</a>
+<a class="item" href="concurrency.spec.html">concurrency.spec — Multi-session safety</a>
+<a class="item" href="coding.spec.html">coding.spec — Baseline code rules (advisory) + artifact provenance</a>
+<a class="item" href="comment.spec.html">comment.spec — Function-comment governance (advisory)</a>
+<a class="item" href="automation.spec.html">automation.spec — Full-Auto (unattended) mode</a>
+</nav>
+<main><div class="content"><div align="center">
+
+<img src="../../assets/logo.svg" alt="VEMO logo" width="128" />
+
+# VEMO
+
+### Velocity-first · Enforced · Model-aware Orchestration
+
+**Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
+
+![version](https://img.shields.io/badge/version-1.0.0-0d9488?style=for-the-badge)
+![conformance](https://img.shields.io/badge/conformance-11%2F11-16a34a?style=for-the-badge)
+![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
+![deps](https://img.shields.io/badge/core%20deps-none-0891b2?style=for-the-badge)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-7c3aed?style=for-the-badge)](https://github.com/vemodalen-x/VEMO/pulls)
+[![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
+
+[Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
+
+<img src="../../assets/demo.svg" alt="vemo eval → 11/11 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
+
+</div>
+
+<hr>
+<blockquote>
+<p><strong>What it is, plainly:</strong> a small set of Markdown specs + thin scripts you drop into any repository. It works
+with any agent harness that can read Markdown and run hooks (Claude Code, etc.). <strong>Core dependencies: none</strong>
+— Markdown + YAML + a little stdlib Python. The governance skills/CLI use the <a href="https://cli.github.com/">GitHub CLI</a>.</p>
+</blockquote>
+<h2 id="the-name">✨ The name</h2>
+<p>VEMO is named after <strong>vemödalen</strong> — a word coined by John Koenig in <em>The Dictionary of Obscure Sorrows</em>:</p>
+<blockquote>
+<p><em>“the frustration of photographing something amazing when thousands of identical photos already exist — the
+same sunset, the same waterfall — each one a thumbprint in an endless mosaic of indistinguishable snapshots.”</em></p>
+</blockquote>
+<p>It's the right name for an era when AI agents generate <strong>oceans of plausible, look-alike, untraceable code</strong>.
+VEMO is the layer that makes every change <strong>intentional, verified, and traceable</strong> — so your codebase isn't
+just one more indistinguishable snapshot.</p>
+<p>And in that same spirit, VEMO is honest about its own originality: it stands on public best practices and its
+real contribution is making good, known patterns <strong>mechanical</strong> instead of merely written down. (See <a href="#-credits">Credits</a>.)</p>
+<h2 id="why-vemo">🤔 Why VEMO</h2>
+<p>AI coding agents are powerful but <strong>stateless and eager</strong>. Left ungoverned, the failure modes are predictable:</p>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Ungoverned</th>
+<th>VEMO's answer</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔄 Lost context across sessions</td>
+<td>repeats work, contradicts past decisions</td>
+<td>repo <em>is</em> the memory — durable task state in machine-readable front-matter</td>
+</tr>
+<tr>
+<td>⚡ Two sessions edit the same file</td>
+<td>silent clobber</td>
+<td><code>chat_id</code> + heartbeat + takeover protocol (and a CI ownership check)</td>
+</tr>
+<tr>
+<td>🚫 Ships unverified</td>
+<td>"looks done" merges</td>
+<td>acceptance gates + an <strong>independent judge</strong> on critical work</td>
+</tr>
+<tr>
+<td>📉 Rule drift</td>
+<td>rules live only in someone's head</td>
+<td>rules live in the repo; the critical ones are <strong>enforced by hooks/CI</strong></td>
+</tr>
+<tr>
+<td>🏃 Runaway autonomy</td>
+<td>a long-horizon model "runs until cut off"</td>
+<td><strong>run-budget stop rules</strong> — hard-stop when unattended</td>
+</tr>
+</tbody>
+</table>
+<p>The thread: <strong>the rules that matter are mechanism, not hope.</strong> A "hard gate" written only as prose is a gate
+that fails the moment the model doesn't read it.</p>
+<h2 id="what-you-get-five-shifts">🚀 What you get — five shifts</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Most frameworks</th>
+<th>VEMO</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Gates are <strong>prose</strong> the model may ignore</td>
+<td><strong>Mechanically enforced</strong> (hooks + CI backstop) — they can't be argued with</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Front-load</strong> every spec each session</td>
+<td><strong>Just-in-time</strong> loading — only the specs a task needs</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>One</strong> ceremony level for everything</td>
+<td><strong>Risk-tiered</strong>: R0 fast · R1 standard · R2 critical</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Ceremony is a <strong>constant</strong></td>
+<td><strong>Scales with your model</strong> (<code>capability.tier</code>: frontier→low)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Agent <strong>self-reports</strong> "done"</td>
+<td>An <strong>independent judge</strong> verifies high-risk gates</td>
+</tr>
+</tbody>
+</table>
+<h2 id="quickstart">⚡ Quickstart</h2>
+<pre><code class="language-bash"># 1) drop VEMO into your repo
+cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ &amp;&amp; cd your-repo
+
+# 2) one command — installs hooks + git pre-commit, preconfigures build/test for your stack
+python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
+export PATH=&quot;$PWD/bin:$PATH&quot;                  # so you can just type `vemo`
+
+# 3) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
+cp tasks/_TASK_TEMPLATE.md tasks/T-myfeature.md   # set  scope_in: [&quot;src/feature/**&quot;]  risk: R1
+vemo status                                       # where am I?    vemo explain gates
+</code></pre>
+<p><strong>The "aha":</strong> ask your agent to edit a file outside <code>scope_in</code> — the hook blocks it. You didn't have to police it.</p>
+<p>▶ Full walkthrough: <strong><a href="QUICKSTART.html">docs/QUICKSTART.md</a></strong> · the model in 5 ideas: <strong><a href="MENTAL_MODEL.html">docs/MENTAL_MODEL.md</a></strong> · 🖼️ visual guide + diagrams: <strong><a href="../GUIDE.html">docs/GUIDE.html</a></strong></p>
+<h2 id="architecture">🧭 Architecture</h2>
+<p>Five layers — the lower you go, the more it's <em>enforced mechanism</em> rather than <em>advisory prose</em>:</p>
+<p align="center"><img src="../../assets/architecture.svg" alt="VEMO layered architecture" width="760" /></p>
+
+<pre><code>┌ AGENTS.md ───────────── thin router: loads config + safety, then JIT-loads the rest   (prose)
+├ vemo.config.yaml ────── the ONE file you edit: tier · routing · risk_tiers · budget    (config)
+├ specs/ ──────────────── safety · task · verify · concurrency · coding · automation     (prose, JIT)
+├ enforcement/ ────────── ⛨ hooks (client) + CI pre-commit (server) + validator      ◀── MECHANISM
+└ agents/ · eval/ · bin/  governance-judge · conformance scenarios · the `vemo` CLI      (verify · tooling)
+</code></pre>
+<p>Enforcement is <strong>defense-in-depth</strong> — a gate never depends on the agent's goodwill:</p>
+<pre><code>agent → ⛨ PreToolUse hook → action runs → git commit/push → ⛨ CI / pre-commit → ✓ main
+         scope·cmd·secret·budget            (if allowed)        tier·R2 judge·acceptance
+         (fast, client-side)                                    (authoritative; --no-verify can't pass it)
+</code></pre>
+<p>🖼️ <strong>Rich, color diagrams</strong> (layered stack, request lifecycle, the two-walls pipeline, and a risk×capability
+ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></strong>.</p>
+<h2 id="the-vemo-cli">🔧 The <code>vemo</code> CLI</h2>
+<p>One verb-based entry point (run <code>vemo</code> for the map, <code>vemo explain &lt;topic&gt;</code> to learn a concept in one line):</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vemo init [--preset python\|node\|cpp\|docs]</code></td>
+<td>set up VEMO in this repo (preset + hooks + tasks/)</td>
+</tr>
+<tr>
+<td><code>vemo status</code></td>
+<td>plain-language dashboard: tier · enforcement · budget · auto mode · active task</td>
+</tr>
+<tr>
+<td><code>vemo doctor</code></td>
+<td>health check (config, hooks, tools)</td>
+</tr>
+<tr>
+<td><code>vemo selfcheck</code></td>
+<td>framework internal-consistency lint</td>
+</tr>
+<tr>
+<td><code>vemo eval</code></td>
+<td>run the executable conformance harness (writes <code>eval/out/report.json</code>)</td>
+</tr>
+<tr>
+<td><code>vemo explain &lt;topic&gt;</code></td>
+<td><code>tiers · gates · auto · budget · judge · capability · presets</code></td>
+</tr>
+<tr>
+<td><code>vemo auto on\|off\|status</code></td>
+<td>full-auto (unattended) mode — records every decision; OFF by default</td>
+</tr>
+<tr>
+<td><code>vemo budget status\|reset</code></td>
+<td>run-budget / stop rules</td>
+</tr>
+<tr>
+<td><code>vemo tier &lt;paths…&gt;</code> / <code>vemo check &lt;path&gt;</code></td>
+<td>required risk tier / is a path in scope?</td>
+</tr>
+</tbody>
+</table>
+<h2 id="skills">🧩 Skills</h2>
+<p>Reusable, script-backed procedures the agent auto-invokes by their frontmatter <code>description</code> (catalog: <a href="_catalog.html">skill/_catalog.md</a>):</p>
+<table>
+<thead>
+<tr>
+<th>Skill</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>call-graph</code></td>
+<td>who-calls / what-calls / chains / impact (tool-backed: <code>cg.py</code>)</td>
+</tr>
+<tr>
+<td><code>flow-discovery</code></td>
+<td>generate a flow doc from real call chains</td>
+</tr>
+<tr>
+<td><code>docs-sync</code></td>
+<td>keep README / GUIDE / docs in sync</td>
+</tr>
+<tr>
+<td><code>governance-sync</code> · <code>-contribute</code> · <code>-release</code></td>
+<td>pull upstream updates · PR improvements back · cut a release</td>
+</tr>
+<tr>
+<td><code>automation-mode</code></td>
+<td>enter full-auto (unattended) mode</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Skills are intentionally thin: contracts stay readable, deterministic work lives in scripts, and release-time
+documentation updates are routed through <code>docs-sync</code>.</p>
+</blockquote>
+<h2 id="documentation">📚 Documentation</h2>
+<p>Organized by need (<a href="https://diataxis.fr/">Diátaxis</a>): <strong>learn → do → look-up → understand.</strong></p>
+<table>
+<thead>
+<tr>
+<th>I want to…</th>
+<th>Go to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>See the whole picture (usage + architecture diagrams)</td>
+<td>🖼️ <a href="../GUIDE.html">docs/GUIDE.html</a></td>
+</tr>
+<tr>
+<td>Get working in 5 minutes</td>
+<td><a href="QUICKSTART.html">docs/QUICKSTART.md</a></td>
+</tr>
+<tr>
+<td>Understand how VEMO thinks</td>
+<td><a href="MENTAL_MODEL.html">docs/MENTAL_MODEL.md</a></td>
+</tr>
+<tr>
+<td>Find the right doc fast</td>
+<td><a href="guide-index.html">docs/INDEX.md</a></td>
+</tr>
+<tr>
+<td>Threat model · roadmap</td>
+<td><a href="SECURITY.html">SECURITY.md</a> · <a href="ROADMAP.html">ROADMAP.md</a></td>
+</tr>
+<tr>
+<td>Look up config / changes</td>
+<td><a href="../../vemo.config.yaml">vemo.config.yaml</a> · <a href="CHANGELOG.html">CHANGELOG.md</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="credits">🌱 Credits</h2>
+<p>VEMO combines public patterns from agent governance, spec-driven development, documentation architecture, and
+long-horizon model safety. It openly credits the best practices it stands on:</p>
+<ul>
+<li><strong><a href="https://github.com/github/spec-kit">GitHub Spec Kit</a></strong> — <code>init</code> + preset ergonomics, spec-driven workflow.</li>
+<li><strong><a href="https://github.com/humanlayer/12-factor-agents">12-Factor Agents</a></strong> — own-your-context, stateless reducer.</li>
+<li><strong><a href="https://agents.md/">AGENTS.md</a></strong> + Anthropic's <em>context engineering</em> — thin, just-in-time entry.</li>
+<li><strong><a href="https://diataxis.fr/">Diátaxis</a></strong> — docs organized by user need.</li>
+<li>Fable 5 / Mythos analysis (2026) — the run-budget stop rules and the evidence-completeness judge check.</li>
+</ul>
+<blockquote>
+<p>See <a href="SCALING.html">docs/SCALING.md</a> for why VEMO holds up — and gets <em>more</em> useful — as models get stronger.</p>
+</blockquote>
+<h2 id="contributing">🤝 Contributing</h2>
+<p>PRs welcome. VEMO <strong>governs itself</strong> — changes flow through its own task lifecycle, and the same hooks/CI that
+protect consumers protect this repo. See <strong><a href="CONTRIBUTING.html">CONTRIBUTING.md</a></strong>. Good first contributions:
+a new <code>presets/&lt;stack&gt;.yaml</code>, a new <code>eval/</code> scenario, or a Windows hook runner.</p>
+<h2 id="star-history">⭐ Star history</h2>
+<p><a href="https://star-history.com/#vemodalen-x/VEMO&Date"><img src="https://api.star-history.com/svg?repos=vemodalen-x/VEMO&type=Date" width="560" alt="Star history chart" /></a></p>
+<p>If a governance framework that <em>proves</em> it works (and tells you where it doesn't) is what you've been missing — a ⭐ helps others find it.</p>
+<h2 id="license">📄 License</h2>
+<p><a href="../../LICENSE">MIT</a> © 2026 The VEMO Authors.</p>
+<h2 id="status">⚠️ Status</h2>
+<p><strong>Status.</strong> VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
+<code>vemo.config.yaml</code>. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) reflect 2026 Anthropic
+releases — swap them freely for whatever you run.</p>
+<div align="center"><sub>governance that gets out of your way — until it shouldn't.</sub></div>
+<div class="footer">VEMO documentation · rendered from Markdown by <code>docs/build_html.py</code>.
+For the rich visual guide see <a href="../GUIDE.html">GUIDE.html</a>.</div>
+</div></main>
+</div></body></html>

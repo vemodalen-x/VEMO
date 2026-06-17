@@ -45,6 +45,5 @@ python3 enforcement/validators/task_state.py verify-plan --risk R2
 ```
 
 ## Source
-Fable 5 / Mythos 5 system-card analysis — digitalapplied.com, *"Claude Fable 5 & Mythos 5: Agentic Coding Deep
-Dive (2026)"*; plus the v1.3 sources (CodeRabbit / MindStudio / Vellum) in
-[`FABLE5_MYTHOS_OPTIMIZATION.md`](FABLE5_MYTHOS_OPTIMIZATION.md).
+Public Fable 5 / Mythos 5 system-card analysis — digitalapplied.com, *"Claude Fable 5 & Mythos 5: Agentic
+Coding Deep Dive (2026)"*; plus CodeRabbit / MindStudio / Vellum on long-horizon-autonomy failure modes.

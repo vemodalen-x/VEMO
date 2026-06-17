@@ -23,13 +23,13 @@ indistinguishable snapshot. Fitting, for an era drowning in look-alike AI-genera
 
 > It's the only one whose "hard gates" are **mechanical** (Claude Code hooks + a git/CI backstop + a
 > machine-readable task state) instead of prose — **and we ship a runnable conformance suite that proves they
-> fire (currently 9/9).** A gate that only exists in a Markdown file is a gate the model can ignore.
+> fire (currently 11/11).** A gate that only exists in a Markdown file is a gate the model can ignore.
 
 ## Three things that'll make you star it
 
 1. **Gates you can't argue with.** Edit a file outside your task's scope → blocked. `git reset --hard` →
    blocked. Push before tests actually ran (with exit codes + a log) → blocked. Not by hoping — by a hook that
-   *can't hallucinate*. Run `vemo eval` and watch 9/9 gates fire on real fixtures. (The suite found and fixed a
+   *can't hallucinate*. Run `vemo eval` and watch 11/11 gates fire on real fixtures. (The suite found and fixed a
    real bug in VEMO itself on its first run — that's the kind of honesty we ship with.)
 2. **It gets *lighter* as your model gets *stronger*.** One knob — `capability.tier` — and ceremony shrinks
    while verification *tightens* (more independent checks, never fewer). Upgrade Opus → Fable 5, bump the tier,

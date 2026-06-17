@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""eval/run.py — executable conformance runner for VEMO's own mechanisms (v1.7).
+"""eval/run.py — executable conformance runner for VEMO's own mechanisms.
 
 Turns eval/ from prose scenarios into a RUNNABLE harness: it exercises the validator with controlled
 fixtures in isolated sandboxes and asserts the gate outcomes the SC scenarios describe. Produces real
@@ -27,8 +27,8 @@ def sandbox(tier=None, task=None):
     return d
 
 
-def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null", evidence=""):
-    return (f"---\nid: T\nrisk: {risk}\nstate: {state}\nscope_in: {scope}\n"
+def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null", evidence="", trifecta="[]"):
+    return (f"---\nid: T\nrisk: {risk}\nstate: {state}\nscope_in: {scope}\ntrifecta: {trifecta}\n"
             f"acceptance:\n  status: {status}\n  build_exit: {build_exit}\n  smoke_exit: 0\n  evidence: \"{evidence}\"\n"
             f"owning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n")
 
@@ -68,6 +68,14 @@ shutil.rmtree(d)
 # 9 safety is capability-invariant (config contract)
 d = sandbox()
 chk("safety_invariant_of_capability=true", run(d, "config-get", "--field", "enforcement.safety_invariant_of_capability"), lambda g: str(g).lower() == "true")
+shutil.rmtree(d)
+
+# 10-11 Rule of Two (lethal trifecta — OWASP ASI01)
+d = sandbox(task=task('["src/**"]', trifecta='[private_data, untrusted_content, external_comms]'))
+chk("rule-of-two: 3/3 trifecta BLOCKED", run(d, "trifecta-check"), "block:rule-of-two")
+shutil.rmtree(d)
+d = sandbox(task=task('["src/**"]', trifecta='[private_data, external_comms]'))
+chk("rule-of-two: 2/3 allowed", run(d, "trifecta-check"), lambda g: g.startswith("ok"))
 shutil.rmtree(d)
 
 passed = sum(1 for _, ok, _ in CHECKS if ok); total = len(CHECKS)

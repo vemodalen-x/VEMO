@@ -2,3 +2,6 @@
 eval/out/
 __pycache__/
 *.pyc
+
+# internal iteration artifacts — not for external deployment
+.internal/

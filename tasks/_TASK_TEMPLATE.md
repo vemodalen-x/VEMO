@@ -5,6 +5,8 @@ risk: R1                       # R0 | R1 | R2  (lowest that fits)
 state: PlanCreated             # PlanCreated|ReviewApproved|ImplementationDone|AcceptancePassed|ProcedureCompleted|Archived
 scope_in: []                   # globs the hook allows edits within, e.g. ["src/fusion/**","tests/fusion/**"]
 scope_out: []                  # explicitly excluded (documentation)
+trifecta: []                    # lethal-trifecta props touched: private_data | untrusted_content | external_comms
+                                # all 3 → explicit human approval required (Rule of Two); unattended auto must stop
 acceptance:
   status: not_run              # not_run|passed|partial|failed|not_applicable
   build_exit: null

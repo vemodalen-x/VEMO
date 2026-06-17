@@ -1,6 +1,6 @@
 # VEMO roadmap
 
-Honest, prioritized. VEMO is young (v1.7); the items below are what stand between it and "battle-tested."
+Honest, prioritized. VEMO is young; the items below are what stand between it and "battle-tested."
 Most are good first contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Near-term (raises the weakest scores)
@@ -18,9 +18,11 @@ Most are good first contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Drift detection CI** — flag spec-vs-code divergence automatically.
 
 ## Longer-term
-- **Multi-agent judge panel** wired as real subagents (the v1.6 design, made runnable end-to-end).
+- **Multi-agent judge panel** wired as real subagents (made runnable end-to-end).
 - **EU AI Act / NIST conformity evidence pack** generated from the audit trail (see `docs/COMPLIANCE.md`).
 - **Formal-ish verification** of the highest-severity guards.
+- **Cryptographic agent identity** (OWASP ASI03 / maturity L4) — beyond `owning_chat` to a verifiable NHI identity.
+- **AIBOM / CycloneDX provenance** (ASI04) and **A2A/MCP message auth** (ASI07) for the supply-chain / multi-agent frontier.
 
 ## Explicitly out of scope
 - OS/container sandboxing (use a real sandbox; VEMO is a cooperative-host control surface — see `SECURITY.md`).

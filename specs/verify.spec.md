@@ -18,7 +18,7 @@ After execution, each criterion is marked PASS/FAIL with the command, exit code,
 (`.vemo/run/<id>.log`). Any FAIL takes a disposition before the task can advance:
 `RCA-inline | RCA-subtask | Criterion-revision | Known-limitation` (+ user approval for the last two).
 
-**Evidence completeness (anti-blind-spot, v1.3).** A PASS is valid only if its evidence covers the **full
+**Evidence completeness (anti-blind-spot).** A PASS is valid only if its evidence covers the **full
 scope of the claim**. Checking one case / one error type / one file and declaring a global "PASS" is itself
 a FAIL. (This guards the documented Fable-5 failure: it reported "no error movement" after checking a single
 error type and undercounted a real incident 20×.) The judge enforces this on R2 — see `agents/governance-judge.md`.

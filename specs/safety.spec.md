@@ -39,13 +39,19 @@
 If `enforcement.degrade_gracefully: true` and a validator/tool is missing, the gate **warns loudly and logs**
 to telemetry rather than silently passing — a missing guard is surfaced, never assumed safe.
 
-## Guardrail elements & rollout (v1.7)
+## Guardrail elements & rollout
 The rules above are the **Permission** + **Audit** elements; the other two canonical guardrail elements:
 - **Approval** — human-in-loop gates (plan/review by risk tier; the human owns intent + irreversible). See `task.spec` / `capability.spec`.
 - **Kill switch** — `vemo auto off`, `run_budget` hard-stop (unattended), and `enforcement.mode: monitor` (observe-only).
 
 **Action-chaining:** a low-risk action (e.g. a read) chained into a high-risk one (exec / push / destructive)
 does not escape these guards — each action is checked, and the high-risk step still hits its risk-tier gate + the judge.
+
+**Rule of Two (lethal trifecta, v1.9 · OWASP ASI01):** a task touching all three of {`private_data`,
+`untrusted_content`, `external_comms`} (declared in the task `trifecta:` field) requires explicit **human
+approval** before acting — `task_state.py trifecta-check` blocks an unattended (auto-mode) session at 3/3.
+This bounds prompt-injection goal-hijack: an injected goal cannot both read secrets and exfiltrate them in one
+unsupervised session. Keep any unattended session to ≤ 2 of the three.
 
 **Monitoring mode:** `enforcement.mode: monitor` logs violations without blocking (for onboarding/tuning); flip
 to `enforce` once calibrated. Safety-critical guards always *log* either way — you get the audit trail first.

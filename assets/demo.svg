@@ -7,7 +7,7 @@
   <g font-size="14.5">
     <text x="22" y="68" fill="#5eead4">$ vemo eval</text>
     <text x="22" y="92" fill="#94a3b8">  [<tspan fill="#7ee787">PASS</tspan>] scope · tier · exec-evidence · capability-monotonic · safety-invariant …</text>
-    <text x="22" y="116" fill="#e6edf3">  [eval] conformance <tspan fill="#7ee787" font-weight="bold">9/9 = 100%</tspan>  → eval/out/report.json</text>
+    <text x="22" y="116" fill="#e6edf3">  [eval] conformance <tspan fill="#7ee787" font-weight="bold">11/11 = 100%</tspan>  → eval/out/report.json</text>
     <text x="22" y="150" fill="#5eead4">$ <tspan fill="#94a3b8">#agent tries to edit a file outside its task's scope…</tspan></text>
     <text x="22" y="174" fill="#e6edf3">  edit src/auth/login.ts</text>
     <text x="22" y="198" fill="#fca5a5">  [VEMO] BLOCKED (safety.spec#1): outside scope_in  → exit 2</text>

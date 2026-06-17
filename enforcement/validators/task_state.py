@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""VEMO task-state validator (v1.1) — the deterministic parser hooks/CI rely on.
+"""VEMO task-state validator — the deterministic parser hooks/CI rely on.
 
-v1.1 fixes/adds (vs v1.0):
-  * Correct NESTED YAML-subset parsing (v1.0 collapsed `acceptance:`/`judge:` maps to []).
-  * `tier-required --paths ...`  -> compute required risk tier from vemo.config.yaml globs
+Commands (each prints a machine-readable verdict the hooks/CI act on):
+  * `tier-required --paths ...`  -> compute the required risk tier from vemo.config.yaml globs
                                     (closes the agent self-classification loophole; CI enforces it).
   * `get --field a.b`            -> read a dotted nested field of the active task.
   * `gate-check --gate r2-judge` -> R2 tasks must carry judge.verdict == pass.
   * `doctor`                     -> validate config + active task front-matter.
-Stdlib only (no PyYAML) so it runs anywhere VEMO is dropped, incl. Windows/PowerShell wrappers.
+Parses a nested YAML subset (acceptance/judge maps) directly. Stdlib only (no PyYAML) so it runs
+anywhere VEMO is dropped, incl. Windows/PowerShell wrappers.
 """
 import sys, os, glob, fnmatch, argparse, re, json
 from datetime import datetime
@@ -16,7 +16,7 @@ from datetime import datetime
 ROOT = os.environ.get("VEMO_ROOT") or os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip() or "."
 TASKS_DIR = os.path.join(ROOT, "tasks")
 CONFIG = os.path.join(ROOT, "vemo.config.yaml")
-CONFIG_OVERLAY = os.path.join(ROOT, "vemo.config.preset.yaml")  # v1.4: per-stack preset overlay (vemo init)
+CONFIG_OVERLAY = os.path.join(ROOT, "vemo.config.preset.yaml")  # per-stack preset overlay (vemo init)
 AUTO_STATE = os.path.join(ROOT, ".vemo", "auto_mode.json")
 RUN_STATE = os.path.join(ROOT, ".vemo", "run.json")
 TIER_RANK = {"R0": 1, "R1": 2, "R2": 3}
@@ -38,7 +38,7 @@ def _auto_state():
     return st
 
 
-# ── run budget / stop rules (v1.3, from Fable 5 analysis) ──
+# ── run budget / stop rules ──
 def _run_cfg():
     return _load_config().get("run_budget") or {}
 
@@ -188,7 +188,7 @@ def _load_config():
 
 
 def _rel(target):
-    # v1.7: resolve a relative input against ROOT (repo-relative), not the process CWD —
+    # resolve a relative input against ROOT (repo-relative), not the process CWD —
     # makes scope/tier checks CWD-independent (a robustness bug the eval harness caught).
     t = target if os.path.isabs(target) else os.path.join(ROOT, target)
     return os.path.relpath(os.path.abspath(t), ROOT)
@@ -283,7 +283,7 @@ def gate_check(gate):
 
 
 def verify_plan(risk):
-    """v1.6: derive the required VERIFICATION depth from capability.tier × risk (the inverse coupling).
+    """derive the required VERIFICATION depth from capability.tier × risk (the inverse coupling).
     Stronger tier => more independent verifiers + ground-truth, less prescription. Mechanizes capability.spec."""
     cfg = _load_config()
     tier = _dig(cfg, "capability.tier") or "high"
@@ -295,8 +295,21 @@ def verify_plan(risk):
     return f"tier={tier} risk={risk} ground_truth={gt} verifiers={verifiers} narration={narration} human_gate={human}"
 
 
+def trifecta_check():
+    """v1.9 (OWASP ASI01 / Meta 'Rule of Two'): a session touching all 3 lethal-trifecta properties
+    {private_data, untrusted_content, external_comms} needs explicit human approval before acting; an
+    unattended (auto-mode) session must STOP. ≤2 properties is allowed without approval."""
+    act = _active_task()
+    if not act:
+        return "ok (no active task)"
+    props = set(act[1].get("trifecta") or []) & {"private_data", "untrusted_content", "external_comms"}
+    if len(props) >= 3:
+        return "block:rule-of-two (3/3 lethal-trifecta properties — requires explicit human approval; unattended auto mode must stop)"
+    return "ok (%d/3 trifecta properties)" % len(props)
+
+
 def selfcheck():
-    """v1.7: framework internal-consistency conformance — catch drift before it ships."""
+    """framework internal-consistency conformance — catch drift before it ships."""
     issues = []
     cfg = _load_config()
     if _dig(cfg, "capability.tier") not in ("frontier", "high", "medium", "low"):
@@ -367,7 +380,7 @@ def main():
     sub.add_parser("budget-reset"); sub.add_parser("budget-status")
     cg = sub.add_parser("config-get"); cg.add_argument("--field", required=True)
     vp = sub.add_parser("verify-plan"); vp.add_argument("--risk", required=True)
-    sub.add_parser("selfcheck")
+    sub.add_parser("selfcheck"); sub.add_parser("trifecta-check")
     a = ap.parse_args()
     if a.cmd == "scope-check":
         print(scope_check(a.path))
@@ -405,6 +418,8 @@ def main():
         print(verify_plan(a.risk))
     elif a.cmd == "selfcheck":
         sys.exit(selfcheck())
+    elif a.cmd == "trifecta-check":
+        print(trifecta_check())
     elif a.cmd == "doctor":
         sys.exit(doctor())
 

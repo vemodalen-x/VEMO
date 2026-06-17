@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VEMO authoritative backstop (v1.1) — safety.spec rules 1,2,3,5 + risk-tier integrity + R2 judge.
+# VEMO authoritative backstop — safety.spec rules 1,2,3,5 + risk-tier integrity + R2 judge.
 # Installed as .git/hooks/pre-commit AND mirrored in CI. Does NOT depend on the agent: even a
 # human or a hookless agent hits it. CI re-runs it server-side so `--no-verify` cannot ship to main.
 #
