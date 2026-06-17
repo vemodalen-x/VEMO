@@ -40,10 +40,10 @@ confidence: high|med|low
 - Cost control: judge runs once per gate, only on tiers that require it. At `tier=high` most R1 work
   self-verifies (the model is trusted to check its own measurable criteria), keeping the loop fast.
 
-## 4. Why this beats prose gates
-Wildpanda's "hard gates" were assertions the implementer made about itself. A judge with its own context,
-told to look for failure, catches the plausible-but-wrong "done" that a self-report waves through —
-and it gets cheaper and more reliable as models improve, so it *replaces* ceremony rather than adding it.
+## 4. Why this beats prose-only gates
+A prose-only "hard gate" can degrade into an assertion the implementer makes about itself. A judge with its own
+context, told to look for failure, catches the plausible-but-wrong "done" that a self-report waves through, and
+it gets cheaper and more reliable as models improve, so it *replaces* ceremony rather than adding it.
 
 ## 5. Verification scales with capability (capability-monotonic — see `capability.spec.md`)
 As `capability.tier` rises, prescription shrinks but verification **tightens** — never the reverse:

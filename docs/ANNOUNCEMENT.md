@@ -52,13 +52,12 @@ Like what it observes? `vemo init --preset python` flips on real enforcement.
 
 ## We're honest about what it isn't
 
-- It's **young** — one real dogfood (a skyline-segmentation task, governed end-to-end; the acceptance gate
-  caught a failing model honestly). Not yet battle-tested at scale.
+- It's **young** — one limited internal trial has exercised the gates end-to-end, but it is not yet
+  battle-tested at scale.
 - The eval is **mechanism-conformance**, not a production telemetry stack yet (OpenTelemetry + transcript-level
   eval are on the roadmap).
-- It stands openly on **[Wildpanda](https://github.com/BST-AII/Wildpanda)** + 12-Factor Agents, AGENTS.md,
-  Diátaxis, spec-kit/Kiro. We didn't reinvent the philosophy — we made the good parts *mechanical*. See
-  [VS_WILDPANDA.md](VS_WILDPANDA.md).
+- It stands on public best practices including 12-Factor Agents, AGENTS.md, Diátaxis, and spec-kit/Kiro.
+  We did not reinvent every principle; we made the most important ones *mechanical*.
 
 ## Help us optimize it
 
@@ -66,4 +65,4 @@ Good first PRs: a new `presets/<stack>.yaml`, an `eval/` scenario, OpenTelemetry
 runner. We govern ourselves with our own gates — your PR runs through them too. ⭐ if a governance framework
 that *proves* it works (and tells you where it doesn't) is what you've been missing.
 
-`vemo eval` · MIT · [README](../README.md) · [the 3-perspective design log](ITERATION_LOG.html)
+`vemo eval` · MIT · [README](../README.md) · [docs index](INDEX.md)

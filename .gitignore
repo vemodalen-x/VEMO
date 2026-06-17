@@ -1,3 +1,4 @@
 .vemo/
+eval/out/
 __pycache__/
 *.pyc

@@ -12,7 +12,7 @@ Deterministic check: `scripts/govsync.py`.
 
 **When**
 - auto: session start, if `vemo.upstream` is set — *notify only*, never auto-apply.
-- manual: "check governance updates", "sync governance", "检查治理更新 / 同步治理".
+- manual: "check governance updates", "sync governance", "check framework updates".
 
 **Steps**
 ```bash

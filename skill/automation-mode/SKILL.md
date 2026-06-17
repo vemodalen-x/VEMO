@@ -8,11 +8,11 @@ description: Enable or disable VEMO full-auto (unattended) mode. Auto mode stops
 Turn VEMO's human-approval pauses into **auto-decide + record**, for trusted batch/overnight/CI work.
 This is the **separate explicit command** required to enter auto mode — it never turns on by itself.
 
-## Trigger / 触发条件
-- **Manual only / 仅手动** — there is no automatic trigger by design.
-- **Enable keywords**: "启用全自动模式" / "开启自动模式" / "enable auto mode" / "vemo auto on" / "full auto on"
-- **Disable keywords**: "关闭自动模式" / "退出全自动" / "disable auto mode" / "vemo auto off"
-- **Status keywords**: "自动模式状态" / "auto mode status"
+## Trigger
+- **Manual only** — there is no automatic trigger by design.
+- **Enable keywords**: "enable auto mode" / "vemo auto on" / "full auto on"
+- **Disable keywords**: "disable auto mode" / "vemo auto off"
+- **Status keywords**: "auto mode status"
 
 ## What it does (and does NOT do)
 - **Removes**: the user-approval pauses (R2 plan review, push confirmation, subtask review, failure-disposition

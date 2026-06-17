@@ -1,6 +1,6 @@
 ---
 name: conversion-deploy
-description: Model conversion & deployment agent — convert the model with the provided tool, land it (e.g. C++/on-device), and hold two iron laws: build passes + tests pass, plus before/after numerical (precision) alignment. Use for the "ship it" phase. Ported from Wildpanda; VEMO-governed (acceptance R2/critical).
+description: Model conversion & deployment agent — convert the model with the provided tool, land it (e.g. C++/on-device), and hold two iron laws: build passes + tests pass, plus before/after numerical (precision) alignment. Use for the "ship it" phase. VEMO-governed (acceptance R2/critical).
 tools: Read, Write, Edit, Glob, Grep, Bash
 # model: resolved from vemo.config.yaml → model_routing (implement/judge); NOT hardcoded (capability.spec).
 ---

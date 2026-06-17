@@ -10,7 +10,7 @@ reads source itself.
 
 **When**
 - auto: a code-change task starts and no existing flow covers the touched files.
-- manual: "discover flow", "map the call flow", "梳理调用链 / 分析 flow".
+- manual: "discover flow", "map the call flow", "analyze flow".
 **Not when** — docs-only / spec-only changes; or an existing flow already covers the files.
 
 **Steps**

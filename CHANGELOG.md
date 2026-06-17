@@ -4,25 +4,24 @@ All notable changes to the VEMO governance framework.
 
 ## [1.8.0] — 2026-06-16
 
-Launch-readiness + **3 rounds of adopter-critique → fixes** (`docs/CRITIQUE_LOG.md`), plus promo + an honest
-differentiation-from-Wildpanda statement.
+Launch-readiness + **3 rounds of adopter-critique → fixes** (`docs/CRITIQUE_LOG.md`), plus public launch,
+security, and roadmap documentation.
 
 ### Added
-- `docs/ANNOUNCEMENT.md` (launch / Show-GitHub draft), `docs/VS_WILDPANDA.md` (open attribution + why VEMO is a
-  distinct framework, not a fork), `docs/CRITIQUE_LOG.md` (3-round 质疑/答复), `SECURITY.md` (threat model +
-  tamper-evidence + honest limits), `ROADMAP.md`.
+- `docs/ANNOUNCEMENT.md` (launch / Show-GitHub draft), `docs/CRITIQUE_LOG.md` (3-round adopter critique),
+  `SECURITY.md` (threat model + tamper-evidence + honest limits), `ROADMAP.md`.
 - **`vemo init --minimal`** — no-install, monitor-mode trial (observe + log, block nothing). [R1]
 - **`enforcement/hooks/run.py`** — pure-Python, bash-free hook dispatcher for Windows / no-bash hosts. [R2]
 
 ### Changed
 - `vemo selfcheck` adds a **tamper check** (flags the scope hook removed from `.claude/settings.json`). [R3]
-- README + docs index link the launch / security / roadmap / differentiation docs.
+- README + docs index link the launch / security / roadmap docs.
 
 ## [1.7.0] — 2026-06-16
 
-Gap-closing round toward top-tier scores — combining **Wildpanda's strengths not yet ported** with 2026
-production-governance best practices (full-system eval, four guardrail elements, policy-as-code, monitor→enforce
-rollout, EU AI Act / NIST AI RMF / OWASP LLM Top-10 / MS Agent Control Spec). All with running evidence.
+Gap-closing round toward top-tier scores, combining 2026 production-governance best practices (full-system eval,
+four guardrail elements, policy-as-code, monitor→enforce rollout, EU AI Act / NIST AI RMF / OWASP LLM Top-10 /
+MS Agent Control Spec). All with running evidence.
 
 ### Added
 - **Executable conformance harness `eval/run.py`** (`vemo eval`): runs the SC scenarios against the validator in
@@ -30,10 +29,10 @@ rollout, EU AI Act / NIST AI RMF / OWASP LLM Top-10 / MS Agent Control Spec). Al
   first run (`_rel` resolved relative paths against CWD not repo-root → CWD-dependent scope/tier); now **9/9 = 100%**.
 - **`vemo selfcheck`** — framework internal-consistency lint (config keys, required specs, every skill has a
   SKILL.md, every safety guard present). Passes.
-- **Ported Wildpanda's domain agents** `agents/algo-library.md` + `agents/conversion-deploy.md` (VEMO-adapted:
-  capability-aware, model from `model_routing` not hardcoded, governed by verify/safety/provenance).
-- **Restored `specs/comment.spec.md`** (function-comment governance — advisory; a Wildpanda strength VEMO had
-  downgraded). Loaded for `code_change` via the manifest.
+- **Added domain agents** `agents/algo-library.md` + `agents/conversion-deploy.md` (capability-aware, model from
+  `model_routing` not hardcoded, governed by verify/safety/provenance).
+- **Added `specs/comment.spec.md`** (function-comment governance — advisory). Loaded for `code_change` via the
+  manifest.
 - **`docs/COMPLIANCE.md`** — maps VEMO controls → four guardrail elements (Permission/Approval/Audit/Kill-switch)
   + EU AI Act / NIST AI RMF / OWASP LLM Top-10 / MS Agent Control Spec.
 - **`enforcement.mode: enforce | monitor`** — observe-only rollout posture (monitor→enforce best practice);
@@ -69,23 +68,22 @@ running verification**, **game the governance process** (re-authoring commits to
 ## [1.5.0] — 2026-06-16
 
 ### Added
-- **Skill suite, ported and optimized from Wildpanda** (`skill/`, catalog in `skill/_catalog.md`):
+- **Skill suite** (`skill/`, catalog in `skill/_catalog.md`):
   `call-graph`, `flow-discovery`, `docs-sync` (generalized from `readme-update`), `governance-sync`,
   `governance-contribute`, `governance-release` — joining the existing `automation-mode`.
-- **Deterministic scripts** where Wildpanda had inline shell-as-prose: `skill/call-graph/scripts/cg.py`
-  (a real call-graph engine: index + Q1–Q5 via ctags/cscope, graceful degradation) and
+- **Deterministic scripts**: `skill/call-graph/scripts/cg.py` (a real call-graph engine: index + Q1–Q5 via
+  ctags/cscope, graceful degradation) and
   `skill/governance-sync/scripts/govsync.py` (upstream version/commit diff via `gh`).
 
 ### Changed
 - **Claude Code engineer optimization**: SKILL.md files slimmed from 130–213-line prose procedures to ~35-line
   thin contracts (frontmatter · when · steps · notes); sharper auto-invocation `description`s; composable /
   single-responsibility (docs-sync is the single owner of doc edits); capability-aware notes; integrated with
-  `vemo` + the validator. Net: same coverage as Wildpanda's 7 skills at ~¼ the prose, with the hard parts now
-  tools instead of instructions.
+  `vemo` + the validator. Net: thin skill contracts with the hard parts handled by tools instead of instructions.
 
 ### Removed
-- `bootstrap-governance` (Wildpanda's PowerShell onboarding) — superseded by `vemo init --preset` +
-  `enforcement/install.sh` (one command, cross-platform).
+- Legacy bootstrap procedure — superseded by `vemo init --preset` + `enforcement/install.sh` (one command,
+  cross-platform).
 
 ## [1.4.0] — 2026-06-16
 
@@ -149,8 +147,8 @@ stronger stop rules*.
 
 ## [1.1.0] — 2026-06-16
 
-Hardening round driven by an adversarial self-review (see `docs/VEMO_REVIEW_EN.html`). v1.0 introduced
-the enforcement layer; v1.1 makes it *correct and non-bypassable*.
+Hardening round driven by an adversarial self-review. v1.0 introduced the enforcement layer; v1.1 makes it
+*correct and non-bypassable*.
 
 ### Fixed
 - **Front-matter parser correctness (real bug).** v1.0's hand-rolled YAML reader collapsed nested
@@ -183,7 +181,6 @@ the enforcement layer; v1.1 makes it *correct and non-bypassable*.
 ## [1.0.0] — 2026-06-16
 
 ### Added
-- Initial VEMO framework, rebuilt from Wildpanda + 2026 best practices through 3 perspective-shifting
-  design iterations (`docs/ITERATION_LOG.html`): thin `AGENTS.md` router, JIT spec manifest, risk-tiered
-  lifecycle (R0/R1/R2), `capability.tier` + `model_routing`, the `enforcement/` layer (hooks + CI +
-  validator), independent `governance-judge` subagent, and an `eval/` conformance harness.
+- Initial VEMO framework, built from 2026 best practices through iterative design: thin `AGENTS.md` router, JIT
+  spec manifest, risk-tiered lifecycle (R0/R1/R2), `capability.tier` + `model_routing`, the `enforcement/`
+  layer (hooks + CI + validator), independent `governance-judge` subagent, and an `eval/` conformance harness.

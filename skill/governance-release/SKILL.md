@@ -8,7 +8,7 @@ description: Cut a versioned release PR for VEMO — collect merged PRs since th
 Package merged work into a tagged version. Creates a **PR only** — never merges or tags. **Manual only.**
 
 **Prereq** — `gh auth status`.
-**When** — manual: "cut a release", "prepare a release", "发布新版本 / agent 正式发布".
+**When** — manual: "cut a release", "prepare a release", "publish a new version".
 
 **Steps**
 1. Compare the latest tag to HEAD; if equal → "nothing to release", stop.

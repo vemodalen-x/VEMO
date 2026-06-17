@@ -8,7 +8,7 @@ description: Contribute a framework improvement from a consuming project back to
 Fork → branch → copy the changed template-owned files → PR. **Manual only.**
 
 **Prereq** — `gh auth status`.
-**When** — manual: "contribute upstream", "push this improvement back", "贡献回上游 / agent 更新".
+**When** — manual: "contribute upstream", "push this improvement back", "send this improvement upstream".
 
 **Steps**
 1. Diff local **template-owned** files against the upstream → list what changed.

@@ -1,8 +1,8 @@
 # safety.spec — Non-negotiables (MECHANICALLY ENFORCED)
 
-> The difference from Wildpanda: every rule here is tagged with **who enforces it** — a hook or CI,
-> not the model's goodwill. "Hooks execute deterministic code. They cannot hallucinate." This is the
-> only spec loaded at every session start, and it is the shortest.
+> Every rule here is tagged with **who enforces it** — a hook or CI, not the model's goodwill.
+> "Hooks execute deterministic code. They cannot hallucinate." This is the only spec loaded at every session
+> start, and it is the shortest.
 
 ## Enforcement legend
 - `ENFORCED-BY: hook` — blocked client-side in the agent loop (fast feedback).
@@ -13,7 +13,7 @@
 
 1. **Scope containment.** No create/edit/delete outside the active task's `scope_in` globs.
    `ENFORCED-BY: hook+ci` → `enforcement/hooks/guard-scope.sh`, `enforcement/ci/pre-commit`.
-   Rationale: the #1 way agents cause collateral damage (Wildpanda Z-03, but now actually blocked).
+   Rationale: out-of-scope edits are the most common way agents cause collateral damage.
 
 2. **Plan-before-commit.** No commit touching code unless a task file with a matching plan + `scope_in` exists and is `PlanCreated`+.
    `ENFORCED-BY: ci` → `enforcement/ci/pre-commit` (reads task front-matter via `validators/task_state.py`).

@@ -106,7 +106,7 @@ paths:
   smoke:        ""         # runtime smoke command
 
 concurrency:
-  stale_threshold_hours: 4   # kept from Wildpanda — multi-session takeover protocol
+  stale_threshold_hours: 4   # multi-session takeover protocol
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN BUDGET / STOP RULES — Mythos-class models "run until the harness cuts them off".

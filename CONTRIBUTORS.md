@@ -1,7 +1,6 @@
 # Contributors
 
-VEMO is rebuilt from [Wildpanda](https://github.com/BST-AII/Wildpanda) and the best practices it credits
-(see [README → Lineage & credits](README.md#-lineage--credits)). Thanks to everyone who contributes.
+VEMO is built on public best practices credited in the README. Thanks to everyone who contributes.
 
 | Contributor | Handle | Since |
 |---|---|---|

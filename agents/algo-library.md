@@ -1,6 +1,6 @@
 ---
 name: algo-library
-description: Algorithm-library engineering agent — turn a trained model into a clean, reusable, zero-redundancy deployable library with well-designed interfaces. Use for the "build the library" phase of an algo→deploy task. Ported from Wildpanda; VEMO-governed.
+description: Algorithm-library engineering agent — turn a trained model into a clean, reusable, zero-redundancy deployable library with well-designed interfaces. Use for the "build the library" phase of an algo→deploy task. VEMO-governed.
 tools: Read, Write, Edit, Glob, Grep, Bash
 # model: resolved from vemo.config.yaml → model_routing (plan/implement); NOT hardcoded (capability.spec).
 ---

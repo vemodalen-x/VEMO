@@ -1,7 +1,7 @@
 # VEMO conformance eval — proving the framework is actually obeyed
 
-> Wildpanda had no way to answer "does an agent following this framework actually hit the gates?"
-> VEMO ships a conformance suite so you can measure it — and **A/B the framework across model versions**
+> VEMO ships a conformance suite so you can answer "does an agent following this framework actually hit the
+> gates?" and **A/B the framework across model versions**
 > (e.g. does Opus 4.8 need the judge on R1 as often as 4.6 did?).
 
 ## How it works

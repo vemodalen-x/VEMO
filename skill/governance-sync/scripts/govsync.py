@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """govsync.py — deterministic upstream-update check for the governance-sync skill.
 
-Wildpanda's sync skill was ~132 lines of prose telling the agent which gh-api calls to make. This makes the
-deterministic part a tool: it asks the upstream what version/commit it is, compares to local, and prints a
-clear verdict. It NEVER auto-applies (sync of files is a confirmed, separate step). Stdlib + the `gh` CLI.
+Governance sync should be deterministic. This tool asks the upstream what version/commit it is, compares to
+local, and prints a clear verdict. It NEVER auto-applies (sync of files is a confirmed, separate step).
+Stdlib + the `gh` CLI.
 
   govsync.py check     compare local VERSION/commit to upstream `vemo.upstream`; print what changed
   govsync.py status    show the last recorded sync state

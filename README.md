@@ -15,7 +15,7 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-7c3aed?style=for-the-badge)](https://github.com/vemodalen-x/VEMO/pulls)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
-[Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [vs Wildpanda](docs/VS_WILDPANDA.md)
+[Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
 <img src="assets/demo.svg" alt="vemo eval → 9/9 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
 
@@ -38,8 +38,8 @@ It's the right name for an era when AI agents generate **oceans of plausible, lo
 VEMO is the layer that makes every change **intentional, verified, and traceable** — so your codebase isn't
 just one more indistinguishable snapshot.
 
-And in that same spirit, VEMO is honest about its own originality: it stands openly on prior art and its real
-contribution is making good, known patterns **mechanical** instead of merely written down. (See [Credits](#-lineage--credits).)
+And in that same spirit, VEMO is honest about its own originality: it stands on public best practices and its
+real contribution is making good, known patterns **mechanical** instead of merely written down. (See [Credits](#-credits).)
 
 ## 🤔 Why VEMO
 
@@ -138,8 +138,8 @@ Reusable, script-backed procedures the agent auto-invokes by their frontmatter `
 | `governance-sync` · `-contribute` · `-release` | pull upstream updates · PR improvements back · cut a release |
 | `automation-mode` | enter full-auto (unattended) mode |
 
-> Optimized from [Wildpanda](https://github.com/BST-AII/Wildpanda)'s skills: ~1006 lines of prose → thin
-> contracts + real scripts (same coverage, ~¼ the prose, the hard parts are tools not instructions).
+> Skills are intentionally thin: contracts stay readable, deterministic work lives in scripts, and release-time
+> documentation updates are routed through `docs-sync`.
 
 ## 📚 Documentation
 
@@ -151,25 +151,21 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |
-| See the design reasoning + a critical scorecard | [docs/ITERATION_LOG.html](docs/ITERATION_LOG.html) · [docs/VEMO_REVIEW_EN.html](docs/VEMO_REVIEW_EN.html) |
-| See how it differs from Wildpanda (not a fork) | [docs/VS_WILDPANDA.md](docs/VS_WILDPANDA.md) |
 | Threat model · roadmap · the 3-round critique | [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) · [docs/CRITIQUE_LOG.md](docs/CRITIQUE_LOG.md) |
 | Look up config / changes | [vemo.config.yaml](vemo.config.yaml) · [CHANGELOG.md](CHANGELOG.md) |
 
-## 🌱 Lineage & credits
+## 🌱 Credits
 
-VEMO was rebuilt from **[Wildpanda](https://github.com/BST-AII/Wildpanda)** (a spec-driven governance framework)
-through three perspective-shifting design iterations, then hardened against published analysis of long-horizon
-frontier models. It openly borrows from, and credits, the best practices it stands on:
+VEMO combines public patterns from agent governance, spec-driven development, documentation architecture, and
+long-horizon model safety. It openly credits the best practices it stands on:
 
-- **[Wildpanda](https://github.com/BST-AII/Wildpanda)** — the philosophy and the multi-session concurrency model.
 - **[GitHub Spec Kit](https://github.com/github/spec-kit)** — `init` + preset ergonomics, spec-driven workflow.
 - **[12-Factor Agents](https://github.com/humanlayer/12-factor-agents)** — own-your-context, stateless reducer.
 - **[AGENTS.md](https://agents.md/)** + Anthropic's *context engineering* — thin, just-in-time entry.
 - **[Diátaxis](https://diataxis.fr/)** — docs organized by user need.
 - Fable 5 / Mythos analysis (2026) — the run-budget stop rules and the evidence-completeness judge check.
 
-> See [docs/ITERATION_LOG.html](docs/ITERATION_LOG.html) and [docs/FABLE5_MYTHOS_OPTIMIZATION.md](docs/FABLE5_MYTHOS_OPTIMIZATION.md) for the full trail (with sources, and an honest note on which sources are speculative).
+> See [docs/FABLE5_MYTHOS_OPTIMIZATION.md](docs/FABLE5_MYTHOS_OPTIMIZATION.md) for the model-scaling trail, including notes on which sources are speculative.
 
 ## 🤝 Contributing
 
@@ -189,7 +185,7 @@ If a governance framework that *proves* it works (and tells you where it doesn't
 
 ## ⚠️ Status
 
-**v1.4.0 — active.** VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
+**v1.8.0 — active.** VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
 `vemo.config.yaml`. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) reflect 2026 Anthropic
 releases — swap them freely for whatever you run.
 

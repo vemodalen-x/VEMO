@@ -146,7 +146,7 @@
         <div class="layer"><span class="lab L-entry">Entry</span><div class="body"><b>AGENTS.md</b> — a ~50-line router. Loads config + the always-on safety spec, then JIT-loads the rest. No rulebook here.</div><span class="tag t-prose">prose · thin</span></div>
         <div class="layer"><span class="lab L-cfg">Config</span><div class="body"><b>vemo.config.yaml</b> (+ <code>presets/*</code> overlay) — the ONE file you edit: <code>capability.tier</code>, <code>model_routing</code>, <code>risk_tiers</code>, <code>run_budget</code>, <code>auto_mode</code>, <code>enforcement</code>.</div><span class="tag t-cfg">instance values</span></div>
         <div class="layer"><span class="lab L-spec">Specs</span><div class="body"><b>specs/</b> — <code>safety</code> · <code>task</code> · <code>verify</code> · <code>concurrency</code> · <code>coding</code> · <code>automation</code>. Slim, loaded on demand via <code>_manifest.yaml</code> (progressive disclosure).</div><span class="tag t-prose">prose · JIT</span></div>
-        <div class="layer enf-hi"><span class="lab L-enf">Enforce</span><div class="body"><b>enforcement/</b> — <i>the layer Wildpanda lacked.</i> <code>hooks/</code> (client-side, fast) + <code>ci/pre-commit</code> (server-side authority) + <code>validators/task_state.py</code> (parses machine-readable task state). This is what makes "hard gates" actually hard.</div><span class="tag t-mech">MECHANISM</span></div>
+        <div class="layer enf-hi"><span class="lab L-enf">Enforce</span><div class="body"><b>enforcement/</b> — <i>the mechanical control layer.</i> <code>hooks/</code> (client-side, fast) + <code>ci/pre-commit</code> (server-side authority) + <code>validators/task_state.py</code> (parses machine-readable task state). This is what makes "hard gates" actually hard.</div><span class="tag t-mech">MECHANISM</span></div>
         <div class="layer"><span class="lab L-agent">Verify</span><div class="body"><b>agents/governance-judge.md</b> — independent verifier (separate context, told to refute "done"). <b>eval/</b> — conformance scenarios. <b>bin/vemo</b> — the unified CLI.</div><span class="tag t-run">judge · tooling</span></div>
       </div>
     </div>
@@ -279,14 +279,13 @@ vemo explain gates          <span class="c"># what's enforced vs advised</span><
     <tr><td>Get working in 5 minutes (tutorial)</td><td><a href="QUICKSTART.md">QUICKSTART.md</a></td></tr>
     <tr><td>Understand the model (explanation)</td><td><a href="MENTAL_MODEL.md">MENTAL_MODEL.md</a></td></tr>
     <tr><td>Find the right doc fast (index)</td><td><a href="INDEX.md">INDEX.md</a></td></tr>
-    <tr><td>See the design reasoning</td><td><a href="ITERATION_LOG.html">ITERATION_LOG.html</a> · <a href="VEMO_REVIEW_EN.html">VEMO_REVIEW_EN.html</a></td></tr>
     <tr><td>See the Fable 5 / Mythos-driven changes</td><td><a href="FABLE5_MYTHOS_OPTIMIZATION.md">FABLE5_MYTHOS_OPTIMIZATION.md</a></td></tr>
     <tr><td>Look up config / CLI / changes</td><td><a href="../vemo.config.yaml">vemo.config.yaml</a> · <code>vemo help</code> · <a href="../CHANGELOG.md">CHANGELOG.md</a></td></tr>
   </table>
 </div></section>
 
 <footer><div class="wrap">
-  <div>VEMO Guide · v1.4 · usage + architecture visualization · 2026-06-16</div>
+  <div>VEMO Guide · v1.8 · usage + architecture visualization · 2026-06-16</div>
   <div>Framework: <a href="../README.md">README</a> · <a href="INDEX.md">docs index</a> · MIT</div>
 </div></footer>
 </body>

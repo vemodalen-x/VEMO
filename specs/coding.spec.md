@@ -21,7 +21,7 @@
 New/modified code compiles on all toolchains the project declares. Toolchain-specific APIs only behind
 explicit platform macros with both branches. Prohibited-API lists are instance-owned.
 
-## 4. Artifact provenance (kept from Wildpanda v1.10)
+## 4. Artifact provenance
 Shipped deployment/conversion artifacts (binaries, converter scripts, exported/quantized models, alignment
 reports) are recorded in the project's single provenance index pinning: content **hash**, canonical
 **machine/dir**, and **what it was produced from** (source commit + input model). Reusable converters live

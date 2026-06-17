@@ -8,7 +8,7 @@
 ## 1. Activation (explicit only)
 - Default: **OFF**. Auto mode never turns on implicitly.
 - Enable: run `enforcement/automation/vemo-auto on [--max-tier R0|R1|R2] [--ttl <hours>] [--allow-r2]`
-  or invoke `skill/automation-mode` (keywords: "启用全自动模式" / "enable auto mode" / "vemo auto on").
+  or invoke `skill/automation-mode` (keywords: "enable auto mode" / "vemo auto on").
 - Enabling is itself **recorded** (who/when/ceiling/expiry) to `.vemo/auto_decisions.jsonl` and `.vemo/auto_mode.json`.
 - Auto mode **expires** (default TTL 8h) — re-enable to continue. Disable any time: `vemo-auto off`.
 - At session start the agent runs `task_state.py auto-status`; if active, it loads this spec and follows it.
@@ -47,7 +47,7 @@ Auto mode must not touch any of these — they are mechanism, not human-approval
 - A run done under auto mode is auditable end-to-end: a human can review *what was auto-approved and why* later, even though no one approved it live.
 
 ## 6. Disable / kill switch / expiry
-- `vemo-auto off` (or keyword "关闭自动模式" / "disable auto mode") → immediate.
+- `vemo-auto off` (or keyword "disable auto mode") → immediate.
 - TTL expiry auto-disables. Mechanical guards (`safety.spec`) cannot be disabled by auto mode at all.
 
 ## 7. Intent statement

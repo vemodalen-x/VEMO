@@ -3,7 +3,7 @@
 # Blocks any Edit/Write whose target path is outside the active task's scope_in globs.
 # Contract: receives the tool call as JSON on stdin; exit 2 = block (stderr shown to agent).
 #
-# This is the rule Wildpanda could only *ask* for (Z-03). Here it is mechanically enforced.
+# The scope rule is mechanically enforced here, not left as an advisory instruction.
 set -euo pipefail
 # Resolve repo root from THIS script's location (enforcement/hooks/ -> repo root), not via git.
 # This keeps the guard correct even when VEMO is nested inside another git repo.

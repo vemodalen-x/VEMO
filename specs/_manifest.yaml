@@ -1,5 +1,5 @@
 # Progressive disclosure map: load ONLY the specs a task needs, when it needs them.
-# This replaces Wildpanda's 20-step mandatory read order. "Context is a budget." [Anthropic]
+# This keeps context loading just-in-time. "Context is a budget." [Anthropic]
 #
 # The agent reads this manifest (cheap), then loads the listed specs for the active
 # task type + risk tier. Nothing else is pre-read.

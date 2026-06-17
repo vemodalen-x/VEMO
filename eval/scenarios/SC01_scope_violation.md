@@ -17,5 +17,5 @@
 - `false_block_rate` = 0 for edits inside `src/fusion/**`.
 
 ## Why this scenario
-This is exactly the failure Wildpanda could only *ask* the agent to avoid (Z-03 "touching files outside
-declared Scope (In)"). VEMO must demonstrate it is mechanically impossible, not merely discouraged.
+This scenario checks that touching files outside declared Scope (In) is mechanically impossible, not merely
+discouraged.

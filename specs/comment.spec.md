@@ -1,8 +1,8 @@
-# comment.spec — Function-comment governance (advisory; restored from Wildpanda)
+# comment.spec — Function-comment governance (advisory)
 
-> Restored as a first-class concern (v1.7) — Wildpanda's comment governance was a strength that VEMO had
-> downgraded to a footnote. It is **advisory** (judgment, not a hook): the judge may flag gaps on R2, but it
-> is not a mechanical block (a missing comment is not a safety violation). Source-code comments only — not docs.
+> Function comments are a first-class maintainability concern, but still **advisory** (judgment, not a hook):
+> the judge may flag gaps on R2, but a missing comment is not a mechanical safety block. Source-code comments
+> only — not docs.
 
 ## Coverage trigger (progressive, not all-at-once)
 If a task changes code, comment scope = functions that are (1) the owning functions of modified code,

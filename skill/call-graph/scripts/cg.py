@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """cg.py — VEMO call-graph engine (the deterministic core of the call-graph skill).
 
-Why this exists: Wildpanda's call-graph skill was 183 lines of prose describing shell commands. A Claude
-Code engineer makes the deterministic part a TOOL — verifiable, testable, fast — and keeps the SKILL.md a
-thin contract. Tool-first beats prose-first, and beats a model "eyeballing" call relationships.
+Why this exists: call-graph work should be deterministic. The tool handles indexing and graph queries, while
+SKILL.md stays a thin contract. Tool-first beats prose-first, and beats a model "eyeballing" call relationships.
 
 Commands:
   cg.py index                      build/refresh the symbol index (ctags) + call db (cscope, if present)

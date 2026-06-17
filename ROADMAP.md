@@ -24,6 +24,6 @@ Most are good first contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Explicitly out of scope
 - OS/container sandboxing (use a real sandbox; VEMO is a cooperative-host control surface — see `SECURITY.md`).
-- Training-side governance (VEMO covers the *coding/deploy* lane, like Wildpanda).
+- Training-side governance (VEMO currently covers the coding/deploy lane).
 
 > Want to move one up? Open an issue. The project governs itself with its own gates, so your PR is dogfood too.

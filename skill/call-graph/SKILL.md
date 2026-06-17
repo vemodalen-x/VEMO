@@ -13,7 +13,7 @@ prefer the tool: it's verifiable and cheap.)
 
 **When**
 - auto: the agent needs call info during any task; `flow-discovery` calls it.
-- manual: "who calls", "what does X call", "call chain", "impact of changing X", "查调用 / 调用链".
+- manual: "who calls", "what does X call", "call chain", "impact of changing X".
 
 **Prereqs** — Universal Ctags (defs) and/or cscope (best for callers/callees, C/C++); pyan3 (Python), madge (JS/TS).
 `cg.py` detects what's installed and prints the install hint for what's missing — it never silently guesses.
