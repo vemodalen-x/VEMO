@@ -1,17 +1,207 @@
 #!/usr/bin/env python3
-"""eval/run.py — executable conformance runner for VEMO's own mechanisms.
+"""Executable conformance runner for VEMO's own mechanisms.
 
-Two layers, both real (no self-grading), written to eval/out/report.json:
-  1. VALIDATOR conformance — exercises task_state.py with controlled fixtures in isolated sandboxes.
-  2. HOOK end-to-end — pipes real PreToolUse/SessionStart payloads into enforcement/hooks/run.py and
-     asserts the EXIT CODES (2=block, 0=allow). This is the layer that used to be untested — a validator
-     that works but hooks that never fire is exactly the failure `vemo doctor`'s gates-heartbeat hunts.
-Run: python3 eval/run.py
+Default output is intentionally compact for agent loops: all selected checks run, but passing
+checks are not printed one by one unless --verbose is requested. Full details remain in
+eval/out/report.json.
 """
-import os, sys, json, tempfile, shutil, subprocess, re
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VAL = os.path.join(ROOT, "enforcement", "validators", "task_state.py")
 HOOK = os.path.join(ROOT, "enforcement", "hooks", "run.py")
+
+GROUPS = ("validator", "ci", "hook", "git", "budget", "auto")
+
+CHECK_INDEX = (
+    ("validator", "scope: in-scope allowed"),
+    ("validator", "scope: out-of-scope flagged"),
+    ("validator", "tier: README->R0"),
+    ("validator", "tier: src/app->R1"),
+    ("validator", "tier: src/core->R2"),
+    ("validator", "tier: unmatched (Makefile) -> R1 fail-safe"),
+    ("validator", "tier: enforcement/** is R2 (self-protection)"),
+    ("validator", "tier: .claude/settings.json is R2 (self-protection)"),
+    ("validator", "tier: vemo.config.yaml is R2 (self-protection)"),
+    ("validator", "tier: specs/** is R2 (self-protection)"),
+    ("validator", "monotonic: frontier verifiers > high"),
+    ("validator", "exec-evidence: 'passed' w/o run trace BLOCKED"),
+    ("validator", "exec-evidence: FAKE evidence path BLOCKED"),
+    ("validator", "exec-evidence: real evidence file ok"),
+    ("validator", "R0: acceptance-before-push exempt"),
+    ("validator", "receipt: build configured + NO receipt -> BLOCKED"),
+    ("validator", "receipt: verify-run executes and passes"),
+    ("validator", "receipt: gate ok after verify-run"),
+    ("validator", "receipt: failing build -> receipt-failed BLOCKED"),
+    ("ci", "ci workflow: verify-run before pre-push (enforcement/ci/vemo-ci.yml)"),
+    ("ci", "ci workflow: verify-run before pre-push (.github/workflows/vemo-ci.yml)"),
+    ("validator", "judge: front-matter pass w/o provenance BLOCKED"),
+    ("validator", "judge: high-tier R2 one pass still BLOCKED"),
+    ("validator", "judge: high-tier R2 required pass count ok"),
+    ("validator", "judge: provenance says FAIL, front-matter says pass -> BLOCKED"),
+    ("validator", "judge: low-tier R1 requires provenance"),
+    ("validator", "judge: low-tier R1 one pass ok"),
+    ("validator", "judge: high-tier R1 self-verifies (no judge required)"),
+    ("validator", "parser: inline-map acceptance parses (spec example)"),
+    ("validator", "parser: inline-map gate-check does not crash"),
+    ("validator", "bind: unbound falls back to freshest heartbeat (TB)"),
+    ("validator", "bind: bound session checked against ITS OWN task"),
+    ("validator", "bind: bound session out-of-scope on the other task's area"),
+    ("validator", "safety_invariant_of_capability=true"),
+    ("validator", "rule-of-two: 3/3 trifecta BLOCKED"),
+    ("validator", "rule-of-two: 2/3 allowed"),
+    ("hook", "hook e2e: in-scope edit exit 0"),
+    ("hook", "hook e2e: out-of-scope edit exit 2 + reason"),
+    ("hook", "hook e2e: binary blob exit 2 (safety#6)"),
+    ("hook", "hook e2e: secret content exit 2 (safety#5)"),
+    ("hook", "hook e2e: destructive command exit 2 (safety#4)"),
+    ("hook", "hook e2e: benign command exit 0"),
+    ("hook", "hook e2e: out-of-repo write exit 2"),
+    ("hook", "hook e2e: git --no-verify gate evasion exit 2"),
+    ("hook", "hook e2e: write into .git/ (hook tamper) exit 2"),
+    ("hook", "hook e2e: core.hooksPath redirect exit 2"),
+    ("hook", "hook e2e: reading .git/hooks allowed (no false positive)"),
+    ("hook", "hook e2e: foreign minimal payload in-scope exit 0"),
+    ("hook", "hook e2e: foreign minimal payload out-of-scope exit 2"),
+    ("hook", "hook e2e: session-start exit 0 + orientation"),
+    ("hook", "hook e2e: telemetry recorded blocks + session_start"),
+    ("git", "pre-commit e2e: staged secret exits 1 + reason"),
+    ("hook", "hook e2e: task-approved destructive cmd allowed + logged"),
+    ("hook", "hook e2e: Stop below acceptance -> exit 0 + reminder"),
+    ("hook", "hook e2e: Stop/SubagentStop telemetry recorded"),
+    ("hook", "hook e2e: monitor mode logs but does NOT block"),
+    ("budget", "hook e2e: budget exceeded + auto ON -> hard stop exit 2"),
+    ("budget", "hook e2e: budget exceeded + human present -> advisory exit 0"),
+    ("budget", "budget: files counts writes only (1, not 2)"),
+    ("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)"),
+)
+
+SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
+
+
+class FailFast(Exception):
+    """Stop the runner after the first selected failure."""
+
+
+class Runner:
+    """@Codex-comment
+    Input: Parsed CLI filters and check metadata.
+    Output: Selected check results and JSON/stdout reports.
+    Key Steps: Normalize filters, record selected checks, compact stdout by default.
+    Key Params: group filters, substring match filters, verbose/failures-only/fail-fast flags.
+    State/Dependencies: Writes eval/out/report.json under ROOT.
+    """
+
+    def __init__(self, args):
+        self.args = args
+        self.selected = [
+            (group, name) for group, name in CHECK_INDEX
+            if self._matches(group, name)
+        ]
+        self.selected_set = set(self.selected)
+        self.selected_groups = {group for group, _ in self.selected}
+        self.checks = []
+
+    def _matches(self, group, name):
+        if self.args.group and group not in self.args.group:
+            return False
+        if self.args.match:
+            lowered = name.lower()
+            return any(term in lowered for term in self.args.match)
+        return True
+
+    def has_group(self, group):
+        return group in self.selected_groups
+
+    def chk(self, group, name, got, want):
+        if (group, name) not in self.selected_set:
+            return
+        ok = (want in got) if isinstance(want, str) else bool(want(got))
+        self.checks.append({"group": group, "name": name, "pass": ok, "got": got})
+        if self.args.fail_fast and not ok:
+            raise FailFast
+
+    def report(self):
+        passed = sum(1 for row in self.checks if row["pass"])
+        total = len(self.checks)
+        rate = round(passed / total, 3) if total else 0.0
+        rep = {
+            "passed": passed,
+            "total": total,
+            "rate": rate,
+            "filters": {
+                "group": sorted(self.args.group),
+                "match": sorted(self.args.match),
+            },
+            "checks": [
+                {
+                    "group": row["group"],
+                    "name": row["name"],
+                    "pass": row["pass"],
+                    "got": (row["got"] if isinstance(row["got"], str) else str(row["got"]))[:200],
+                }
+                for row in self.checks
+            ],
+        }
+        out = os.path.join(ROOT, "eval", "out")
+        os.makedirs(out, exist_ok=True)
+        json.dump(rep, open(os.path.join(out, "report.json"), "w", encoding="utf-8"), indent=2)
+        self._print(rep)
+        return 0 if total and passed == total else 1
+
+    def _print(self, rep):
+        rows = self.checks
+        if self.args.verbose:
+            printable = rows
+        elif self.args.failures_only:
+            printable = [row for row in rows if not row["pass"]]
+        else:
+            printable = [row for row in rows if not row["pass"]]
+
+        for row in printable:
+            status = "PASS" if row["pass"] else "FAIL"
+            print(f"  [{status}] {row['group']}: {row['name']}")
+            if not row["pass"]:
+                got = row["got"] if isinstance(row["got"], str) else str(row["got"])
+                print(f"         got: {got[:200]}")
+
+        pct = int(rep["rate"] * 100) if rep["total"] else 0
+        print(f"[eval] conformance {rep['passed']}/{rep['total']} = {pct}%  -> eval/out/report.json")
+
+
+def parse_args(argv):
+    """Parse compact-output and check-selection options."""
+    p = argparse.ArgumentParser(description="Run VEMO conformance checks.")
+    p.add_argument("--group", action="append", default=[], help="Run one group; repeat or comma-separate.")
+    p.add_argument("--match", action="append", default=[], help="Only count checks whose name contains text.")
+    p.add_argument("--verbose", action="store_true", help="Print every selected PASS/FAIL line.")
+    p.add_argument("--failures-only", action="store_true", help="Print failed selected checks plus summary.")
+    p.add_argument("--fail-fast", action="store_true", help="Stop after the first selected failure.")
+    p.add_argument("--list", action="store_true", help="List selected checks without running them.")
+    args = p.parse_args(argv)
+    args.group = normalize_csv(args.group)
+    args.match = normalize_csv(args.match, lower=True)
+    unknown = sorted(set(args.group) - set(GROUPS))
+    if unknown:
+        p.error("unknown group(s): " + ", ".join(unknown))
+    return args
+
+
+def normalize_csv(values, lower=False):
+    out = []
+    for value in values:
+        for part in value.split(","):
+            part = part.strip()
+            if part:
+                out.append(part.lower() if lower else part)
+    return set(out)
 
 
 def run(root, *args):
@@ -29,20 +219,18 @@ def hook(root, guard, payload):
 
 def sandbox(tier=None, task=None, cfg_sub=()):
     d = tempfile.mkdtemp(prefix="vemo_eval_")
-    cfg = open(os.path.join(ROOT, "vemo.config.yaml")).read()
-    # neutralize the host's paths.build/smoke (VEMO dogfoods eval as its own build): sandboxes must
-    # not inherit a real build command — receipts are opted into per-check via cfg_sub on `build: ""`
+    cfg = open(os.path.join(ROOT, "vemo.config.yaml"), encoding="utf-8").read()
     cfg = re.sub(r'(?m)^(\s*build:\s*).*$', r'\1""', cfg, count=1)
     cfg = re.sub(r'(?m)^(\s*smoke:\s*).*$', r'\1""', cfg, count=1)
     if tier:
         cfg = re.sub(r'(?m)^(\s*tier:\s*)\w+', r'\1' + tier, cfg, count=1)
     for pat, repl in cfg_sub:
         cfg = re.sub(pat, repl, cfg, count=1)
-    open(os.path.join(d, "vemo.config.yaml"), "w").write(cfg)
+    open(os.path.join(d, "vemo.config.yaml"), "w", encoding="utf-8").write(cfg)
     os.makedirs(os.path.join(d, "tasks"))
     os.makedirs(os.path.join(d, ".vemo"))
     if task:
-        open(os.path.join(d, "tasks", "T.md"), "w").write(task)
+        open(os.path.join(d, "tasks", "T.md"), "w", encoding="utf-8").write(task)
     return d
 
 
@@ -54,17 +242,9 @@ def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_e
             f"owning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n")
 
 
-CHECKS = []
-def chk(name, got, want):
-    ok = (want in got) if isinstance(want, str) else bool(want(got))
-    CHECKS.append((name, ok, got))
-
-
-SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
-
-
 def vnum(s):
-    m = re.search(r"verifiers=(\d+)", s); return int(m.group(1)) if m else -1
+    m = re.search(r"verifiers=(\d+)", s)
+    return int(m.group(1)) if m else -1
 
 
 def edit_payload(path, content="x = 1\n"):
@@ -81,224 +261,259 @@ def install_precommit_fixture(root):
     subprocess.run(["git", "init"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
 
-# ═══ 1. VALIDATOR conformance ═══════════════════════════════════════════════
-# scope containment
-d = sandbox(task=task('["src/feature/**"]'))
-chk("scope: in-scope allowed", run(d, "scope-check", "--path", d + "/src/feature/x.py"), "in-scope")
-chk("scope: out-of-scope flagged", run(d, "scope-check", "--path", d + "/src/other/x.py"), "out-of-scope")
-shutil.rmtree(d)
+def run_validator_checks(r):
+    if not r.has_group("validator"):
+        return
 
-# diff-derived risk tier + fail-safe default + self-protection
-d = sandbox()
-chk("tier: README->R0", run(d, "tier-required", "--paths", "README.md"), lambda g: g == "R0")
-chk("tier: src/app->R1", run(d, "tier-required", "--paths", "src/app/x.ts"), lambda g: g == "R1")
-chk("tier: src/core->R2", run(d, "tier-required", "--paths", "src/core/k.cpp"), lambda g: g == "R2")
-chk("tier: unmatched (Makefile) -> R1 fail-safe", run(d, "tier-required", "--paths", "Makefile"), lambda g: g == "R1")
-chk("tier: enforcement/** is R2 (self-protection)", run(d, "tier-required", "--paths", "enforcement/hooks/run.py"), lambda g: g == "R2")
-chk("tier: .claude/settings.json is R2 (self-protection)", run(d, "tier-required", "--paths", ".claude/settings.json"), lambda g: g == "R2")
-chk("tier: vemo.config.yaml is R2 (self-protection)", run(d, "tier-required", "--paths", "vemo.config.yaml"), lambda g: g == "R2")
-chk("tier: specs/** is R2 (self-protection)", run(d, "tier-required", "--paths", "specs/safety.spec.md"), lambda g: g == "R2")
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/feature/**"]'))
+    r.chk("validator", "scope: in-scope allowed", run(d, "scope-check", "--path", d + "/src/feature/x.py"), "in-scope")
+    r.chk("validator", "scope: out-of-scope flagged", run(d, "scope-check", "--path", d + "/src/other/x.py"), "out-of-scope")
+    shutil.rmtree(d)
 
-# capability-monotonic: verifiers scale UP with tier
-dh, df = sandbox(tier="high"), sandbox(tier="frontier")
-chk("monotonic: frontier verifiers > high", "", lambda _: vnum(run(df, "verify-plan", "--risk", "R2")) > vnum(run(dh, "verify-plan", "--risk", "R2")))
-shutil.rmtree(dh); shutil.rmtree(df)
+    d = sandbox()
+    r.chk("validator", "tier: README->R0", run(d, "tier-required", "--paths", "README.md"), lambda g: g == "R0")
+    r.chk("validator", "tier: src/app->R1", run(d, "tier-required", "--paths", "src/app/x.ts"), lambda g: g == "R1")
+    r.chk("validator", "tier: src/core->R2", run(d, "tier-required", "--paths", "src/core/k.cpp"), lambda g: g == "R2")
+    r.chk("validator", "tier: unmatched (Makefile) -> R1 fail-safe", run(d, "tier-required", "--paths", "Makefile"), lambda g: g == "R1")
+    r.chk("validator", "tier: enforcement/** is R2 (self-protection)", run(d, "tier-required", "--paths", "enforcement/hooks/run.py"), lambda g: g == "R2")
+    r.chk("validator", "tier: .claude/settings.json is R2 (self-protection)", run(d, "tier-required", "--paths", ".claude/settings.json"), lambda g: g == "R2")
+    r.chk("validator", "tier: vemo.config.yaml is R2 (self-protection)", run(d, "tier-required", "--paths", "vemo.config.yaml"), lambda g: g == "R2")
+    r.chk("validator", "tier: specs/** is R2 (self-protection)", run(d, "tier-required", "--paths", "specs/safety.spec.md"), lambda g: g == "R2")
+    shutil.rmtree(d)
 
-# executed-ground-truth gate: claim without trace / with fake path / with real file
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed"))
-chk("exec-evidence: 'passed' w/o run trace BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "executed-evidence-missing")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
-                      build_exit="0", evidence="totally/fake/nonexistent.log"))
-chk("exec-evidence: FAKE evidence path BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "evidence-file-missing")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
-                      build_exit="0", evidence=".vemo/run/1.log"))
-os.makedirs(os.path.join(d, ".vemo", "run")); open(os.path.join(d, ".vemo", "run", "1.log"), "w").write("$ true\n[exit 0]\n")
-chk("exec-evidence: real evidence file ok", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-shutil.rmtree(d)
+    dh, df = sandbox(tier="high"), sandbox(tier="frontier")
+    r.chk("validator", "monotonic: frontier verifiers > high", "",
+          lambda _: vnum(run(df, "verify-plan", "--risk", "R2")) > vnum(run(dh, "verify-plan", "--risk", "R2")))
+    shutil.rmtree(dh)
+    shutil.rmtree(df)
 
-# R0 velocity path: no acceptance gate
-d = sandbox(task=task('["docs/**"]', state="ImplementationDone", risk="R0"))
-chk("R0: acceptance-before-push exempt", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed"))
+    r.chk("validator", "exec-evidence: 'passed' w/o run trace BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "executed-evidence-missing")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence="totally/fake/nonexistent.log"))
+    r.chk("validator", "exec-evidence: FAKE evidence path BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "evidence-file-missing")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence=".vemo/run/1.log"))
+    os.makedirs(os.path.join(d, ".vemo", "run"))
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("$ true\n[exit 0]\n")
+    r.chk("validator", "exec-evidence: real evidence file ok", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
+    shutil.rmtree(d)
 
-# verify-run receipt: the gate trusts the machine receipt, not typed numbers
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
-                      build_exit="0", evidence=".vemo/run/1.log"),
-            cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"true"')])
-os.makedirs(os.path.join(d, ".vemo", "run")); open(os.path.join(d, ".vemo", "run", "1.log"), "w").write("x\n")
-chk("receipt: build configured + NO receipt -> BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "no-verify-receipt")
-chk("receipt: verify-run executes and passes", run(d, "verify-run"), lambda g: g.startswith("pass"))
-chk("receipt: gate ok after verify-run", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
-                      build_exit="0", evidence=".vemo/run/1.log"),
-            cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"false"')])   # build command that FAILS
-os.makedirs(os.path.join(d, ".vemo", "run")); open(os.path.join(d, ".vemo", "run", "1.log"), "w").write("x\n")
-run(d, "verify-run")
-chk("receipt: failing build -> receipt-failed BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "receipt-failed")
-shutil.rmtree(d)
+    d = sandbox(task=task('["docs/**"]', state="ImplementationDone", risk="R0"))
+    r.chk("validator", "R0: acceptance-before-push exempt", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
+    shutil.rmtree(d)
 
-# CI must create the verify-run receipt before the push gate checks it.
-for wf in ("enforcement/ci/vemo-ci.yml", ".github/workflows/vemo-ci.yml"):
-    txt = open(os.path.join(ROOT, wf), encoding="utf-8").read()
-    chk(f"ci workflow: verify-run before pre-push ({wf})", txt,
-        lambda g: "verify-run" in g and "bash enforcement/ci/pre-push" in g
-        and g.index("verify-run") < g.index("bash enforcement/ci/pre-push"))
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence=".vemo/run/1.log"),
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"true"')])
+    os.makedirs(os.path.join(d, ".vemo", "run"))
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    r.chk("validator", "receipt: build configured + NO receipt -> BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "no-verify-receipt")
+    r.chk("validator", "receipt: verify-run executes and passes", run(d, "verify-run"), lambda g: g.startswith("pass"))
+    r.chk("validator", "receipt: gate ok after verify-run", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence=".vemo/run/1.log"),
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"false"')])
+    os.makedirs(os.path.join(d, ".vemo", "run"))
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    run(d, "verify-run")
+    r.chk("validator", "receipt: failing build -> receipt-failed BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "receipt-failed")
+    shutil.rmtree(d)
 
-# judge provenance: a verdict pasted into front-matter alone does not open the gate
-d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
-chk("judge: front-matter pass w/o provenance BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-no-provenance")
-run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e")
-chk("judge: high-tier R2 one pass still BLOCKED", run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
-run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e-2")
-chk("judge: high-tier R2 required pass count ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
-run(d, "judge-record", "--task", "T", "--verdict", "fail")
-chk("judge: provenance says FAIL, front-matter says pass -> BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-provenance-mismatch")
-shutil.rmtree(d)
-d = sandbox(tier="low", task=task('["src/**"]', risk="R1", verdict="pass"))
-chk("judge: low-tier R1 requires provenance", run(d, "gate-check", "--gate", "required-judge"), "judge-no-provenance")
-run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "low-r1")
-chk("judge: low-tier R1 one pass ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-shutil.rmtree(d)
-d = sandbox(tier="high", task=task('["src/**"]', risk="R1", verdict="null"))
-chk("judge: high-tier R1 self-verifies (no judge required)", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
+    r.chk("validator", "judge: front-matter pass w/o provenance BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-no-provenance")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e")
+    r.chk("validator", "judge: high-tier R2 one pass still BLOCKED", run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e-2")
+    r.chk("validator", "judge: high-tier R2 required pass count ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
+    run(d, "judge-record", "--task", "T", "--verdict", "fail")
+    r.chk("validator", "judge: provenance says FAIL, front-matter says pass -> BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-provenance-mismatch")
+    shutil.rmtree(d)
+    d = sandbox(tier="low", task=task('["src/**"]', risk="R1", verdict="pass"))
+    r.chk("validator", "judge: low-tier R1 requires provenance", run(d, "gate-check", "--gate", "required-judge"), "judge-no-provenance")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "low-r1")
+    r.chk("validator", "judge: low-tier R1 one pass ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
+    shutil.rmtree(d)
+    d = sandbox(tier="high", task=task('["src/**"]', risk="R1", verdict="null"))
+    r.chk("validator", "judge: high-tier R1 self-verifies (no judge required)", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
+    shutil.rmtree(d)
 
-# inline-map front-matter (the task.spec §2 example style) parses
-d = sandbox(task=("---\nid: T\nrisk: R1\nstate: ImplementationDone\nscope_in: [\"src/**\"]\n"
-                  "acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: \".vemo/run/1.log\" }\n"
-                  "judge: { required: false, verdict: null }\nowning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n"))
-chk("parser: inline-map acceptance parses (spec example)", run(d, "get", "--field", "acceptance.status"), lambda g: g == "passed")
-chk("parser: inline-map gate-check does not crash", run(d, "gate-check", "--gate", "acceptance-before-push"), "block:")
-shutil.rmtree(d)
+    d = sandbox(task=("---\nid: T\nrisk: R1\nstate: ImplementationDone\nscope_in: [\"src/**\"]\n"
+                      "acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: \".vemo/run/1.log\" }\n"
+                      "judge: { required: false, verdict: null }\nowning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n"))
+    r.chk("validator", "parser: inline-map acceptance parses (spec example)", run(d, "get", "--field", "acceptance.status"), lambda g: g == "passed")
+    r.chk("validator", "parser: inline-map gate-check does not crash", run(d, "gate-check", "--gate", "acceptance-before-push"), "block:")
+    shutil.rmtree(d)
 
-# session binding: a bound session is checked against ITS task, not freshest-heartbeat
-d = sandbox(task=task('["src/a/**"]', task_id="TA"))
-open(os.path.join(d, "tasks", "T2.md"), "w").write(
-    task('["src/b/**"]', task_id="TB").replace("heartbeat: 2026-06-16T20:00", "heartbeat: 2026-06-17T09:00"))
-chk("bind: unbound falls back to freshest heartbeat (TB)", run(d, "scope-check", "--path", d + "/src/b/x.py"), "in-scope")
-run(d, "bind", "--session", "s-A", "--task", "TA")
-chk("bind: bound session checked against ITS OWN task", run(d, "scope-check", "--path", d + "/src/a/x.py", "--session", "s-A"), "in-scope")
-chk("bind: bound session out-of-scope on the other task's area", run(d, "scope-check", "--path", d + "/src/b/x.py", "--session", "s-A"), "out-of-scope")
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/a/**"]', task_id="TA"))
+    open(os.path.join(d, "tasks", "T2.md"), "w", encoding="utf-8").write(
+        task('["src/b/**"]', task_id="TB").replace("heartbeat: 2026-06-16T20:00", "heartbeat: 2026-06-17T09:00"))
+    r.chk("validator", "bind: unbound falls back to freshest heartbeat (TB)", run(d, "scope-check", "--path", d + "/src/b/x.py"), "in-scope")
+    run(d, "bind", "--session", "s-A", "--task", "TA")
+    r.chk("validator", "bind: bound session checked against ITS OWN task", run(d, "scope-check", "--path", d + "/src/a/x.py", "--session", "s-A"), "in-scope")
+    r.chk("validator", "bind: bound session out-of-scope on the other task's area", run(d, "scope-check", "--path", d + "/src/b/x.py", "--session", "s-A"), "out-of-scope")
+    shutil.rmtree(d)
 
-# safety flags + Rule of Two
-d = sandbox()
-chk("safety_invariant_of_capability=true", run(d, "config-get", "--field", "enforcement.safety_invariant_of_capability"), lambda g: str(g).lower() == "true")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', trifecta='[private_data, untrusted_content, external_comms]'))
-chk("rule-of-two: 3/3 trifecta BLOCKED", run(d, "trifecta-check"), "block:rule-of-two")
-shutil.rmtree(d)
-d = sandbox(task=task('["src/**"]', trifecta='[private_data, external_comms]'))
-chk("rule-of-two: 2/3 allowed", run(d, "trifecta-check"), lambda g: g.startswith("ok"))
-shutil.rmtree(d)
+    d = sandbox()
+    r.chk("validator", "safety_invariant_of_capability=true", run(d, "config-get", "--field", "enforcement.safety_invariant_of_capability"), lambda g: str(g).lower() == "true")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', trifecta='[private_data, untrusted_content, external_comms]'))
+    r.chk("validator", "rule-of-two: 3/3 trifecta BLOCKED", run(d, "trifecta-check"), "block:rule-of-two")
+    shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', trifecta='[private_data, external_comms]'))
+    r.chk("validator", "rule-of-two: 2/3 allowed", run(d, "trifecta-check"), lambda g: g.startswith("ok"))
+    shutil.rmtree(d)
 
-# ═══ 2. HOOK end-to-end (payload -> dispatcher -> exit code) ═══════════════
-d = sandbox(task=task('["src/feature/**"]'))
-rc, err = hook(d, "edit", edit_payload(d + "/src/feature/x.py"))
-chk("hook e2e: in-scope edit exit 0", "", lambda _: rc == 0)
-rc, err = hook(d, "edit", edit_payload(d + "/src/other/x.py"))
-chk("hook e2e: out-of-scope edit exit 2 + reason", "", lambda _: rc == 2 and "safety.spec#1" in err)
-rc, err = hook(d, "edit", edit_payload(d + "/src/feature/model.onnx"))
-chk("hook e2e: binary blob exit 2 (safety#6)", "", lambda _: rc == 2 and "safety.spec#6" in err)
-rc, err = hook(d, "edit", edit_payload(d + "/src/feature/cfg.py", SECRET_FIXTURE))
-chk("hook e2e: secret content exit 2 (safety#5)", "", lambda _: rc == 2 and "safety.spec#5" in err)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git reset --hard HEAD~3"}})
-chk("hook e2e: destructive command exit 2 (safety#4)", "", lambda _: rc == 2 and "safety.spec#4" in err)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "ls -la"}})
-chk("hook e2e: benign command exit 0", "", lambda _: rc == 0)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo pwned >> ~/.bashrc"}})
-chk("hook e2e: out-of-repo write exit 2", "", lambda _: rc == 2 and "outside repo_root" in err)
-# git-gate evasion / tamper (safety#4): the agent must not bypass or redirect VEMO's own git ring
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git commit -m wip --no-verify"}})
-chk("hook e2e: git --no-verify gate evasion exit 2", "", lambda _: rc == 2 and "no-verify" in err)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo ok > .git/hooks/pre-push"}})
-chk("hook e2e: write into .git/ (hook tamper) exit 2", "", lambda _: rc == 2 and "git-gate tamper" in err)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git config core.hooksPath /tmp/nohooks"}})
-chk("hook e2e: core.hooksPath redirect exit 2", "", lambda _: rc == 2 and "hooksPath" in err)
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "ls -la .git/hooks"}})
-chk("hook e2e: reading .git/hooks allowed (no false positive)", "", lambda _: rc == 0)
-# harness-neutral adapter contract (docs/ADAPTERS.md): a minimal payload from a NON-Claude harness —
-# no session_id, unknown extra fields — must be guarded identically, not crash or fail open
-rc, err = hook(d, "edit", {"tool_name": "Write", "tool_input": {"file_path": d + "/src/feature/ok.py"}, "harness": "generic"})
-chk("hook e2e: foreign minimal payload in-scope exit 0", "", lambda _: rc == 0)
-rc, err = hook(d, "edit", {"tool_name": "Write", "tool_input": {"file_path": d + "/src/other/no.py"}, "harness": "generic"})
-chk("hook e2e: foreign minimal payload out-of-scope exit 2", "", lambda _: rc == 2 and "safety.spec#1" in err)
-rc, err = hook(d, "session-start", {"session_id": "eval-s1"})
-chk("hook e2e: session-start exit 0 + orientation", "", lambda _: rc == 0)
-tele = open(os.path.join(d, ".vemo", "telemetry.jsonl")).read()
-chk("hook e2e: telemetry recorded blocks + session_start", "", lambda _: "scope_block_out" in tele and "session_start" in tele)
-shutil.rmtree(d)
 
-# pre-commit secret scan must not miss matches because of grep -q + pipefail SIGPIPE behavior
-d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
-                      build_exit="0", evidence=".vemo/run/1.log"))
-os.makedirs(os.path.join(d, ".vemo", "run")); open(os.path.join(d, ".vemo", "run", "1.log"), "w").write("ok\n")
-install_precommit_fixture(d)
-os.makedirs(os.path.join(d, "src")); open(os.path.join(d, "src", "secret.py"), "w").write(SECRET_FIXTURE + "\n")
-subprocess.run(["git", "add", "src/secret.py"], cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True)
-chk("pre-commit e2e: staged secret exits 1 + reason", p.stdout + p.stderr,
-    lambda g: p.returncode == 1 and "secret-scan" in g)
-shutil.rmtree(d)
+def run_ci_checks(r):
+    if not r.has_group("ci"):
+        return
+    for wf in ("enforcement/ci/vemo-ci.yml", ".github/workflows/vemo-ci.yml"):
+        txt = open(os.path.join(ROOT, wf), encoding="utf-8").read()
+        r.chk("ci", f"ci workflow: verify-run before pre-push ({wf})", txt,
+              lambda g: "verify-run" in g and "bash enforcement/ci/pre-push" in g
+              and g.index("verify-run") < g.index("bash enforcement/ci/pre-push"))
 
-# approved_commands escape hatch (user-approved destructive cmd in the task file)
-d = sandbox(task=task('["src/**"]', approved='["git reset --hard HEAD~1"]'))
-rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git reset --hard HEAD~1"}})
-chk("hook e2e: task-approved destructive cmd allowed + logged", "", lambda _: rc == 0)
-shutil.rmtree(d)
 
-# stop + subagent-stop guards: advisory (exit 0) but must FIRE and leave a telemetry trail
-d = sandbox(task=task('["src/**"]'))   # ImplementationDone R1 -> below AcceptancePassed
-rc, err = hook(d, "stop", {"session_id": "eval-s1"})
-chk("hook e2e: Stop below acceptance -> exit 0 + reminder", "", lambda _: rc == 0 and "not yet push-ready" in err)
-rc2, _ = hook(d, "subagent-stop", {"session_id": "eval-s1"})
-tele = open(os.path.join(d, ".vemo", "telemetry.jsonl")).read()
-chk("hook e2e: Stop/SubagentStop telemetry recorded", "",
-    lambda _: rc2 == 0 and "stop_below_acceptance" in tele and "subagent_stop" in tele)
-shutil.rmtree(d)
+def run_hook_checks(r):
+    if not r.has_group("hook"):
+        return
+    d = sandbox(task=task('["src/feature/**"]'))
+    rc, err = hook(d, "edit", edit_payload(d + "/src/feature/x.py"))
+    r.chk("hook", "hook e2e: in-scope edit exit 0", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "edit", edit_payload(d + "/src/other/x.py"))
+    r.chk("hook", "hook e2e: out-of-scope edit exit 2 + reason", (rc, err), lambda g: g[0] == 2 and "safety.spec#1" in g[1])
+    rc, err = hook(d, "edit", edit_payload(d + "/src/feature/model.onnx"))
+    r.chk("hook", "hook e2e: binary blob exit 2 (safety#6)", (rc, err), lambda g: g[0] == 2 and "safety.spec#6" in g[1])
+    rc, err = hook(d, "edit", edit_payload(d + "/src/feature/cfg.py", SECRET_FIXTURE))
+    r.chk("hook", "hook e2e: secret content exit 2 (safety#5)", (rc, err), lambda g: g[0] == 2 and "safety.spec#5" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git reset --hard HEAD~3"}})
+    r.chk("hook", "hook e2e: destructive command exit 2 (safety#4)", (rc, err), lambda g: g[0] == 2 and "safety.spec#4" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "ls -la"}})
+    r.chk("hook", "hook e2e: benign command exit 0", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo pwned >> ~/.bashrc"}})
+    r.chk("hook", "hook e2e: out-of-repo write exit 2", (rc, err), lambda g: g[0] == 2 and "outside repo_root" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git commit -m wip --no-verify"}})
+    r.chk("hook", "hook e2e: git --no-verify gate evasion exit 2", (rc, err), lambda g: g[0] == 2 and "no-verify" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo ok > .git/hooks/pre-push"}})
+    r.chk("hook", "hook e2e: write into .git/ (hook tamper) exit 2", (rc, err), lambda g: g[0] == 2 and "git-gate tamper" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git config core.hooksPath /tmp/nohooks"}})
+    r.chk("hook", "hook e2e: core.hooksPath redirect exit 2", (rc, err), lambda g: g[0] == 2 and "hooksPath" in g[1])
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "ls -la .git/hooks"}})
+    r.chk("hook", "hook e2e: reading .git/hooks allowed (no false positive)", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "edit", {"tool_name": "Write", "tool_input": {"file_path": d + "/src/feature/ok.py"}, "harness": "generic"})
+    r.chk("hook", "hook e2e: foreign minimal payload in-scope exit 0", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "edit", {"tool_name": "Write", "tool_input": {"file_path": d + "/src/other/no.py"}, "harness": "generic"})
+    r.chk("hook", "hook e2e: foreign minimal payload out-of-scope exit 2", (rc, err), lambda g: g[0] == 2 and "safety.spec#1" in g[1])
+    rc, err = hook(d, "session-start", {"session_id": "eval-s1"})
+    r.chk("hook", "hook e2e: session-start exit 0 + orientation", (rc, err), lambda g: g[0] == 0)
+    tele = open(os.path.join(d, ".vemo", "telemetry.jsonl"), encoding="utf-8").read()
+    r.chk("hook", "hook e2e: telemetry recorded blocks + session_start", tele,
+          lambda g: "scope_block_out" in g and "session_start" in g)
+    shutil.rmtree(d)
 
-# monitor mode: observed, not blocked — honored by the dispatcher (used to be honored nowhere on the bash path)
-d = sandbox(task=task('["src/feature/**"]'), cfg_sub=[(r'(?m)^(\s*mode:\s*)enforce', r'\1monitor')])
-rc, err = hook(d, "edit", edit_payload(d + "/src/other/x.py"))
-chk("hook e2e: monitor mode logs but does NOT block", "", lambda _: rc == 0 and "monitor mode" in err)
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]', approved='["git reset --hard HEAD~1"]'))
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git reset --hard HEAD~1"}})
+    r.chk("hook", "hook e2e: task-approved destructive cmd allowed + logged", (rc, err), lambda g: g[0] == 0)
+    shutil.rmtree(d)
 
-# budget stop rule: hard only when unattended (auto ON)
-d = sandbox(task=task('["src/**"]'))
-json.dump({"enabled": True, "max_auto_tier": "R1"}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w"))
-json.dump({"started": "2026-06-16T20:00", "tool_calls": 9999, "files": []}, open(os.path.join(d, ".vemo", "run.json"), "w"))
-rc, err = hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/x.py"}})
-chk("hook e2e: budget exceeded + auto ON -> hard stop exit 2", "", lambda _: rc == 2 and "STOP RULE" in err)
-json.dump({"enabled": False}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w"))
-rc, err = hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/x.py"}})
-chk("hook e2e: budget exceeded + human present -> advisory exit 0", "", lambda _: rc == 0 and "advisory" in err)
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/**"]'))
+    rc, err = hook(d, "stop", {"session_id": "eval-s1"})
+    r.chk("hook", "hook e2e: Stop below acceptance -> exit 0 + reminder", (rc, err), lambda g: g[0] == 0 and "not yet push-ready" in g[1])
+    rc2, _ = hook(d, "subagent-stop", {"session_id": "eval-s1"})
+    tele = open(os.path.join(d, ".vemo", "telemetry.jsonl"), encoding="utf-8").read()
+    r.chk("hook", "hook e2e: Stop/SubagentStop telemetry recorded", tele,
+          lambda g: rc2 == 0 and "stop_below_acceptance" in g and "subagent_stop" in g)
+    shutil.rmtree(d)
 
-# budget counts only WRITE-touched files (reading is not touching)
-d = sandbox(task=task('["src/**"]'))
-hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/r.py"}, "session_id": "s9"})
-hook(d, "budget", {"tool_name": "Edit", "tool_input": {"file_path": d + "/src/w.py"}, "session_id": "s9"})
-st = run(d, "budget-status", "--session", "s9")
-chk("budget: files counts writes only (1, not 2)", st, lambda g: "files=1/" in g)
-shutil.rmtree(d)
+    d = sandbox(task=task('["src/feature/**"]'), cfg_sub=[(r'(?m)^(\s*mode:\s*)enforce', r'\1monitor')])
+    rc, err = hook(d, "edit", edit_payload(d + "/src/other/x.py"))
+    r.chk("hook", "hook e2e: monitor mode logs but does NOT block", (rc, err), lambda g: g[0] == 0 and "monitor mode" in g[1])
+    shutil.rmtree(d)
 
-# auto-mode enable is human-only: no TTY -> refuse
-p = subprocess.run(["python3", os.path.join(ROOT, "enforcement", "automation", "vemo-auto"), "on"],
-                   input="", capture_output=True, text=True, env=dict(os.environ, VEMO_ROOT=tempfile.mkdtemp(prefix="vemo_eval_")))
-chk("auto: enable w/o TTY REFUSED (agent cannot self-enable)", p.stdout, "REFUSED")
 
-passed = sum(1 for _, ok, _ in CHECKS if ok); total = len(CHECKS)
-rep = {"passed": passed, "total": total, "rate": round(passed / total, 3),
-       "checks": [{"name": n, "pass": ok, "got": (g if isinstance(g, str) else "")[:200]} for n, ok, g in CHECKS]}
-os.makedirs(os.path.join(ROOT, "eval", "out"), exist_ok=True)
-json.dump(rep, open(os.path.join(ROOT, "eval", "out", "report.json"), "w"), indent=2)
-for n, ok, _ in CHECKS:
-    print(f"  [{'PASS' if ok else 'FAIL'}] {n}")
-print(f"[eval] conformance {passed}/{total} = {int(rep['rate']*100)}%  -> eval/out/report.json")
-sys.exit(0 if passed == total else 1)
+def run_git_checks(r):
+    if not r.has_group("git"):
+        return
+    d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence=".vemo/run/1.log"))
+    os.makedirs(os.path.join(d, ".vemo", "run"))
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("ok\n")
+    install_precommit_fixture(d)
+    os.makedirs(os.path.join(d, "src"))
+    open(os.path.join(d, "src", "secret.py"), "w", encoding="utf-8").write(SECRET_FIXTURE + "\n")
+    subprocess.run(["git", "add", "src/secret.py"], cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True)
+    r.chk("git", "pre-commit e2e: staged secret exits 1 + reason", p.stdout + p.stderr,
+          lambda g: p.returncode == 1 and "secret-scan" in g)
+    shutil.rmtree(d)
+
+
+def run_budget_checks(r):
+    if not r.has_group("budget"):
+        return
+    d = sandbox(task=task('["src/**"]'))
+    json.dump({"enabled": True, "max_auto_tier": "R1"}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w", encoding="utf-8"))
+    json.dump({"started": "2026-06-16T20:00", "tool_calls": 9999, "files": []}, open(os.path.join(d, ".vemo", "run.json"), "w", encoding="utf-8"))
+    rc, err = hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/x.py"}})
+    r.chk("budget", "hook e2e: budget exceeded + auto ON -> hard stop exit 2", (rc, err), lambda g: g[0] == 2 and "STOP RULE" in g[1])
+    json.dump({"enabled": False}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w", encoding="utf-8"))
+    rc, err = hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/x.py"}})
+    r.chk("budget", "hook e2e: budget exceeded + human present -> advisory exit 0", (rc, err), lambda g: g[0] == 0 and "advisory" in g[1])
+    shutil.rmtree(d)
+
+    d = sandbox(task=task('["src/**"]'))
+    hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/r.py"}, "session_id": "s9"})
+    hook(d, "budget", {"tool_name": "Edit", "tool_input": {"file_path": d + "/src/w.py"}, "session_id": "s9"})
+    st = run(d, "budget-status", "--session", "s9")
+    r.chk("budget", "budget: files counts writes only (1, not 2)", st, lambda g: "files=1/" in g)
+    shutil.rmtree(d)
+
+
+def run_auto_checks(r):
+    if not r.has_group("auto"):
+        return
+    tmp = tempfile.mkdtemp(prefix="vemo_eval_")
+    try:
+        p = subprocess.run(["python3", os.path.join(ROOT, "enforcement", "automation", "vemo-auto"), "on"],
+                           input="", capture_output=True, text=True, env=dict(os.environ, VEMO_ROOT=tmp))
+        r.chk("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)", p.stdout, "REFUSED")
+    finally:
+        shutil.rmtree(tmp)
+
+
+def main(argv):
+    args = parse_args(argv)
+    runner = Runner(args)
+    if args.list:
+        for group, name in runner.selected:
+            print(f"{group}\t{name}")
+        return 0 if runner.selected else 1
+    if not runner.selected:
+        out = os.path.join(ROOT, "eval", "out")
+        os.makedirs(out, exist_ok=True)
+        json.dump({"passed": 0, "total": 0, "rate": 0.0,
+                   "filters": {"group": sorted(args.group), "match": sorted(args.match)},
+                   "checks": [], "error": "no-checks-selected"},
+                  open(os.path.join(out, "report.json"), "w", encoding="utf-8"), indent=2)
+        print("[eval] no checks selected  -> eval/out/report.json")
+        return 1
+    try:
+        run_validator_checks(runner)
+        run_ci_checks(runner)
+        run_hook_checks(runner)
+        run_git_checks(runner)
+        run_budget_checks(runner)
+        run_auto_checks(runner)
+    except FailFast:
+        pass
+    return runner.report()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
