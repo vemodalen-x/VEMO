@@ -80,6 +80,84 @@ img{max-width:100%}
 <main><div class="content"><h1 id="changelog">Changelog</h1>
 <p>All notable changes to VEMO are documented here.
 Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: <a href="https://semver.org/">SemVer</a>.</p>
+<h2 id="unreleased">[Unreleased]</h2>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li>The required judge gate now enforces the verifier depth reported by <code>verify-plan</code>: high-tier R2 needs two
+  contiguous judge pass records, frontier-tier R2 needs three, and a later fail resets the pass suffix.</li>
+<li>Low/medium capability R1 work now has a real judge requirement at the push gate, while high/frontier R1
+  keeps the self-verify fast path.</li>
+<li>The pre-commit secret diff scan no longer uses <code>git diff | grep -q</code> under <code>pipefail</code>, which could turn a
+  real secret match into a SIGPIPE-based miss. Eval now covers the staged-diff secret path.</li>
+<li>CI now runs <code>task_state.py verify-run</code> before the push gate, so configured build/smoke checks create the
+  machine receipt that <code>acceptance-before-push</code> requires.</li>
+</ul>
+<h3 id="changed">Changed</h3>
+<ul>
+<li>Clarified that <code>capability.tier</code> is vendor-neutral. Model names in <code>model_routing</code> and agent front-matter
+  are advisory routing hints, not governance trust anchors.</li>
+<li>Updated config and CLI wording from <code>R2 judge</code> to the generalized required-judge semantics.</li>
+</ul>
+<h2 id="110-trust-chain-rework-the-labels-are-now-checked">[1.1.0] — trust-chain rework ("the labels are now checked")</h2>
+<p>Driven by a first-principles audit (<code>doc/vemo-first-principles-critique.md</code> in the parent workspace):
+every <code>ENFORCED-BY</code> claim must map to a real mechanism, and every gate's input must be an artifact the
+governed agent did not simply type.</p>
+<h3 id="fixed-claims-that-now-match-mechanisms">Fixed — claims that now match mechanisms</h3>
+<ul>
+<li><strong>Server-side authority shipped</strong>: <code>enforcement/ci/vemo-ci.yml</code> (+ installed for VEMO itself under
+  <code>.github/workflows/</code>) re-runs selfcheck, the full eval, the commit backstop on the change range, the
+  push gate, and the configured build/smoke. Previously "CI is the authority" had no CI file.</li>
+<li><strong><code>acceptance-before-push</code> is now mechanical</strong>: new <code>enforcement/ci/pre-push</code> (installed by
+  <code>install.sh</code>), mirrored in CI. R0 is exempt (that is the point of R0).</li>
+<li><strong>Executed ground truth is now executed</strong>: the gate requires the evidence file to exist, and — when
+  <code>paths.build/smoke</code> are configured — the machine receipt written by the new <code>vemo verify</code>
+  (<code>task_state.py verify-run</code>). Exit codes typed into front-matter no longer open any gate.</li>
+<li><strong>Judge verdicts need provenance</strong>: the judge records via <code>task_state.py judge-record</code> into
+  append-only <code>.vemo/judge.jsonl</code>; front-matter <code>pass</code> without a matching record blocks (forged-verdict
+  defense). <code>SubagentStop</code>/<code>record-judge</code> telemetry now captures sessions.</li>
+<li><strong>The governance layer protects itself</strong>: <code>enforcement/**</code>, <code>.claude/**</code>, <code>.github/**</code>,
+  <code>vemo.config*.yaml</code>, <code>specs/**</code> are R2 by default; unmatched paths default to R1
+  (<code>risk_tiers.unmatched</code>) instead of silently R0.</li>
+<li><strong><code>enforcement.mode: monitor</code> now actually observes-without-blocking</strong> in every guard (it was honored
+  by one dispatcher and ignored by the bash guards).</li>
+<li><strong>safety.spec#6 (binary/model blobs) is now enforced</strong> (<code>blob-check</code> in the edit guard;
+  <code>exclusions.third_party</code> exempt) — it was labeled <code>ENFORCED-BY: hook</code> with no hook.</li>
+<li><strong><code>install.sh</code> is actually idempotent</strong> (dedupes hook registrations; migrates legacy <code>.sh</code> entries).</li>
+<li><strong>Honest labels elsewhere</strong>: concurrency takeover is labeled advisory+audit (git cannot know "the
+  committing session"); Bash-write scope bypass is warned client-side and contained at commit/CI;
+  judge "panel" is labeled N sequential independent passes until a real panel ships.</li>
+</ul>
+<h3 id="changed-one-dispatcher-fewer-entities-occam">Changed — one dispatcher, fewer entities (Occam)</h3>
+<ul>
+<li>The six <code>.sh</code> guards are <strong>deleted</strong>; <code>enforcement/hooks/run.py</code> is the single dispatcher
+  (scope+blob+secret / command / budget / stop / subagent-stop / session-start). Every <code>.sh</code> already
+  shelled out to python3, so bash bought no portability — only a second copy of the logic to drift.</li>
+<li>Hook registration uses <code>$CLAUDE_PROJECT_DIR</code> (CWD-independent) and adds <code>SessionStart</code>
+  (telemetry heartbeat + one-line agent orientation; <code>vemo doctor</code> flags hooks that never fire).</li>
+<li><strong>Every config key now has a consumer or was deleted</strong> — <code>selfcheck</code> enforces this and also verifies
+  <code>ENFORCED-BY</code> labels point at existing mechanisms. Wired: <code>block_on</code>, <code>fail_closed</code>, <code>mode</code>,
+  <code>enforce_risk_tier</code>, <code>require_judge_on_R2</code>, <code>rule_of_two</code>, <code>auto_mode.*</code> defaults,
+  <code>observability.telemetry</code> levels, <code>stale_threshold_hours</code> (doctor), checkpoint/reanchor advisories,
+  <code>exclusions.third_party</code> (blob guard). Deleted: <code>check_authorship_provenance</code> (ROADMAP).
+  <code>model_routing</code> is explicitly labeled ADVISORY.</li>
+<li>Front-matter parser supports inline <code>{ }</code> maps (the <code>task.spec §2</code> example no longer crashes the
+  validator); validator errors are uniform <code>error:*</code>/exit 3 and <strong>fail closed</strong> at safety gates.</li>
+</ul>
+<h3 id="added-oversight-and-concurrency-primitives">Added — oversight and concurrency primitives</h3>
+<ul>
+<li><strong>Auto mode can no longer be enabled by the agent</strong>: <code>vemo auto on</code> requires an interactive TTY +
+  typed confirmation; the automation-mode skill exposes status/off only. Config defaults
+  (<code>default_max_auto_tier</code>, <code>default_ttl_hours</code>, <code>record_to</code>, <code>preauthorized_commands</code>) are wired.
+  Unattended R1+ pushes additionally require judge pass + provenance (<code>auto_mode.require_judge</code>).</li>
+<li><strong>Session binding</strong> (<code>task_state.py bind</code>): hooks pass the harness <code>session_id</code>, so concurrent
+  sessions are checked against <em>their own</em> task instead of "freshest heartbeat wins".</li>
+<li><strong>Budget semantics</strong>: only write-touched files count toward <code>max_files_touched</code>; per-session
+  counters; checkpoint/re-anchor advisory notes.</li>
+<li><strong>Destructive-command escape hatch</strong> made real: task-file <code>approved_commands:</code> +
+  <code>auto_mode.preauthorized_commands</code> (both logged).</li>
+<li><strong>Eval doubled</strong>: 45 checks incl. hook end-to-end (payload → dispatcher → exit code), receipt flow,
+  judge provenance, session binding, monitor mode, budget hard-stop, and agent-cannot-enable-auto.</li>
+</ul>
 <h2 id="100">[1.0.0]</h2>
 <p>First public release.</p>
 <h3 id="governance-model">Governance model</h3>

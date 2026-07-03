@@ -90,8 +90,11 @@ your head. If you only read one doc, read this one.</p>
    (<code>capability.tier</code>). A typo and a migration don't get the same process; Opus and Fable 5 don't get the same hand-holding.</li>
 <li><strong>The repo is the memory.</strong> Durable state lives in <code>tasks/&lt;id&gt;.md</code> front-matter (machine-readable), not in chat.
    Any session can resume from it; hooks read it.</li>
-<li><strong>Verify, don't trust.</strong> High-risk gates are flipped by an <em>independent judge</em> subagent, not the worker's
-   self-report. Autonomy raises the value of verification, so stronger/auto modes lean on it <em>more</em>.</li>
+<li><strong>Verify, don't trust — and never trust a typed number.</strong> High-risk gates are flipped by an <em>independent
+   judge</em>, not the worker's self-report, and the judge's verdict must carry a <strong>provenance record</strong>
+   (<code>judge-record</code>) — a verdict pasted into front-matter blocks. Acceptance rests on an evidence file that
+   exists and, when build/smoke are configured, on the <strong>machine receipt</strong> written by <code>vemo verify</code>
+   (the gate executes the build itself). Autonomy raises the value of verification, so auto mode leans on it <em>more</em>.</li>
 <li><strong>Bounded autonomy.</strong> Unattended runs have <em>stop rules</em> (<code>run_budget</code>) and <em>recording</em> (auto mode logs every
    decision). Freedom from approval pauses, never freedom from limits or the audit trail.</li>
 </ol>
@@ -110,7 +113,7 @@ your head. If you only read one doc, read this one.</p>
 </tr>
 <tr>
 <td><strong>capability.tier</strong></td>
-<td>how much hand-holding the <em>model</em> gets (frontier/high/medium/low)</td>
+<td>vendor-neutral model operating envelope (frontier/high/medium/low)</td>
 </tr>
 <tr>
 <td><strong>gate</strong></td>
@@ -136,15 +139,23 @@ your head. If you only read one doc, read this one.</p>
 </table>
 <h2 id="enforced-vs-advised-know-which-is-which">Enforced vs Advised (know which is which)</h2>
 <ul>
-<li><strong>Enforced (cannot bypass):</strong> scope containment · no destructive/out-of-repo cmd · no secrets ·
-  acceptance-before-push · risk-tier integrity (no self-downgrade) · R2 judge pass · run budget (hard when unattended).</li>
-<li><strong>Advised (your judgment, judge may flag):</strong> coding style · comments · decomposition depth · doc quality.</li>
+<li><strong>Enforced (mechanical):</strong> scope containment · no destructive/out-of-repo cmd · no secrets · no binary-blob
+  edits · acceptance-before-push with real evidence + <code>vemo verify</code> receipt · risk-tier integrity incl. the
+  governance layer itself (R2) and unmatched paths (R1) · required judge pass record(s) <strong>with provenance</strong>
+  (R2 depth scales by <code>capability.tier</code>; low/medium R1 also needs one) · run budget (hard when unattended) ·
+  auto-mode enable = human-at-TTY only.</li>
+<li><strong>Advised (your judgment, judge may flag):</strong> coding style · comments · decomposition depth · doc quality ·
+  the takeover protocol (audited, not enforced — see <code>concurrency.spec §3</code>).</li>
+<li>Every <code>ENFORCED-BY</code> label is itself checked: <code>selfcheck</code> fails if a tag points at a missing mechanism,
+  and if a config key has no consumer. Honest labels are a safety property.</li>
 </ul>
 <h2 id="configure-by-tiers-progressive-disclosure">Configure by tiers (progressive disclosure)</h2>
 <p><code>vemo.config.yaml</code> is grouped so you can stop reading early:
 - <strong>ESSENTIAL</strong> (set these): <code>capability.tier</code>, <code>paths.build</code>/<code>smoke</code>, <code>risk_tiers.*.match_paths</code>. A <code>--preset</code> fills most.
 - <strong>COMMON</strong> (sometimes): <code>model_routing</code>, <code>auto_mode</code> defaults, <code>run_budget</code> limits.
 - <strong>ADVANCED</strong> (defaults are fine): <code>enforcement.*</code>, <code>concurrency</code>, <code>observability</code>.</p>
+<p>Model names are examples. To move between different LLM families, map the model's observed behavior to a
+<code>capability.tier</code>; do not encode trust in the provider name.</p>
 <blockquote>
 <p>The rule (from convention-over-configuration): VEMO should let you <em>start without thinking</em>, but never
 <em>stop</em> you from thinking. Presets are the "start without thinking"; this file is the "think when you need to."</p>

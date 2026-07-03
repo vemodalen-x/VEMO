@@ -172,7 +172,7 @@
       <div class="gate">scope hook<small>safety#1 · in scope?</small></div><div class="arw">→</div>
       <div class="node">Implement<small>edits within scope_in</small></div><div class="arw">→</div>
       <div class="gate">acceptance<small>measurable PASS</small></div><div class="arw">→</div>
-      <div class="gate judge">R2 judge<small>refute "done"</small></div><div class="arw">→</div>
+      <div class="gate judge">required judge<small>refute "done"</small></div><div class="arw">→</div>
       <div class="gate">CI pre-commit<small>tier · plan · push</small></div><div class="arw">→</div>
       <div class="done">✓ shipped</div>
     </div>
@@ -191,7 +191,7 @@
       <div class="wall client">① PreToolUse hook<small>scope · destructive · secret · budget</small></div><div class="arw">→</div>
       <div class="pbox">action runs<br><span class="kbd">(if allowed)</span></div><div class="arw">→</div>
       <div class="pbox">git commit / push</div><div class="arw">→</div>
-      <div class="wall">② CI / pre-commit<small>tier integrity · R2 judge · acceptance · secrets</small></div><div class="arw">→</div>
+      <div class="wall">② CI / pre-commit<small>tier integrity · judge depth · acceptance · secrets</small></div><div class="arw">→</div>
       <div class="done">✓ to main</div>
     </div>
     <div class="grid2" style="margin-top:8px">
@@ -211,12 +211,12 @@
       <div class="rh">R2 critical</div>
         <div class="cell c5">review+judge<br>small steps</div><div class="cell c5">review+judge</div><div class="cell c4">review+judge</div><div class="cell c4">judge+budget<br>self-plan</div>
       <div class="rh">R1 standard</div>
-        <div class="cell c4">plan+acc<br>+judge</div><div class="cell c3">plan+acc<br>judge(crit)</div><div class="cell c2">plan+acc<br>self-verify</div><div class="cell c1">self-test<br>+budget</div>
+        <div class="cell c4">plan+acc<br>+judge</div><div class="cell c3">plan+acc<br>+judge</div><div class="cell c2">plan+acc<br>self-verify</div><div class="cell c1">self-test<br>+budget</div>
       <div class="rh">R0 trivial</div>
         <div class="cell c2">plan-inline</div><div class="cell c1">plan-inline</div><div class="cell c1">inline</div><div class="cell c1">inline</div>
     </div>
     <div class="legend"><span class="k"><span class="sw c1"></span>lightest</span><span class="k"><span class="sw c3"></span>moderate</span><span class="k"><span class="sw c5"></span>heaviest</span></div>
-    <p class="axis-note">Set the model axis once in <code>capability.tier</code>; the risk axis is auto-derived from the changed paths (and CI blocks a self-downgrade). Raise <code>tier</code> when you upgrade your model and the whole grid lightens automatically. The independent judge stays on R2 across all tiers — autonomy raises the value of verification, never lowers it.</p>
+    <p class="axis-note">Set the model axis once in <code>capability.tier</code>; the risk axis is auto-derived from the changed paths (and CI blocks a self-downgrade). Raise <code>tier</code> when you upgrade your model and the whole grid lightens automatically. R2 judge depth scales upward at high/frontier tiers, and low/medium R1 keeps one judge pass — autonomy raises the value of verification, never lowers it.</p>
   </div>
 </div></section>
 

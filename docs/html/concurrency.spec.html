@@ -80,32 +80,44 @@ img{max-width:100%}
 <main><div class="content"><h1 id="concurrencyspec-multi-session-safety">concurrency.spec — Multi-session safety</h1>
 <blockquote>
 <p>Several agents or sessions editing one repo must not silently stomp each other. VEMO keeps the ownership state
-machine-readable so CI can check it.</p>
+machine-readable, and binds each harness session to <em>its own</em> task.</p>
 </blockquote>
-<h2 id="1-chat-identity">1. Chat identity</h2>
+<h2 id="1-chat-identity-session-binding">1. Chat identity &amp; session binding</h2>
 <ul>
 <li>Each session gets <code>chat_id = chat-&lt;YYYYMMDD&gt;-&lt;HHMM&gt;-&lt;3char&gt;</code>, generated at first task-state write.</li>
 <li>Read-only sessions need no id.</li>
 <li>Stored authoritatively in the task front-matter <code>owning_chat</code> (machine-readable).</li>
+<li><strong>Bind the session</strong> when you create/continue a task:
+  <code>task_state.py bind --session &lt;harness session_id&gt; --task &lt;task-id&gt;</code>. The hooks pass the harness
+  <code>session_id</code> to every scope/gate check, so a bound session is checked against <strong>its own task</strong> — not
+  against whichever live task happens to have the freshest heartbeat. Unbound sessions fall back to
+  freshest-heartbeat (single-task repos never notice).</li>
 </ul>
 <h2 id="2-heartbeat-staleness">2. Heartbeat &amp; staleness</h2>
 <ul>
 <li><code>heartbeat</code> (ISO-8601) updates on every meaningful state write (phase change, acceptance change, exec note).</li>
 <li>A task is <strong>stale</strong> when <code>now - heartbeat &gt; concurrency.stale_threshold_hours</code> (default 4).</li>
-<li>Staleness is evaluated during the session-start continuity check.</li>
+<li>Staleness is evaluated during the session-start continuity check, and <code>vemo doctor</code> flags stale live
+  tasks mechanically (takeover candidates).</li>
 </ul>
-<h2 id="3-takeover-protocol-hard-gate-now-ci-checkable">3. Takeover protocol (hard gate — now CI-checkable)</h2>
+<h2 id="3-takeover-protocol-advisory-protocol-audit-trail">3. Takeover protocol (ADVISORY protocol + audit trail)</h2>
 <p>On resume, scan live task front-matter:
 1. <strong>Same <code>owning_chat</code></strong> → continue.
-2. <strong>Different + stale</strong> → ask: <code>[STALE] Task &lt;id&gt; last held by &lt;chat&gt; at &lt;ts&gt;. Take over? (Y/N)</code>. On yes: reassign <code>owning_chat</code>, reset heartbeat, log takeover.
+2. <strong>Different + stale</strong> → ask: <code>[STALE] Task &lt;id&gt; last held by &lt;chat&gt; at &lt;ts&gt;. Take over? (Y/N)</code>. On yes: reassign <code>owning_chat</code>, reset heartbeat, log takeover in the task file.
 3. <strong>Different + active</strong> → ask with a stronger prompt (force-takeover needs explicit approval).
-4. <strong>Silent takeover is forbidden</strong> — and a pre-commit check rejects a commit whose task <code>owning_chat</code> ≠ the committing session unless a logged takeover exists.</p>
+4. <strong>Silent takeover is forbidden</strong> — every <code>owning_chat</code> change must appear in the task's Execution Log
+   (auditable in the diff; the judge flags an unlogged reassignment on R2).</p>
+<p><em>Honest limit:</em> git has no notion of "the committing session", so ownership at commit time is <strong>not</strong>
+mechanically verifiable — this protocol is convention plus an audit trail, and the spec does not claim
+otherwise. What IS mechanical: session-bound scope checks (§1), stale detection (<code>doctor</code>), and the
+front-matter diff that makes every takeover visible in review.</p>
 <h2 id="4-thin-index-optional">4. Thin index (optional)</h2>
 <p>A <code>tasks/_index.md</code> may snapshot live tasks (id, state, owning_chat, heartbeat) for fast discovery,
 but the <strong>task file front-matter is authoritative</strong> — the index is a convenience, never the source of truth.</p>
-<h2 id="5-why-machine-check-it">5. Why machine-check it</h2>
-<p>VEMO keeps the human-visible takeover prompt and adds a pre-commit check that the committer owns the task, so a
-forgetful or misaligned session is stopped by mechanism, not etiquette.</p>
+<h2 id="5-why-keep-it-machine-readable">5. Why keep it machine-readable</h2>
+<p>Even where enforcement is impossible (§3 limit), machine-readable ownership means collisions are <em>detected
+and attributed</em> — a forgetful session is caught by the session-bound scope check, and a takeover leaves a
+reviewable trace instead of a mystery.</p>
 <div class="footer">VEMO documentation · rendered from Markdown by <code>docs/build_html.py</code>.
 For the rich visual guide see <a href="../GUIDE.html">GUIDE.html</a>.</div>
 </div></main>

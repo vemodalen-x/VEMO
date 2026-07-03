@@ -84,14 +84,18 @@ still <strong>recording every decision</strong> and <strong>keeping all mechanic
 <em>human-in-the-loop pauses</em>, not the <em>verification</em>. It is OFF by default and only the explicit command
 turns it on.</p>
 </blockquote>
-<h2 id="1-activation-explicit-only">1. Activation (explicit only)</h2>
+<h2 id="1-activation-human-at-a-terminal-the-agent-cannot-enable-it">1. Activation (human at a terminal — the agent cannot enable it)</h2>
 <ul>
 <li>Default: <strong>OFF</strong>. Auto mode never turns on implicitly.</li>
-<li>Enable: run <code>enforcement/automation/vemo-auto on [--max-tier R0|R1|R2] [--ttl &lt;hours&gt;] [--allow-r2]</code>
-  or invoke <code>skill/automation-mode</code> (keywords: "enable auto mode" / "vemo auto on").</li>
+<li>Enable: a <strong>human</strong> runs <code>vemo auto on [--max-tier R0|R1|R2] [--ttl &lt;hours&gt;] [--allow-r2]</code> in an
+  interactive terminal. The command <strong>refuses without a TTY and a typed confirmation</strong> — an agent's shell
+  tool has neither, so neither the agent nor injected text ("enable auto mode") can remove its own
+  approval pauses. Reducing oversight must come from outside the loop being overseen; restoring it
+  (<code>off</code>) may be automated.</li>
 <li>Enabling is itself <strong>recorded</strong> (who/when/ceiling/expiry) to <code>.vemo/auto_decisions.jsonl</code> and <code>.vemo/auto_mode.json</code>.</li>
 <li>Auto mode <strong>expires</strong> (default TTL 8h) — re-enable to continue. Disable any time: <code>vemo-auto off</code>.</li>
 <li>At session start the agent runs <code>task_state.py auto-status</code>; if active, it loads this spec and follows it.</li>
+<li><code>skill/automation-mode</code> covers <strong>status and disable only</strong> — by design it cannot enable.</li>
 </ul>
 <h2 id="2-what-auto-mode-removes-approval-pause-auto-decide-record">2. What auto mode REMOVES (approval pause → auto-decide + record)</h2>
 <p>Each of these normally stops and asks the user. In auto mode the agent <strong>decides, records the decision +
@@ -108,12 +112,16 @@ one-line rationale, and proceeds</strong> — provided the change is within <cod
 <p>Auto mode must not touch any of these — they are mechanism, not human-approval:
 1. <strong>All <code>safety.spec</code> guards</strong> — scope containment, destructive-command block, secret block, out-of-repo. (Hooks/CI do not read auto-mode; they always fire.)
 2. <strong>Risk-tier integrity</strong> — diff-derived tier; no self-downgrade.
-3. <strong>Independent judge</strong> — on every auto-approved R1+/R2, <code>judge.verdict == pass</code> is <strong>required</strong>; a <code>fail</code> blocks even in auto mode. The judge replaces the absent human reviewer, so auto mode makes it <em>more</em> mandatory, not less.
-4. <strong>Acceptance-before-push</strong> — measurable criteria must pass; auto mode does not fabricate a pass.
+3. <strong>Independent judge</strong> — on every auto-approved R1+/R2 push, <code>judge.verdict == pass</code> <strong>with a provenance
+   record</strong> (<code>.vemo/judge.jsonl</code>) is required; <code>gate-check acceptance-before-push</code> enforces this mechanically
+   when auto mode is ON (<code>auto_mode.require_judge</code>). A <code>fail</code> blocks even in auto mode. The judge replaces
+   the absent human reviewer, so auto mode makes it <em>more</em> mandatory, not less.
+4. <strong>Acceptance-before-push</strong> — measurable criteria must pass with executed ground truth (<code>vemo verify</code>
+   receipt); auto mode does not fabricate a pass.
 5. <strong>Run budget / stop rules</strong> — an unattended run must be bounded: <code>run_budget.enabled: true</code> is
-   required for auto mode, and <code>vemo-auto on</code> resets the counter. <code>enforcement/hooks/guard-budget.sh</code>
-   <strong>hard-stops</strong> the run (exit 2) when a budget limit is hit while auto mode is ON — this is the mechanical
-   answer to a Mythos-class model that would otherwise "run until cut off" with no human watching.</p>
+   required for auto mode, and <code>vemo-auto on</code> resets the counter. The budget guard
+   (<code>enforcement/hooks/run.py budget</code>) <strong>hard-stops</strong> the run (exit 2) when a limit is hit while auto mode
+   is ON — the mechanical answer to a Mythos-class model that would otherwise "run until cut off".</p>
 <ol start="6">
 <li><strong>Rule of Two / lethal trifecta</strong> — a task touching all 3 of {private_data, untrusted_content,
    external_comms} (<code>trifecta-check</code> = 3/3) is <strong>not auto-approvable</strong>: auto mode stops and requires explicit

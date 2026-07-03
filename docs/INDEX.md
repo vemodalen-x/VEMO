@@ -9,6 +9,7 @@
 | **Get it working in 5 min** | Tutorial | [QUICKSTART.md](QUICKSTART.md) |
 | **Understand how VEMO thinks** | Explanation | [MENTAL_MODEL.md](MENTAL_MODEL.md) |
 | **Know why it works as models get stronger** | Explanation | [SCALING.md](SCALING.md) |
+| **Run VEMO under another harness / other model vendors** | Reference | [ADAPTERS.md](ADAPTERS.md) |
 | **Map controls to EU AI Act / NIST / OWASP** | Reference | [COMPLIANCE.md](COMPLIANCE.md) |
 | **Map controls to the OWASP Agentic Top 10 (ASI01–10) + maturity model** | Reference | [OWASP_AGENTIC_TOP10.md](OWASP_AGENTIC_TOP10.md) |
 | **Read the pitch / launch post** | — | [ANNOUNCEMENT.md](ANNOUNCEMENT.md) |

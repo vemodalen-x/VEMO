@@ -23,17 +23,18 @@ indistinguishable snapshot. Fitting, for an era drowning in look-alike AI-genera
 
 > It's the only one whose "hard gates" are **mechanical** (Claude Code hooks + a git/CI backstop + a
 > machine-readable task state) instead of prose — **and we ship a runnable conformance suite that proves they
-> fire (currently 11/11).** A gate that only exists in a Markdown file is a gate the model can ignore.
+> fire.** A gate that only exists in a Markdown file is a gate the model can ignore.
 
 ## Three things that'll make you star it
 
 1. **Gates you can't argue with.** Edit a file outside your task's scope → blocked. `git reset --hard` →
    blocked. Push before tests actually ran (with exit codes + a log) → blocked. Not by hoping — by a hook that
-   *can't hallucinate*. Run `vemo eval` and watch 11/11 gates fire on real fixtures. (The suite found and fixed a
+   *can't hallucinate*. Run `vemo eval` and watch the gates fire on real fixtures. (The suite found and fixed a
    real bug in VEMO itself on its first run — that's the kind of honesty we ship with.)
-2. **It gets *lighter* as your model gets *stronger*.** One knob — `capability.tier` — and ceremony shrinks
-   while verification *tightens* (more independent checks, never fewer). Upgrade Opus → Fable 5, bump the tier,
-   done. We call it **capability-monotonic governance**, and `verify-plan` computes it, not vibes.
+2. **It gets *lighter* as your model gets *stronger*.** One vendor-neutral knob — `capability.tier` — and
+   ceremony shrinks while verification *tightens* (more independent checks, never fewer). Map any LLM family
+   to the tier its observed behavior supports. We call it **capability-monotonic governance**, and
+   `verify-plan` computes it, not vibes.
 3. **Velocity-first.** A typo and a schema migration don't get the same process. Risk tiers (R0 fast / R1 / R2
    critical) mean low-risk work is ~3 steps; the heavy machinery only shows up where the blast radius is real.
 

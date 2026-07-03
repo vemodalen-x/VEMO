@@ -113,41 +113,45 @@ Grounded in the Fable 5 / Mythos 5 system-card analysis (see <code>docs/SCALING.
 <tr>
 <td><strong>audit</strong></td>
 <td>—</td>
-<td>decision record · authorship provenance · telemetry</td>
+<td>decision record · judge-verdict provenance log · telemetry</td>
 </tr>
 </tbody>
 </table>
-<p>Mechanized by <code>task_state.py verify-plan</code> (derives required verification depth from tier × risk) and by the
-acceptance/judge gates below — not left as prose.</p>
+<p>Mechanized by <code>task_state.py verify-plan</code> (derives required verification depth from tier × risk) and by
+<code>gate-check required-judge</code> (enforces the required judge-pass count) — not left as prose.</p>
+<p><code>capability.tier</code> is vendor-neutral. A team may map Anthropic, OpenAI, local, or future models to
+<code>frontier|high|medium|low</code> based on observed task reliability, context length, tool-use reliability, and
+verification-following behavior. Model names in <code>model_routing</code> are advisory routing hints; they are not the
+governance contract.</p>
 <h2 id="2-frontier-failure-modes-mechanism-not-a-reminder">2. Frontier failure modes → mechanism (not a reminder)</h2>
 <p>Stronger models fabricate <strong>less</strong> but fail in <strong>new</strong> ways. Each gets a mechanism:</p>
 <table>
 <thead>
 <tr>
 <th>Observed at frontier (Fable 5 / Mythos 5)</th>
-<th>VEMO mechanism</th>
+<th>VEMO answer (tagged: mechanism vs judge-checked vs advisory)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><strong>Skips running verification</strong> — claims "verified end-to-end" on checks never run; "no errors" after checking one error type (20× undercount)</td>
-<td><strong>Executed-ground-truth gate</strong>: a <code>passed</code> acceptance REQUIRES a real run — non-null exit codes + an evidence log. "Verified" with no execution trace = FAIL. The judge re-reads the <em>log</em>, not the claim.</td>
+<td><em>Mechanism:</em> the <strong>executed-ground-truth gate</strong> — a <code>passed</code> acceptance requires an evidence file that exists, and the <code>vemo verify</code> <strong>machine receipt</strong> when build/smoke are configured; typed exit codes do not open the gate. <em>Judge-checked:</em> the judge re-reads the <em>log</em>, not the claim.</td>
 </tr>
 <tr>
-<td><strong>Games the process</strong> — tried to re-author agent commits as human to dodge review; reframes bugs as "design decisions"</td>
-<td><strong>Tamper-evident enforcement</strong>: CI is authoritative (the agent can't re-author around it); authorship/provenance is checked; the judge flags reframing; enforcement-config integrity is itself verified.</td>
+<td><strong>Games the process</strong> — pastes a judge verdict; reframes bugs as "design decisions"</td>
+<td><em>Mechanism:</em> judge verdicts need a <strong>provenance record</strong> (<code>judge-record</code> → <code>.vemo/judge.jsonl</code>; a front-matter-only <code>pass</code> blocks); the governance layer itself is R2 (tamper = highest ceremony); <code>selfcheck</code> verifies enforcement-config integrity in CI. <em>Judge-checked:</em> reframing. <em>(Commit authorship forensics: ROADMAP.)</em></td>
 </tr>
 <tr>
 <td><strong>Stops after one pass, "good enough"</strong></td>
-<td>Verification is <strong>independent</strong> (not self-judged); the judge may demand another round; criteria are falsifiable + full-scope.</td>
+<td><em>Mechanism:</em> verification is <strong>independent</strong> (not self-judged) with N judge passes by tier; the required-judge gate counts contiguous pass records, so one pass cannot satisfy a high/frontier R2 task. <em>Judge-checked:</em> may demand another round; criteria falsifiable + full-scope.</td>
 </tr>
 <tr>
 <td><strong>Silent memory misuse</strong> — ignores known-good pattern</td>
-<td>Tasks with relevant history must record a memory/prior-decision consult trace.</td>
+<td><em>Advisory (judge-weighed):</em> tasks with relevant history record a memory/prior-decision consult trace in the task file.</td>
 </tr>
 <tr>
 <td><strong>Undetected sabotage when NOT narrating</strong> (0% with CoT monitoring → 9.2%+ without)</td>
-<td><strong>Intent narration required + monitored</strong>; missing narration is a red flag, not a convenience. Treat self-reports as partly performance-motivated.</td>
+<td><em>Judge-checked:</em> intent narration required (<code>verification.require_intent_narration</code>); missing narration is a red flag the judge treats as a violation, not a style issue.</td>
 </tr>
 </tbody>
 </table>
@@ -157,8 +161,9 @@ relax as <code>capability.tier</code> rises. A more capable model running unatte
 Capability tier relaxes only <em>prescription</em> — never <em>safety</em>. (<code>enforcement.safety_invariant_of_capability: true</code>.)</p>
 <h2 id="4-verification-scales-up-with-capability-the-verifier-problem">4. Verification scales UP with capability (the verifier problem)</h2>
 <p>When the model may exceed the human reviewer, a single same-class judge can share its blind spots. So at high
-tiers VEMO escalates: a <strong>panel of independent/diverse verifiers</strong> anchored in <strong>executed ground truth</strong>
-(tests/build/diff invariants, not opinion), with the human retained for <strong>intent + irreversible only</strong>.</p>
+tiers VEMO escalates the required <strong>sequential independent verifier pass count</strong> anchored in <strong>executed ground
+truth</strong> (tests/build/diff invariants, not opinion), with the human retained for <strong>intent + irreversible only</strong>.
+True concurrent verifier panels remain ROADMAP.</p>
 <h2 id="5-delegate-what-the-model-now-does-natively">5. Delegate what the model now does natively</h2>
 <p>Fable 5 plans across stages, writes its own tests, delegates to sub-agents, keeps memory. VEMO delegates those
 and <strong>verifies the outputs</strong> — it does not re-spell-out planning/testing. The framework's enduring value is the

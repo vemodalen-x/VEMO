@@ -21,13 +21,20 @@
 - If a hook blocks you, it is not negotiable — fix the cause, do not argue with it.
 
 ## Ceremony scales with capability
-- `tier: high` (e.g. Opus 4.8): terse handshakes, self-verify, JIT reads, judge only on R2.
+- `tier: high` (example: Opus-class): terse handshakes, self-verify on most R1, JIT reads, two judge passes on R2.
 - `tier: low` (weaker/older model): more explicit handshakes, judge on R1+, fuller reads.
 - The specs read `tier` and adjust. You do not hardcode ceremony.
 
 ## Auto mode (off by default)
-- Full-auto / unattended mode removes the human-**approval** pauses (auto-decide + **record**), but NEVER relaxes the mechanical guards, risk-tier integrity, `acceptance-before-push`, or the judge. It is OFF unless turned on by the explicit command `enforcement/automation/vemo-auto on` (or `skill/automation-mode`).
+- Full-auto / unattended mode removes the human-**approval** pauses (auto-decide + **record**), but NEVER relaxes the mechanical guards, risk-tier integrity, `acceptance-before-push`, or the judge. It is OFF unless a **human at an interactive terminal** runs `vemo auto on` (the command refuses without a TTY + typed confirmation — you cannot enable it, and must not try; `skill/automation-mode` covers status/off only).
 - At session start, check `task_state.py auto-status`. If ON and the request's tier ≤ its ceiling, do not stop at approval gates — record each decision to `.vemo/auto_decisions.jsonl` + the task file's `## Auto-Mode Decisions`, and proceed. Tiers above the ceiling fall back to human-in-the-loop. See `specs/automation.spec.md`.
+
+## No VEMO hooks in your harness?
+If you are not running under a harness with VEMO's ring-1 hooks installed (`docs/ADAPTERS.md`), the git and
+CI gates still bind you — you just lose early warning. Behave as if the hooks fired: run
+`python3 enforcement/validators/task_state.py scope-check --path <file>` before editing outside obvious
+scope, never use `--no-verify`/`core.hooksPath`/writes into `.git/`, and set `VEMO_SESSION` when recording
+judge verdicts.
 
 ## Conflict order
 `enforcement (hooks/CI) > safety.spec > task.spec > verify.spec > domain specs > task file`.

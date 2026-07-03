@@ -9,12 +9,14 @@ trifecta: []                    # lethal-trifecta props touched: private_data | 
                                 # all 3 → explicit human approval required (Rule of Two); unattended auto must stop
 acceptance:
   status: not_run              # not_run|passed|partial|failed|not_applicable
-  build_exit: null
-  smoke_exit: null
-  evidence: ""                 # path under .vemo/run/
+  build_exit: null             # cache of the `vemo verify` receipt — the gate trusts the receipt,
+  smoke_exit: null             # not these numbers; evidence file must EXIST
+  evidence: ""                 # path under .vemo/run/ (written by `vemo verify`)
 judge:
   required: false              # set by risk tier + capability.tier
-  verdict: null                # pass|fail (written by agents/governance-judge.md)
+  verdict: null                # pass|fail — must match the judge's own `judge-record` entry
+                               # in .vemo/judge.jsonl; a pasted verdict without that record blocks
+approved_commands: []          # destructive cmds the USER approved this session, e.g. ["git reset --hard"]
 owning_chat: ""                # chat-YYYYMMDD-HHMM-xxx
 heartbeat: ""                  # ISO-8601, updated on every state write
 ---

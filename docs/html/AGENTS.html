@@ -104,13 +104,13 @@ loaded just-in-time. Enforcement lives in <code>enforcement/</code>, not in pros
 </ul>
 <h2 id="ceremony-scales-with-capability">Ceremony scales with capability</h2>
 <ul>
-<li><code>tier: high</code> (e.g. Opus 4.8): terse handshakes, self-verify, JIT reads, judge only on R2.</li>
+<li><code>tier: high</code> (example: Opus-class): terse handshakes, self-verify on most R1, JIT reads, two judge passes on R2.</li>
 <li><code>tier: low</code> (weaker/older model): more explicit handshakes, judge on R1+, fuller reads.</li>
 <li>The specs read <code>tier</code> and adjust. You do not hardcode ceremony.</li>
 </ul>
 <h2 id="auto-mode-off-by-default">Auto mode (off by default)</h2>
 <ul>
-<li>Full-auto / unattended mode removes the human-<strong>approval</strong> pauses (auto-decide + <strong>record</strong>), but NEVER relaxes the mechanical guards, risk-tier integrity, <code>acceptance-before-push</code>, or the judge. It is OFF unless turned on by the explicit command <code>enforcement/automation/vemo-auto on</code> (or <code>skill/automation-mode</code>).</li>
+<li>Full-auto / unattended mode removes the human-<strong>approval</strong> pauses (auto-decide + <strong>record</strong>), but NEVER relaxes the mechanical guards, risk-tier integrity, <code>acceptance-before-push</code>, or the judge. It is OFF unless a <strong>human at an interactive terminal</strong> runs <code>vemo auto on</code> (the command refuses without a TTY + typed confirmation — you cannot enable it, and must not try; <code>skill/automation-mode</code> covers status/off only).</li>
 <li>At session start, check <code>task_state.py auto-status</code>. If ON and the request's tier ≤ its ceiling, do not stop at approval gates — record each decision to <code>.vemo/auto_decisions.jsonl</code> + the task file's <code>## Auto-Mode Decisions</code>, and proceed. Tiers above the ceiling fall back to human-in-the-loop. See <code>specs/automation.spec.md</code>.</li>
 </ul>
 <h2 id="conflict-order">Conflict order</h2>

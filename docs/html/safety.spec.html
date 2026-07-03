@@ -79,66 +79,86 @@ img{max-width:100%}
 </nav>
 <main><div class="content"><h1 id="safetyspec-non-negotiables-mechanically-enforced">safety.spec — Non-negotiables (MECHANICALLY ENFORCED)</h1>
 <blockquote>
-<p>Every rule here is tagged with <strong>who enforces it</strong> — a hook or CI, not the model's goodwill.
-"Hooks execute deterministic code. They cannot hallucinate." This is the only spec loaded at every session
-start, and it is the shortest.</p>
+<p>Every rule here is tagged with <strong>who enforces it</strong> — a hook, a git gate, or CI; not the model's goodwill.
+These tags are a <strong>checked contract</strong>: <code>selfcheck</code> fails if a tag points at a mechanism that does not
+exist (label accuracy is itself a safety property). This is the only spec loaded at every session start.</p>
 </blockquote>
 <h2 id="enforcement-legend">Enforcement legend</h2>
 <ul>
-<li><code>ENFORCED-BY: hook</code> — blocked client-side in the agent loop (fast feedback).</li>
-<li><code>ENFORCED-BY: ci</code> — blocked server-side / pre-commit (authoritative; survives <code>--no-verify</code> only if CI is the gate).</li>
-<li><code>ENFORCED-BY: hook+ci</code> — defense in depth (both).</li>
+<li><code>ENFORCED-BY: hook</code> — blocked client-side in the agent loop (<code>enforcement/hooks/run.py</code>; fast feedback,
+  bypassable by a hostile host — the guarantee is below).</li>
+<li><code>ENFORCED-BY: git</code> — local <code>pre-commit</code> / <code>pre-push</code> (survives a hookless agent; <code>--no-verify</code> defers to CI).</li>
+<li><code>ENFORCED-BY: ci</code> — server-side (<code>enforcement/ci/vemo-ci.yml</code> + branch protection). <strong>This is the
+  authoritative layer</strong>; everything client-side is fast feedback for it.</li>
 </ul>
 <h2 id="the-list">The list</h2>
 <ol>
 <li>
 <p><strong>Scope containment.</strong> No create/edit/delete outside the active task's <code>scope_in</code> globs.
-   <code>ENFORCED-BY: hook+ci</code> → <code>enforcement/hooks/guard-scope.sh</code>, <code>enforcement/ci/pre-commit</code>.
-   Rationale: out-of-scope edits are the most common way agents cause collateral damage.</p>
+   <code>ENFORCED-BY: hook+git+ci</code> → <code>enforcement/hooks/run.py</code> (edit guard), <code>enforcement/ci/pre-commit</code>.
+   <em>Honest coverage note:</em> the hook contains the <strong>Edit/Write tools</strong>; file writes routed through <strong>Bash</strong>
+   (redirects, <code>tee</code>, <code>sed -i</code>) get a client-side <em>warning</em> only — an enumerated blacklist cannot contain an
+   open command space. Containment is <strong>guaranteed at commit/CI</strong>, where the diff shows every write however
+   it was made.</p>
 </li>
 <li>
-<p><strong>Plan-before-commit.</strong> No commit touching code unless a task file with a matching plan + <code>scope_in</code> exists and is <code>PlanCreated</code>+.
-   <code>ENFORCED-BY: ci</code> → <code>enforcement/ci/pre-commit</code> (reads task front-matter via <code>validators/task_state.py</code>).</p>
+<p><strong>Plan-before-commit.</strong> No commit touching code unless a task file with a matching plan + <code>scope_in</code> exists.
+   <code>ENFORCED-BY: git+ci</code> → <code>enforcement/ci/pre-commit</code> (reads task front-matter via <code>validators/task_state.py</code>).</p>
 </li>
 <li>
-<p><strong>Acceptance-before-push.</strong> No push of a code task whose task state is below <code>AcceptancePassed</code>.
-   <code>ENFORCED-BY: ci</code> → blocks on <code>state</code> / <code>acceptance.status</code> mismatch.</p>
+<p><strong>Acceptance-before-push.</strong> No push of an R1+ task below <code>AcceptancePassed</code>, and a <code>passed</code> acceptance must
+   carry <strong>executed ground truth</strong>: the evidence file must exist, and when <code>paths.build</code>/<code>paths.smoke</code> are
+   configured the gate trusts only the machine receipt written by <code>vemo verify</code> — never exit codes typed into
+   front-matter. <code>ENFORCED-BY: git+ci</code> → <code>enforcement/ci/pre-push</code>, re-run in CI.</p>
 </li>
 <li>
-<p><strong>No destructive / out-of-repo commands</strong> without explicit same-session user approval:
-   <code>rm -rf</code> on broad paths, <code>git reset --hard</code>, <code>git checkout -- &lt;file&gt;</code>, writes outside <code>repo_root</code>, privilege escalation, network install of unknown binaries.
-   <code>ENFORCED-BY: hook</code> → <code>enforcement/hooks/guard-command.sh</code> (PreToolUse on Bash).</p>
+<p><strong>No destructive / out-of-repo commands</strong> without explicit approval recorded in the task file
+   (<code>approved_commands:</code> list): broad <code>rm -rf</code>, <code>git reset --hard</code>, <code>git checkout -- &lt;file&gt;</code>,
+   <code>git clean -f</code>, plain <code>git push --force</code>, <code>find -delete</code>, <code>xargs rm</code>, writes outside <code>repo_root</code>,
+   privilege escalation, pipe-to-shell installs.
+   <code>ENFORCED-BY: hook</code> → <code>enforcement/hooks/run.py</code> (command guard, PreToolUse on Bash).
+   <em>Honest coverage note:</em> this is a <strong>blacklist</strong> — it raises the bar, it cannot be complete. For untrusted
+   work, pair VEMO with OS/container sandboxing (see <code>SECURITY.md</code>); VEMO is a cooperative-host layer.</p>
 </li>
 <li>
-<p><strong>No secrets in a diff.</strong> Staged changes are scanned for credential/key patterns.
-   <code>ENFORCED-BY: hook+ci</code> → <code>enforcement/hooks/guard-secret.sh</code>.</p>
+<p><strong>No secrets in a diff.</strong> Content writes and staged/pushed diffs are scanned for credential/key patterns.
+   <code>ENFORCED-BY: hook+git+ci</code> → <code>enforcement/hooks/run.py</code> (edit guard), <code>enforcement/ci/pre-commit</code>.</p>
 </li>
 <li>
-<p><strong>No editing generated binaries / model blobs</strong> (<code>*.a *.lib *.dll *.exe *.bin</code> model weights).
-   <code>ENFORCED-BY: hook</code>.</p>
+<p><strong>No editing generated binaries / model blobs</strong> (<code>*.a *.so *.dll *.exe *.bin</code>, model weights;
+   <code>exclusions.third_party</code> vendor drops are exempt).
+   <code>ENFORCED-BY: hook</code> → <code>enforcement/hooks/run.py</code> (edit guard, <code>blob-check</code>).</p>
 </li>
 </ol>
+<h2 id="the-governance-layer-protects-itself">The governance layer protects itself</h2>
+<p><code>enforcement/**</code>, <code>.claude/**</code>, <code>.github/**</code>, <code>vemo.config*.yaml</code> and <code>specs/**</code> are <strong>R2 by default</strong>
+(<code>risk_tiers</code>), and unmatched paths default to <strong>R1</strong> (<code>risk_tiers.unmatched</code>) — so weakening a guard, editing
+hook registration, or rewriting these rules takes the <em>highest</em>-ceremony path (human review + judge), not the
+lowest. Additionally <code>selfcheck</code> (run in CI) flags hooks deregistered from <code>.claude/settings.json</code> and
+<code>ENFORCED-BY</code> tags pointing at missing mechanisms. <code>ENFORCED-BY: git+ci</code> via risk-tier integrity.</p>
 <h2 id="when-a-gate-fires">When a gate fires</h2>
 <ul>
-<li>The action is refused with a one-line reason + the rule id. The agent must address the <strong>cause</strong>, not retry verbatim, and must not attempt to disable the hook.</li>
-<li>Disabling/bypassing enforcement is itself a blocked action (<code>ENFORCED-BY: ci</code> checks the hook/CI config is intact).</li>
+<li>The action is refused with a one-line reason + the rule id. The agent must address the <strong>cause</strong>, not retry
+  verbatim, and must not attempt to disable the hook (see above — that path is R2 + judge).</li>
 </ul>
-<h2 id="graceful-degradation">Graceful degradation</h2>
-<p>If <code>enforcement.degrade_gracefully: true</code> and a validator/tool is missing, the gate <strong>warns loudly and logs</strong>
-to telemetry rather than silently passing — a missing guard is surfaced, never assumed safe.</p>
+<h2 id="failure-semantics-a-missing-guard-is-not-a-safe-guard">Failure semantics (a missing guard is not a safe guard)</h2>
+<p>Guards in <code>enforcement.fail_closed</code> <strong>block</strong> when the check itself errors; others degrade to a loud warning
+plus a telemetry record. <code>enforcement.degrade_gracefully: true</code> is the explicit opt-in to fail-open — even
+then, degradation is logged, never silent.</p>
 <h2 id="guardrail-elements-rollout">Guardrail elements &amp; rollout</h2>
 <p>The rules above are the <strong>Permission</strong> + <strong>Audit</strong> elements; the other two canonical guardrail elements:
 - <strong>Approval</strong> — human-in-loop gates (plan/review by risk tier; the human owns intent + irreversible). See <code>task.spec</code> / <code>capability.spec</code>.
 - <strong>Kill switch</strong> — <code>vemo auto off</code>, <code>run_budget</code> hard-stop (unattended), and <code>enforcement.mode: monitor</code> (observe-only).</p>
 <p><strong>Action-chaining:</strong> a low-risk action (e.g. a read) chained into a high-risk one (exec / push / destructive)
 does not escape these guards — each action is checked, and the high-risk step still hits its risk-tier gate + the judge.</p>
-<p><strong>Rule of Two (lethal trifecta, v1.9 · OWASP ASI01):</strong> a task touching all three of {<code>private_data</code>,
+<p><strong>Rule of Two (lethal trifecta · OWASP ASI01):</strong> a task touching all three of {<code>private_data</code>,
 <code>untrusted_content</code>, <code>external_comms</code>} (declared in the task <code>trifecta:</code> field) requires explicit <strong>human
-approval</strong> before acting — <code>task_state.py trifecta-check</code> blocks an unattended (auto-mode) session at 3/3.
-This bounds prompt-injection goal-hijack: an injected goal cannot both read secrets and exfiltrate them in one
-unsupervised session. Keep any unattended session to ≤ 2 of the three.</p>
+approval</strong> before acting — <code>task_state.py trifecta-check</code> blocks at 3/3 (checked at push; unattended auto
+sessions must stop). <em>Honest coverage note:</em> <code>trifecta:</code> is <strong>self-declared</strong> by the agent — this gate bounds
+honest mistakes and raises the audit bar; deriving the properties from observed tool usage is on the ROADMAP.</p>
 <p><strong>Monitoring mode:</strong> <code>enforcement.mode: monitor</code> logs violations without blocking (for onboarding/tuning); flip
-to <code>enforce</code> once calibrated. Safety-critical guards always <em>log</em> either way — you get the audit trail first.</p>
+to <code>enforce</code> once calibrated. Honored by every guard in the single dispatcher. Blocks are always logged —
+you get the audit trail first.</p>
 <h2 id="why-so-short">Why so short</h2>
 <p>Non-negotiables you can enforce are few. Everything else is advice and belongs in the domain specs,
 loaded on demand. A long safety spec is a smell: if it can't be a hook, it isn't really "hard".</p>

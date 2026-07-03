@@ -94,24 +94,35 @@ Vague criteria ("faster", "looks better") are rejected by the plan gate.</p>
 <p>After execution, each criterion is marked PASS/FAIL with the command, exit code, and an evidence path
 (<code>.vemo/run/&lt;id&gt;.log</code>). Any FAIL takes a disposition before the task can advance:
 <code>RCA-inline | RCA-subtask | Criterion-revision | Known-limitation</code> (+ user approval for the last two).</p>
+<p><strong>Run <code>vemo verify</code>, don't type numbers.</strong> When <code>paths.build</code>/<code>paths.smoke</code> are configured, the push gate
+trusts only the <strong>machine receipt</strong> (<code>.vemo/run/receipt.json</code>) written by <code>vemo verify</code> — it executes the
+build/smoke itself and records the exit codes. Front-matter <code>acceptance:</code> fields are a human-readable cache
+of that receipt, not the source of truth; a <code>passed</code> whose evidence file does not exist is <strong>blocked</strong>.</p>
 <p><strong>Evidence completeness (anti-blind-spot).</strong> A PASS is valid only if its evidence covers the <strong>full
 scope of the claim</strong>. Checking one case / one error type / one file and declaring a global "PASS" is itself
 a FAIL. (This guards the documented Fable-5 failure: it reported "no error movement" after checking a single
 error type and undercounted a real incident 20×.) The judge enforces this on R2 — see <code>agents/governance-judge.md</code>.</p>
 <h2 id="3-independent-judge-agent-as-judge">3. Independent judge (agent-as-judge)</h2>
-<p>When <code>risk_tiers[...].judge</code> resolves true (always R2; R1 only at <code>capability.tier&lt;=medium</code> or critical paths),
-the gate is flipped by <code>agents/governance-judge.md</code> running on <code>model_routing.judge</code> (Opus) — a <strong>separate
-context</strong> from the implementer, prompted to <em>refute</em>. It returns a structured verdict:</p>
+<p>When the capability/risk matrix requires a judge, the gate is flipped by <code>agents/governance-judge.md</code> — a
+<strong>separate context</strong> from the implementer, prompted to <em>refute</em>. The actual model/provider is harness-specific:
+<code>model_routing.judge</code> and the judge agent front-matter are advisory records, while the enforced invariant is
+"separate verifier context + provenance record(s)." It returns a structured verdict:</p>
 <pre><code class="language-yaml">verdict: pass | fail
 violations: []           # rule ids + evidence
 evidence_checked: [&quot;...:line&quot;, &quot;.vemo/run/123.log&quot;]
 confidence: high|med|low
 </code></pre>
 <ul>
-<li>The judge's verdict — not the implementer's claim — sets <code>judge.verdict</code> in the task front-matter.</li>
+<li><strong>Provenance, not paste:</strong> the judge records its verdict with
+  <code>task_state.py judge-record --task &lt;id&gt; --verdict pass|fail</code> (append-only <code>.vemo/judge.jsonl</code>), <em>then</em>
+  mirrors it into the task front-matter. The commit/push gates require the front-matter <code>pass</code> plus enough
+  contiguous pass records for the required verifier depth. A <code>pass</code> typed into front-matter with no provenance
+  record is treated as forged and blocks. A later <code>fail</code> resets the contiguous pass count until rework earns
+  the required pass suffix again.</li>
 <li>A <code>fail</code> verdict blocks <code>AcceptancePassed</code>. The judge cannot be the same session that did the work.</li>
-<li>Cost control: judge runs once per gate, only on tiers that require it. At <code>tier=high</code> most R1 work
-  self-verifies (the model is trusted to check its own measurable criteria), keeping the loop fast.</li>
+<li>Cost control: judge runs only on tiers that require it. At <code>tier=high</code>/<code>frontier</code>, most R1 work
+  self-verifies; at <code>tier=medium</code>/<code>low</code>, R1 needs one judge pass. R2 requires
+  <code>verification.independent_verifiers[capability.tier]</code> pass records.</li>
 </ul>
 <h2 id="4-why-this-beats-prose-only-gates">4. Why this beats prose-only gates</h2>
 <p>A prose-only "hard gate" can degrade into an assertion the implementer makes about itself. A judge with its own
@@ -119,14 +130,16 @@ context, told to look for failure, catches the plausible-but-wrong "done" that a
 it gets cheaper and more reliable as models improve, so it <em>replaces</em> ceremony rather than adding it.</p>
 <h2 id="5-verification-scales-with-capability-capability-monotonic-see-capabilityspecmd">5. Verification scales with capability (capability-monotonic — see <code>capability.spec.md</code>)</h2>
 <p>As <code>capability.tier</code> rises, prescription shrinks but verification <strong>tightens</strong> — never the reverse:
-- <code>tier=low/medium</code>: judge on R1(critical)+R2; smaller steps; fuller prescription.
-- <code>tier=high</code>: less hand-holding; R1 self-verifies measurable criteria; <strong>judge panel of 2</strong> on R2.
-- <code>tier=frontier</code>: minimal prescription; <strong>judge panel of 3, diverse lenses</strong> on R2 (a single same-class judge
-  shares the worker's blind spots).</p>
+- <code>tier=low/medium</code>: judge on R1+R2; smaller steps; fuller prescription.
+- <code>tier=high</code>: less hand-holding; R1 self-verifies measurable criteria; <strong>2 independent judge passes</strong> on R2.
+- <code>tier=frontier</code>: minimal prescription; <strong>3 independent judge passes, diverse lenses</strong> on R2 (a single
+  same-class judge shares the worker's blind spots).</p>
+<p>"N passes" today means invoking the judge agent N times with fresh context, each recording via <code>judge-record</code>
+(<code>verification.independent_verifiers</code> sets N; <code>verify-plan</code> reports it; <code>gate-check required-judge</code> enforces
+the contiguous pass count). A true concurrent multi-agent panel is ROADMAP — the spec does not pretend otherwise.</p>
 <p>Across all tiers, a <code>passed</code> acceptance must show <strong>executed ground truth</strong> — a real run with exit codes + an
-evidence log. A "verified" claim with no execution trace is a <strong>FAIL</strong> (strong models skip running checks more
-than they fabricate). The CI gate enforces this mechanically; <code>task_state.py verify-plan --risk &lt;Rn&gt;</code> returns
-the required depth.</p>
+evidence log that exists (and, when build/smoke are configured, the <code>vemo verify</code> receipt). The pre-push/CI
+gates enforce this mechanically; <code>task_state.py verify-plan --risk &lt;Rn&gt;</code> returns the required depth.</p>
 <div class="footer">VEMO documentation · rendered from Markdown by <code>docs/build_html.py</code>.
 For the rich visual guide see <a href="../GUIDE.html">GUIDE.html</a>.</div>
 </div></main>

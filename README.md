@@ -8,21 +8,26 @@
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.0.0-0d9488?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.1.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
 [Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
-<img src="assets/demo.svg" alt="vemo eval → 11/11 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
+<img src="assets/demo.svg" alt="vemo eval → 60/60 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
 
 </div>
 
 ---
 
-> **What it is, plainly:** a small set of Markdown specs + thin scripts you drop into any repository. It works
-> with any agent harness that can read Markdown and run hooks (Claude Code, etc.). **Core dependencies: none**
-> — Markdown + YAML + a little stdlib Python. The governance skills/CLI use the [GitHub CLI](https://cli.github.com/).
+> **What it is, plainly:** a small set of Markdown specs + thin scripts you drop into any repository. It
+> enforces in three rings — agent-loop hooks, git gates, server-side CI — and only the first ring is
+> harness-specific (Claude Code wiring ships; any harness with a hook API can reuse the same dispatcher —
+> see [docs/ADAPTERS.md](docs/ADAPTERS.md)). The git+CI rings bind **any agent, any model, any harness**.
+> **Core dependencies: none** — Markdown + YAML + a little stdlib Python. Model names are advisory routing
+> hints; the portable control is `capability.tier`, a behavioral, vendor-neutral rubric
+> (`specs/capability.spec.md` §1.5) that maps any LLM family to the same verification and safety gates.
+> The governance skills/CLI use the [GitHub CLI](https://cli.github.com/).
 
 ## ✨ The name
 
@@ -69,11 +74,14 @@ that fails the moment the model doesn't read it.
 # 1) drop VEMO into your repo
 cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ && cd your-repo
 
-# 2) one command — installs hooks + git pre-commit, preconfigures build/test for your stack
+# 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
 python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
 export PATH="$PWD/bin:$PATH"                  # so you can just type `vemo`
 
-# 3) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
+# 3) make it AUTHORITATIVE: server-side CI + branch protection (local hooks are fast feedback only)
+mkdir -p .github/workflows && cp enforcement/ci/vemo-ci.yml .github/workflows/
+
+# 4) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
 cp tasks/_TASK_TEMPLATE.md tasks/T-myfeature.md   # set  scope_in: ["src/feature/**"]  risk: R1
 vemo status                                       # where am I?    vemo explain gates
 ```
@@ -90,18 +98,21 @@ Five layers — the lower you go, the more it's *enforced mechanism* rather than
 
 ```
 ┌ AGENTS.md ───────────── thin router: loads config + safety, then JIT-loads the rest   (prose)
-├ vemo.config.yaml ────── the ONE file you edit: tier · routing · risk_tiers · budget    (config)
+├ vemo.config.yaml ────── config where EVERY key has a consumer (selfcheck-enforced)     (config)
 ├ specs/ ──────────────── safety · task · verify · concurrency · coding · automation     (prose, JIT)
-├ enforcement/ ────────── ⛨ hooks (client) + CI pre-commit (server) + validator      ◀── MECHANISM
-└ agents/ · eval/ · bin/  governance-judge · conformance scenarios · the `vemo` CLI      (verify · tooling)
+├ enforcement/ ────────── ⛨ hook dispatcher + git pre-commit/pre-push + CI workflow  ◀── MECHANISM
+└ agents/ · eval/ · bin/  governance-judge · validator+hook e2e eval · the `vemo` CLI    (verify · tooling)
 ```
 
-Enforcement is **defense-in-depth** — a gate never depends on the agent's goodwill:
+Enforcement is **defense-in-depth** — a gate never depends on the agent's goodwill, and every
+"passed" claim needs an artifact the claimant did not type (evidence file · `vemo verify` receipt ·
+required judge provenance record(s)):
 
 ```
-agent → ⛨ PreToolUse hook → action runs → git commit/push → ⛨ CI / pre-commit → ✓ main
-         scope·cmd·secret·budget            (if allowed)        tier·R2 judge·acceptance
-         (fast, client-side)                                    (authoritative; --no-verify can't pass it)
+agent → ⛨ PreToolUse hook → action runs → ⛨ git pre-commit → ⛨ git pre-push → ⛨ CI workflow → ✓ main
+         scope·blob·cmd·secret·budget       scope·tier·judge    acceptance·receipt   same checks, server-side
+         (fast, client-side)                (no self-downgrade)  ·judge provenance   (authoritative with branch
+                                                                                      protection; --no-verify moot)
 ```
 
 🖼️ **Rich, color diagrams** (layered stack, request lifecycle, the two-walls pipeline, and a risk×capability
@@ -113,13 +124,14 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 
 | Command | Does |
 |---|---|
-| `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + tasks/) |
-| `vemo status` | plain-language dashboard: tier · enforcement · budget · auto mode · active task |
-| `vemo doctor` | health check (config, hooks, tools) |
-| `vemo selfcheck` | framework internal-consistency lint |
-| `vemo eval` | run the executable conformance harness (writes `eval/out/report.json`) |
-| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets` |
-| `vemo auto on\|off\|status` | full-auto (unattended) mode — records every decision; OFF by default |
+| `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + git gates + tasks/) |
+| `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
+| `vemo verify` | **execute** `paths.build/smoke` → evidence log + machine receipt (what the push gate trusts) |
+| `vemo doctor` | health check (config, hooks, tools, stale tasks, gates-heartbeat) |
+| `vemo selfcheck` | internal consistency: ENFORCED-BY claims and config keys must map to real consumers |
+| `vemo eval` | executable conformance harness, validator + hook end-to-end (writes `eval/out/report.json`) |
+| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify` |
+| `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
 | `vemo tier <paths…>` / `vemo check <path>` | required risk tier / is a path in scope? |
 
@@ -183,7 +195,7 @@ If a governance framework that *proves* it works (and tells you where it doesn't
 ## ⚠️ Status
 
 **Status.** VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
-`vemo.config.yaml`. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) reflect 2026 Anthropic
-releases — swap them freely for whatever you run.
+`vemo.config.yaml`. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) are examples, not trust
+anchors. Swap them freely; keep `capability.tier` calibrated to observed model behavior.
 
 <div align="center"><sub>governance that gets out of your way — until it shouldn't.</sub></div>

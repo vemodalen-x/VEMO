@@ -27,10 +27,18 @@ state: ImplementationDone      # PlanCreated|ReviewApproved|ImplementationDone|A
 scope_in: ["src/fusion/**", "tests/fusion/**"]   # hooks BLOCK edits outside this
 acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: ".vemo/run/123.log" }
 judge: { required: false, verdict: null }
+approved_commands: []          # destructive cmds the USER approved this session (command-guard escape hatch)
 owning_chat: chat-20260616-1410-x7q
 heartbeat: 2026-06-16T14:55
 ---
 ```
+
+Two integrity notes: (1) `acceptance:` is a human-readable **cache** — when `paths.build/smoke` are
+configured, the push gate trusts the `vemo verify` receipt and the evidence file's existence, not these
+numbers. (2) `judge.verdict` requires a matching provenance record written by the judge itself
+(`judge-record`), and R2 may require multiple contiguous pass records by `capability.tier`; a verdict pasted
+here alone blocks. On task start, bind the session:
+`task_state.py bind --session <id> --task <id>` (see `concurrency.spec §1`).
 
 ## 3. Ceremony matrix (derived from `capability.tier`)
 
@@ -38,7 +46,7 @@ heartbeat: 2026-06-16T14:55
 |---|---|---|---|
 | Plan handshake | 1 terse line | explicit block | explicit block + user echo |
 | Spec reads | headers JIT, pull on demand | listed specs in full | listed specs in full + re-confirm |
-| Self-verify | agent self-checks, judge on R2 | judge on R1-critical + R2 | judge on R1 + R2 |
+| Self-verify | agent self-checks, judge on R2 | judge on R1 + R2 | judge on R1 + R2 |
 | Step size | larger autonomous steps | medium | small, frequent checkpoints |
 
 Rationale: a stronger model needs *outcomes + verification*, not step-by-step prescription. As you upgrade
@@ -55,7 +63,7 @@ to long-horizon/R2/migration only — never R0/R1 (2× cost; "renting a truck to
 - **PlanCreated** — task file exists with `Goal`, `Scope (In/Out)`, `Pass/Fail Criteria` (measurable, EARS-style; see verify.spec). R0 may inline this.
 - **ReviewApproved** *(R2 only)* — human approved the plan.
 - **ImplementationDone** — changes within `scope_in` only (hook-enforced). Read-audit appended if source was read.
-- **AcceptancePassed** — `verify.spec` criteria evaluated PASS/FAIL with exit codes + evidence path; failures get a disposition (`RCA-inline|RCA-subtask|Criterion-revision|Known-limitation`).
+- **AcceptancePassed** — `verify.spec` criteria evaluated PASS/FAIL with a real evidence file; when build/smoke are configured, produced via `vemo verify` (machine receipt). Failures get a disposition (`RCA-inline|RCA-subtask|Criterion-revision|Known-limitation`). The pre-push/CI gate checks this for **R1+** (R0 has no acceptance gate — that is the point of R0).
 - **ProcedureCompleted** *(R2 / code release)* — release procedure run; commit-message + push are separate human-confirmed gates.
 - **Archived** — moved to `tasks/Archive/` after self-check.
 

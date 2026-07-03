@@ -1,4 +1,8 @@
-.vemo/
+# .vemo/ holds per-machine runtime state (telemetry, budgets, receipts) — EXCEPT the judge
+# provenance log, which is part of the governed record: CI reads it for the required-judge gate,
+# and git history is what makes an append-only audit log tamper-evident.
+.vemo/*
+!.vemo/judge.jsonl
 eval/out/
 __pycache__/
 *.pyc

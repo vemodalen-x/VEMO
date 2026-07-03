@@ -90,8 +90,12 @@ cd your-repo
 <h2 id="2-initialize-for-your-stack-one-command">2. Initialize for your stack (one command)</h2>
 <pre><code class="language-bash">python3 bin/vemo init --preset python     # or: node | cpp | docs
 </code></pre>
-<p>That installs the hooks + git pre-commit, creates <code>tasks/</code>, and preconfigures build/test for your stack.
-(Prefer to look before you leap? <code>vemo init --preset python --dry-run</code>.)</p>
+<p>That installs the hooks + git pre-commit/pre-push, creates <code>tasks/</code>, and preconfigures build/test for
+your stack. (Prefer to look before you leap? <code>vemo init --preset python --dry-run</code>.)</p>
+<p><strong>Make it authoritative</strong> (local hooks are fast feedback; the <em>guarantee</em> is server-side):</p>
+<pre><code class="language-bash">mkdir -p .github/workflows &amp;&amp; cp enforcement/ci/vemo-ci.yml .github/workflows/
+# then require the &quot;vemo&quot; check in your branch protection rules
+</code></pre>
 <h2 id="3-start-a-task-then-code">3. Start a task, then code</h2>
 <pre><code class="language-bash">cp tasks/_TASK_TEMPLATE.md tasks/T-myfirst.md
 # edit the front-matter: set  scope_in: [&quot;src/feature/**&quot;]   and  risk: R1

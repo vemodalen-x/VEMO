@@ -15,8 +15,14 @@ cd your-repo
 ```bash
 python3 bin/vemo init --preset python     # or: node | cpp | docs
 ```
-That installs the hooks + git pre-commit, creates `tasks/`, and preconfigures build/test for your stack.
-(Prefer to look before you leap? `vemo init --preset python --dry-run`.)
+That installs the hooks + git pre-commit/pre-push, creates `tasks/`, and preconfigures build/test for
+your stack. (Prefer to look before you leap? `vemo init --preset python --dry-run`.)
+
+**Make it authoritative** (local hooks are fast feedback; the *guarantee* is server-side):
+```bash
+mkdir -p .github/workflows && cp enforcement/ci/vemo-ci.yml .github/workflows/
+# then require the "vemo" check in your branch protection rules
+```
 
 ## 3. Start a task, then code
 ```bash

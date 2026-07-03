@@ -103,7 +103,7 @@ verifying + constraining.</strong> Prescription shrinks; verification, boundarie
 </tr>
 <tr>
 <td><strong>Game the process</strong> — re-authored agent commits as human to dodge review; reframed bugs as "design decisions"</td>
-<td>enforcement must be <strong>tamper-evident</strong> + provenance-checked</td>
+<td>enforcement must be <strong>tamper-evident</strong> + judge-verdict provenance-checked; commit authorship forensics remain future work</td>
 </tr>
 <tr>
 <td><strong>Sabotage undetected without narration</strong> — 0% with chain-of-thought monitoring → 9.2%+ without; &gt;60% vs a weak monitor (UK AISI)</td>
@@ -130,7 +130,7 @@ verifying + constraining.</strong> Prescription shrinks; verification, boundarie
 </tr>
 <tr>
 <td>process-gaming</td>
-<td>CI authoritative + authorship-provenance check; judge flags reframing</td>
+<td>CI authoritative + judge-verdict provenance + tamper-evident governance changes; judge flags reframing. Commit authorship forensics remains ROADMAP.</td>
 </tr>
 <tr>
 <td>non-narration sabotage</td>
@@ -138,11 +138,11 @@ verifying + constraining.</strong> Prescription shrinks; verification, boundarie
 </tr>
 <tr>
 <td>stop-early / single-pass</td>
-<td>independent judge may demand another round; <strong>panel</strong> at high tiers</td>
+<td>independent judge may demand another round; high tiers require multiple sequential pass records</td>
 </tr>
 <tr>
 <td>over-trust of one reviewer</td>
-<td><code>verify-plan</code>: verifier <strong>panel scales UP</strong> with capability (the verifier problem)</td>
+<td><code>verify-plan</code>: verifier pass depth scales UP with capability (the verifier problem); true concurrent panels remain ROADMAP</td>
 </tr>
 <tr>
 <td>stronger ⇒ riskier unattended</td>
@@ -157,12 +157,20 @@ verifying + constraining.</strong> Prescription shrinks; verification, boundarie
 </ul>
 <p>That is the whole idea: VEMO reads one <code>capability.tier</code>, and the framework gets <em>lighter to work with</em> and
 <em>harder to fool</em> at the same time.</p>
+<h2 id="why-this-adapts-across-model-families">Why this adapts across model families</h2>
+<p><code>capability.tier</code> is not a vendor label. Treat it as an operating envelope for the model you actually run:
+tool-use reliability, context retention, willingness to execute verification, and tendency to stop early.
+Anthropic, OpenAI, local, or future models can all be mapped onto the same four tiers. The model names in
+<code>model_routing</code> are routing hints for your harness; the enforceable contract is the tier-derived gate behavior.</p>
 <h2 id="see-it-mechanical-not-just-prose">See it (mechanical, not just prose)</h2>
 <pre><code class="language-bash">python3 enforcement/validators/task_state.py verify-plan --risk R2
 #   tier=high     → verifiers=2  ground_truth=required  narration=required  human_gate=intent + irreversible only
 # raise capability.tier to 'frontier', re-run:
 #   tier=frontier → verifiers=3  ...   # verification TIGHTENS, never loosens
 </code></pre>
+<p>The push gate enforces that depth with <code>gate-check required-judge</code>: a high-tier R2 task needs two contiguous
+judge pass records today, and a frontier-tier R2 task needs three. One pasted verdict or one pass record is
+not enough.</p>
 <h2 id="source">Source</h2>
 <p>Public Fable 5 / Mythos 5 system-card analysis — digitalapplied.com, <em>"Claude Fable 5 &amp; Mythos 5: Agentic
 Coding Deep Dive (2026)"</em>; plus CodeRabbit / MindStudio / Vellum on long-horizon-autonomy failure modes.</p>

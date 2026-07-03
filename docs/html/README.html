@@ -87,16 +87,13 @@ img{max-width:100%}
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.0.0-0d9488?style=for-the-badge)
-![conformance](https://img.shields.io/badge/conformance-11%2F11-16a34a?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.1.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
-![deps](https://img.shields.io/badge/core%20deps-none-0891b2?style=for-the-badge)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-7c3aed?style=for-the-badge)](https://github.com/vemodalen-x/VEMO/pulls)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
 [Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
-<img src="../../assets/demo.svg" alt="vemo eval → 11/11 conformance; an out-of-scope edit blocked (exit 2)" width="760" />
+<img src="../../assets/demo.svg" alt="vemo eval → 54/54 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
 
 </div>
 
@@ -104,7 +101,9 @@ img{max-width:100%}
 <blockquote>
 <p><strong>What it is, plainly:</strong> a small set of Markdown specs + thin scripts you drop into any repository. It works
 with any agent harness that can read Markdown and run hooks (Claude Code, etc.). <strong>Core dependencies: none</strong>
-— Markdown + YAML + a little stdlib Python. The governance skills/CLI use the <a href="https://cli.github.com/">GitHub CLI</a>.</p>
+— Markdown + YAML + a little stdlib Python. Model names are advisory routing hints; the portable control is
+<code>capability.tier</code>, which maps any LLM family to the same verification and safety gates. The governance
+skills/CLI use the <a href="https://cli.github.com/">GitHub CLI</a>.</p>
 </blockquote>
 <h2 id="the-name">✨ The name</h2>
 <p>VEMO is named after <strong>vemödalen</strong> — a word coined by John Koenig in <em>The Dictionary of Obscure Sorrows</em>:</p>
@@ -198,11 +197,14 @@ that fails the moment the model doesn't read it.</p>
 <pre><code class="language-bash"># 1) drop VEMO into your repo
 cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ &amp;&amp; cd your-repo
 
-# 2) one command — installs hooks + git pre-commit, preconfigures build/test for your stack
+# 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
 python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
 export PATH=&quot;$PWD/bin:$PATH&quot;                  # so you can just type `vemo`
 
-# 3) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
+# 3) make it AUTHORITATIVE: server-side CI + branch protection (local hooks are fast feedback only)
+mkdir -p .github/workflows &amp;&amp; cp enforcement/ci/vemo-ci.yml .github/workflows/
+
+# 4) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
 cp tasks/_TASK_TEMPLATE.md tasks/T-myfeature.md   # set  scope_in: [&quot;src/feature/**&quot;]  risk: R1
 vemo status                                       # where am I?    vemo explain gates
 </code></pre>
@@ -213,15 +215,18 @@ vemo status                                       # where am I?    vemo explain 
 <p align="center"><img src="../../assets/architecture.svg" alt="VEMO layered architecture" width="760" /></p>
 
 <pre><code>┌ AGENTS.md ───────────── thin router: loads config + safety, then JIT-loads the rest   (prose)
-├ vemo.config.yaml ────── the ONE file you edit: tier · routing · risk_tiers · budget    (config)
+├ vemo.config.yaml ────── config where EVERY key has a consumer (selfcheck-enforced)     (config)
 ├ specs/ ──────────────── safety · task · verify · concurrency · coding · automation     (prose, JIT)
-├ enforcement/ ────────── ⛨ hooks (client) + CI pre-commit (server) + validator      ◀── MECHANISM
-└ agents/ · eval/ · bin/  governance-judge · conformance scenarios · the `vemo` CLI      (verify · tooling)
+├ enforcement/ ────────── ⛨ hook dispatcher + git pre-commit/pre-push + CI workflow  ◀── MECHANISM
+└ agents/ · eval/ · bin/  governance-judge · validator+hook e2e eval · the `vemo` CLI    (verify · tooling)
 </code></pre>
-<p>Enforcement is <strong>defense-in-depth</strong> — a gate never depends on the agent's goodwill:</p>
-<pre><code>agent → ⛨ PreToolUse hook → action runs → git commit/push → ⛨ CI / pre-commit → ✓ main
-         scope·cmd·secret·budget            (if allowed)        tier·R2 judge·acceptance
-         (fast, client-side)                                    (authoritative; --no-verify can't pass it)
+<p>Enforcement is <strong>defense-in-depth</strong> — a gate never depends on the agent's goodwill, and every
+"passed" claim needs an artifact the claimant did not type (evidence file · <code>vemo verify</code> receipt ·
+required judge provenance record(s)):</p>
+<pre><code>agent → ⛨ PreToolUse hook → action runs → ⛨ git pre-commit → ⛨ git pre-push → ⛨ CI workflow → ✓ main
+         scope·blob·cmd·secret·budget       scope·tier·judge    acceptance·receipt   same checks, server-side
+         (fast, client-side)                (no self-downgrade)  ·judge provenance   (authoritative with branch
+                                                                                      protection; --no-verify moot)
 </code></pre>
 <p>🖼️ <strong>Rich, color diagrams</strong> (layered stack, request lifecycle, the two-walls pipeline, and a risk×capability
 ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></strong>.</p>
@@ -237,31 +242,35 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <tbody>
 <tr>
 <td><code>vemo init [--preset python\|node\|cpp\|docs]</code></td>
-<td>set up VEMO in this repo (preset + hooks + tasks/)</td>
+<td>set up VEMO in this repo (preset + hooks + git gates + tasks/)</td>
 </tr>
 <tr>
 <td><code>vemo status</code></td>
-<td>plain-language dashboard: tier · enforcement · budget · auto mode · active task</td>
+<td>plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task</td>
+</tr>
+<tr>
+<td><code>vemo verify</code></td>
+<td><strong>execute</strong> <code>paths.build/smoke</code> → evidence log + machine receipt (what the push gate trusts)</td>
 </tr>
 <tr>
 <td><code>vemo doctor</code></td>
-<td>health check (config, hooks, tools)</td>
+<td>health check (config, hooks, tools, stale tasks, gates-heartbeat)</td>
 </tr>
 <tr>
 <td><code>vemo selfcheck</code></td>
-<td>framework internal-consistency lint</td>
+<td>internal consistency: ENFORCED-BY claims and config keys must map to real consumers</td>
 </tr>
 <tr>
 <td><code>vemo eval</code></td>
-<td>run the executable conformance harness (writes <code>eval/out/report.json</code>)</td>
+<td>executable conformance harness, validator + hook end-to-end (writes <code>eval/out/report.json</code>)</td>
 </tr>
 <tr>
 <td><code>vemo explain &lt;topic&gt;</code></td>
-<td><code>tiers · gates · auto · budget · judge · capability · presets</code></td>
+<td><code>tiers · gates · auto · budget · judge · capability · presets · verify</code></td>
 </tr>
 <tr>
 <td><code>vemo auto on\|off\|status</code></td>
-<td>full-auto (unattended) mode — records every decision; OFF by default</td>
+<td>unattended mode — <code>on</code> requires a human at a TTY; records every decision</td>
 </tr>
 <tr>
 <td><code>vemo budget status\|reset</code></td>
@@ -369,8 +378,8 @@ a new <code>presets/&lt;stack&gt;.yaml</code>, a new <code>eval/</code> scenario
 <p><a href="../../LICENSE">MIT</a> © 2026 The VEMO Authors.</p>
 <h2 id="status">⚠️ Status</h2>
 <p><strong>Status.</strong> VEMO is a framework of specs + thin scripts; treat it as a starting skeleton you tune via
-<code>vemo.config.yaml</code>. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) reflect 2026 Anthropic
-releases — swap them freely for whatever you run.</p>
+<code>vemo.config.yaml</code>. Model names referenced in defaults (Opus 4.8, Fable 5, Mythos) are examples, not trust
+anchors. Swap them freely; keep <code>capability.tier</code> calibrated to observed model behavior.</p>
 <div align="center"><sub>governance that gets out of your way — until it shouldn't.</sub></div>
 <div class="footer">VEMO documentation · rendered from Markdown by <code>docs/build_html.py</code>.
 For the rich visual guide see <a href="../GUIDE.html">GUIDE.html</a>.</div>

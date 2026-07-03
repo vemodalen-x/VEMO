@@ -125,10 +125,17 @@ state: ImplementationDone      # PlanCreated|ReviewApproved|ImplementationDone|A
 scope_in: [&quot;src/fusion/**&quot;, &quot;tests/fusion/**&quot;]   # hooks BLOCK edits outside this
 acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: &quot;.vemo/run/123.log&quot; }
 judge: { required: false, verdict: null }
+approved_commands: []          # destructive cmds the USER approved this session (command-guard escape hatch)
 owning_chat: chat-20260616-1410-x7q
 heartbeat: 2026-06-16T14:55
 ---
 </code></pre>
+<p>Two integrity notes: (1) <code>acceptance:</code> is a human-readable <strong>cache</strong> — when <code>paths.build/smoke</code> are
+configured, the push gate trusts the <code>vemo verify</code> receipt and the evidence file's existence, not these
+numbers. (2) <code>judge.verdict</code> requires a matching provenance record written by the judge itself
+(<code>judge-record</code>), and R2 may require multiple contiguous pass records by <code>capability.tier</code>; a verdict pasted
+here alone blocks. On task start, bind the session:
+<code>task_state.py bind --session &lt;id&gt; --task &lt;id&gt;</code> (see <code>concurrency.spec §1</code>).</p>
 <h2 id="3-ceremony-matrix-derived-from-capabilitytier">3. Ceremony matrix (derived from <code>capability.tier</code>)</h2>
 <table>
 <thead>
@@ -155,7 +162,7 @@ heartbeat: 2026-06-16T14:55
 <tr>
 <td>Self-verify</td>
 <td>agent self-checks, judge on R2</td>
-<td>judge on R1-critical + R2</td>
+<td>judge on R1 + R2</td>
 <td>judge on R1 + R2</td>
 </tr>
 <tr>
@@ -178,7 +185,7 @@ to long-horizon/R2/migration only — never R0/R1 (2× cost; "renting a truck to
 <li><strong>PlanCreated</strong> — task file exists with <code>Goal</code>, <code>Scope (In/Out)</code>, <code>Pass/Fail Criteria</code> (measurable, EARS-style; see verify.spec). R0 may inline this.</li>
 <li><strong>ReviewApproved</strong> <em>(R2 only)</em> — human approved the plan.</li>
 <li><strong>ImplementationDone</strong> — changes within <code>scope_in</code> only (hook-enforced). Read-audit appended if source was read.</li>
-<li><strong>AcceptancePassed</strong> — <code>verify.spec</code> criteria evaluated PASS/FAIL with exit codes + evidence path; failures get a disposition (<code>RCA-inline|RCA-subtask|Criterion-revision|Known-limitation</code>).</li>
+<li><strong>AcceptancePassed</strong> — <code>verify.spec</code> criteria evaluated PASS/FAIL with a real evidence file; when build/smoke are configured, produced via <code>vemo verify</code> (machine receipt). Failures get a disposition (<code>RCA-inline|RCA-subtask|Criterion-revision|Known-limitation</code>). The pre-push/CI gate checks this for <strong>R1+</strong> (R0 has no acceptance gate — that is the point of R0).</li>
 <li><strong>ProcedureCompleted</strong> <em>(R2 / code release)</em> — release procedure run; commit-message + push are separate human-confirmed gates.</li>
 <li><strong>Archived</strong> — moved to <code>tasks/Archive/</code> after self-check.</li>
 </ul>

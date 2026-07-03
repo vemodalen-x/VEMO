@@ -95,17 +95,18 @@ indistinguishable snapshot. Fitting, for an era drowning in look-alike AI-genera
 <blockquote>
 <p>It's the only one whose "hard gates" are <strong>mechanical</strong> (Claude Code hooks + a git/CI backstop + a
 machine-readable task state) instead of prose — <strong>and we ship a runnable conformance suite that proves they
-fire (currently 11/11).</strong> A gate that only exists in a Markdown file is a gate the model can ignore.</p>
+fire.</strong> A gate that only exists in a Markdown file is a gate the model can ignore.</p>
 </blockquote>
 <h2 id="three-things-thatll-make-you-star-it">Three things that'll make you star it</h2>
 <ol>
 <li><strong>Gates you can't argue with.</strong> Edit a file outside your task's scope → blocked. <code>git reset --hard</code> →
    blocked. Push before tests actually ran (with exit codes + a log) → blocked. Not by hoping — by a hook that
-   <em>can't hallucinate</em>. Run <code>vemo eval</code> and watch 11/11 gates fire on real fixtures. (The suite found and fixed a
+   <em>can't hallucinate</em>. Run <code>vemo eval</code> and watch the gates fire on real fixtures. (The suite found and fixed a
    real bug in VEMO itself on its first run — that's the kind of honesty we ship with.)</li>
-<li><strong>It gets <em>lighter</em> as your model gets <em>stronger</em>.</strong> One knob — <code>capability.tier</code> — and ceremony shrinks
-   while verification <em>tightens</em> (more independent checks, never fewer). Upgrade Opus → Fable 5, bump the tier,
-   done. We call it <strong>capability-monotonic governance</strong>, and <code>verify-plan</code> computes it, not vibes.</li>
+<li><strong>It gets <em>lighter</em> as your model gets <em>stronger</em>.</strong> One vendor-neutral knob — <code>capability.tier</code> — and
+   ceremony shrinks while verification <em>tightens</em> (more independent checks, never fewer). Map any LLM family
+   to the tier its observed behavior supports. We call it <strong>capability-monotonic governance</strong>, and
+   <code>verify-plan</code> computes it, not vibes.</li>
 <li><strong>Velocity-first.</strong> A typo and a schema migration don't get the same process. Risk tiers (R0 fast / R1 / R2
    critical) mean low-risk work is ~3 steps; the heavy machinery only shows up where the blast radius is real.</li>
 </ol>

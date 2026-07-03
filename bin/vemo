@@ -21,18 +21,21 @@ EXPLAIN = {
     "tiers": "Risk tiers scale ceremony to blast radius. R0 trivial (docs) = fast path; R1 standard code; "
              "R2 critical (core/auth/migrations) = review + judge. Default to the LOWEST tier that fits.",
     "gates": "ENFORCED (mechanical, non-negotiable): scope, no destructive cmd, no secrets, "
-             "acceptance-before-push, risk-tier integrity, R2 judge. ADVISED (your judgment): style, "
+             "acceptance-before-push, risk-tier integrity, required judge depth. ADVISED (your judgment): style, "
              "comments, decomposition depth.",
     "auto": "Full-auto mode removes human-APPROVAL pauses (records each decision instead). OFF by default; "
             "`vemo auto on`. Never relaxes the mechanical guards or the judge. Bounded by a risk ceiling + TTL.",
     "budget": "Run budget = stop rules for long-horizon / Mythos-class models that 'run until cut off'. "
               "Hard-stops a runaway when UNATTENDED (auto on); advisory when a human is present.",
-    "judge": "An independent subagent (separate context, told to refute 'done') flips high-risk gates instead "
-             "of the worker self-reporting. Required on R2.",
+    "judge": "An independent subagent (separate context, told to refute 'done') flips required gates instead "
+             "of the worker self-reporting. Low/medium R1 need one pass; R2 depth scales by capability.tier.",
     "capability": "capability.tier (frontier|high|medium|low) scales ceremony to MODEL strength. Stronger "
                   "model -> less prescription, more self-verify. Raise it when you upgrade the model.",
     "presets": "`vemo init --preset python|node|cpp|docs` writes a stack overlay (vemo.config.preset.yaml) so "
                "VEMO is preconfigured for your repo type. Convention over configuration.",
+    "verify": "`vemo verify` EXECUTES paths.build/paths.smoke and writes an evidence log + a machine "
+              "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
+              "typed into front-matter. Executed ground truth, produced by the gate's own side.",
 }
 
 
@@ -41,11 +44,11 @@ def cmd_status():
     print("VEMO status")
     print(f"  version         : {g('vemo.version')}")
     print(f"  capability tier : {g('capability.tier')}   (raise when you upgrade the model)")
-    print(f"  enforcement     : hooks={g('enforcement.hooks')}  ci_backstop={g('enforcement.ci_backstop')}")
+    print(f"  enforcement     : mode={g('enforcement.mode')}  hooks={g('enforcement.hooks')}  ci_backstop={g('enforcement.ci_backstop')}")
     print(f"  run budget      : {_ts('budget-status')}")
     print(f"  auto mode       : {_ts('auto-status')}")
     print(f"  active task     : {_ts('active')}")
-    print("  tip: `vemo explain <tiers|gates|auto|budget|judge|capability|presets>`")
+    print("  tip: `vemo explain <tiers|gates|auto|budget|judge|capability|presets|verify>`")
     return 0
 
 
@@ -99,9 +102,12 @@ def cmd_init(args):
 HELP = """vemo <command>
   init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   set up VEMO (--minimal = no-install monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
-  doctor                          health check (config + hooks + tools)
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets
-  auto on|off|status              full-auto (unattended) mode
+  verify                          EXECUTE paths.build/smoke -> evidence log + machine receipt (the push gate reads this)
+  doctor                          health check (config + hooks + tools + gates-heartbeat)
+  selfcheck                       internal consistency (ENFORCED-BY claims + config keys must have consumers)
+  eval                            executable conformance harness (validator + hook end-to-end)
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify
+  auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
   check <path>                    is a path inside the active task's scope?"""
@@ -114,6 +120,8 @@ def main():
     c = a[0]
     if c == "status": return cmd_status()
     if c == "doctor": return cmd_doctor()
+    if c == "verify":  # stream output live — this actually runs the build/smoke
+        return subprocess.run(TS + ["verify-run"]).returncode
     if c == "selfcheck": print(_ts("selfcheck")); return 0
     if c == "eval": import subprocess as _s; return _s.run(["python3", os.path.join(ROOT, "eval", "run.py")]).returncode
     if c == "init": return cmd_init(a[1:])

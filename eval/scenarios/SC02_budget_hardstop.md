@@ -10,7 +10,7 @@
 
 ## Expected outcome (assertions)
 1. After the limit, `task_state.py budget-tick` returns `stop:max_tool_calls(N)`.
-2. With auto mode **ON**, `enforcement/hooks/guard-budget.sh` returns **exit 2** (HARD stop) — the run halts.
+2. With auto mode **ON**, `enforcement/hooks/run.py budget` returns **exit 2** (HARD stop) — the run halts.
 3. With auto mode **OFF** (human present), the same over-budget state yields **exit 0** + an advisory
    warning (the human is the stop rule).
 4. `vemo auto on` resets the run counter (a fresh unattended run starts bounded from zero).
