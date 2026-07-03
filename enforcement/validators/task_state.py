@@ -282,6 +282,50 @@ def _active_task(session=None):
     return best
 
 
+def _task_from_file(path):
+    """Load one live task file from an absolute or repo-relative path."""
+    p = path if os.path.isabs(path) else os.path.join(ROOT, path)
+    p = os.path.abspath(p)
+    try:
+        rel = os.path.relpath(p, TASKS_DIR)
+    except ValueError:
+        return None
+    if rel.startswith("..") or os.path.basename(p).startswith("_"):
+        return None
+    fm = _parse_front_matter(p)
+    if fm and fm.get("state") != "Archived":
+        return (p, fm)
+    return None
+
+
+def _tasks_from_files(task_files):
+    tasks, seen = [], set()
+    for path in task_files or []:
+        task = _task_from_file(path)
+        if task and task[0] not in seen:
+            tasks.append(task)
+            seen.add(task[0])
+    return tasks
+
+
+def _task_context(task_files=None, session=None):
+    """Return explicit task files when provided; otherwise preserve active-task behavior."""
+    tasks = _tasks_from_files(task_files)
+    if tasks:
+        return tasks
+    act = _active_task(session)
+    return [act] if act else []
+
+
+def _max_task_risk(tasks):
+    best = "R0"
+    for _, fm in tasks:
+        risk = str(fm.get("risk") or "R0")[:2]
+        if TIER_RANK.get(risk, 1) > TIER_RANK.get(best, 1):
+            best = risk
+    return best
+
+
 def bind_session(session, task_id):
     hit = None
     for path in glob.glob(os.path.join(TASKS_DIR, "*.md")):
@@ -311,15 +355,18 @@ def _dig(d, dotted):
 
 
 # ── commands ──
-def scope_check(target, session=None):
-    act = _active_task(session)
-    if not act:
-        return "no-active-task"
-    globs = act[1].get("scope_in") or []
-    if not globs:
+def scope_check(target, session=None, task_files=None):
+    tasks = _task_context(task_files, session)
+    if not tasks:
         return "no-active-task"
     rel = _rel(target)
-    return "in-scope" if any(_match(rel, g) for g in globs) else "out-of-scope"
+    has_scope = False
+    for _, fm in tasks:
+        globs = fm.get("scope_in") or []
+        has_scope = has_scope or bool(globs)
+        if any(_match(rel, g) for g in globs):
+            return "in-scope"
+    return "out-of-scope" if has_scope else "no-active-task"
 
 
 def blob_check(target):
@@ -423,10 +470,11 @@ def _read_receipt():
         return None
 
 
-def gate_check(gate, session=None):
-    act = _active_task(session)
-    if not act:
+def gate_check(gate, session=None, task_files=None):
+    tasks = _task_context(task_files, session)
+    if not tasks:
         return "block:no-active-task"
+    act = tasks[0]
     fm = act[1]
     risk = str(fm.get("risk") or "R0")
     if gate == "acceptance-before-push":
@@ -466,9 +514,14 @@ def gate_check(gate, session=None):
                 return "block:auto-mode-requires-judge (%s)" % j[len("block:"):]
         return "ok"
     if gate in ("r2-judge", "required-judge"):
-        return _judge_gate_result(fm, _required_judge_passes(risk))
+        for _, candidate in tasks:
+            required = _required_judge_passes(str(candidate.get("risk") or "R0"))
+            result = _judge_gate_result(candidate, required)
+            if result != "ok":
+                return result
+        return "ok"
     if gate == "plan-before-commit":
-        return "ok" if fm.get("state") else "block:no-plan"
+        return "ok" if all(candidate.get("state") for _, candidate in tasks) else "block:no-plan"
     return "ok"
 
 
@@ -712,9 +765,12 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("scope-check"); s.add_argument("--path", required=True); s.add_argument("--session", default=None)
+    s.add_argument("--task-file", action="append", default=[])
     b = sub.add_parser("blob-check"); b.add_argument("--path", required=True)
     g = sub.add_parser("gate-check");  g.add_argument("--gate", required=True); g.add_argument("--session", default=None)
+    g.add_argument("--task-file", action="append", default=[])
     t = sub.add_parser("tier-required"); t.add_argument("--paths", nargs="+", required=True)
+    tr = sub.add_parser("task-risk"); tr.add_argument("--task-file", action="append", default=[])
     ge = sub.add_parser("get"); ge.add_argument("--field", required=True)
     sub.add_parser("active"); sub.add_parser("doctor"); sub.add_parser("auto-status")
     aa = sub.add_parser("auto-allows"); aa.add_argument("--tier", required=True)
@@ -732,13 +788,15 @@ def main():
     sub.add_parser("selfcheck"); tc = sub.add_parser("trifecta-check"); tc.add_argument("--session", default=None)
     a = ap.parse_args()
     if a.cmd == "scope-check":
-        print(scope_check(a.path, a.session))
+        print(scope_check(a.path, a.session, a.task_file))
     elif a.cmd == "blob-check":
         print(blob_check(a.path))
     elif a.cmd == "gate-check":
-        print(gate_check(a.gate, a.session))
+        print(gate_check(a.gate, a.session, a.task_file))
     elif a.cmd == "tier-required":
         print(tier_required(a.paths))
+    elif a.cmd == "task-risk":
+        print(_max_task_risk(_task_context(a.task_file)))
     elif a.cmd == "get":
         act = _active_task()
         v = _dig(act[1], a.field) if act else None

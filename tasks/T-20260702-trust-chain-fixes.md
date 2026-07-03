@@ -16,7 +16,7 @@ judge:
   confidence: high
 approved_commands: []
 owning_chat: chat-20260703-1012-vmx
-heartbeat: 2026-07-03T14:56
+heartbeat: 2026-07-03T15:26
 ---
 
 # T-trust-chain-fixes — 兑现宣称：信任链重构 + 剃刀清理（P0–P2）
@@ -130,6 +130,15 @@ heartbeat: 2026-07-03T14:56
   连续 2 pass 满足 tier=high R2 要求。Judge-2 非阻塞建议：将 `.gitignore`/`.gitattributes` 加入
   R2_critical.match_paths（当前 unmatched→R1；已有缓解：selfcheck 的 judge-log-not-gitignored 断言在
   CI 与 paths.smoke 双跑）——按流程不在判后追加未复审的 R2 改动，留待下一版本（建议已随溯源记录留存）。
+- 2026-07-03T15:26 CI follow-up: GitHub Actions failed on a multi-commit push because the range backstop
+  checked `4b0ca43...HEAD` against only the newest active R1 task. This is a trust-chain backstop bug:
+  a push range may contain multiple task files, so CI must validate changed paths against the union of the
+  task scopes present in that range and use the maximum declared task risk for downgrade/judge checks.
+  Scope remains inside this R2 task (`enforcement/**`, `eval/**`, `tasks/**`).
+- 2026-07-03T15:29 Fix implemented: `task_state.py` now accepts explicit task-file context for scope,
+  task-risk, and required-judge checks; `enforcement/ci/pre-commit` passes changed `tasks/*.md` files as the
+  range context. Added eval coverage for a range containing one R2 task plus one R1 task. Local reproduction
+  of the failed GitHub range (`4b0ca43...HEAD`) now passes.
 
 ## Acceptance Result
 - [Build] eval 47/47，exit 0 → PASS（evidence: eval/out/report.json，judge 复核过 mtime 新鲜）。
@@ -146,6 +155,14 @@ heartbeat: 2026-07-03T14:56
 - [Safety] hook e2e：`--no-verify`/`.git/` 写入/`core.hooksPath` → exit 2；`ls .git/hooks` → exit 0（无误报）.
 - [Portability] 外来最小 payload（无 session_id、含未知字段）in-scope exit 0 / out-of-scope exit 2（eval 证明）.
 - [Governance] `vemo verify` 机器收据见下方 Conclusion（build=eval, smoke=selfcheck 均 exit 0）.
+
+### CI Follow-up Acceptance Result — 2026-07-03T15:29
+- [Build] `python3 eval/run.py` → PASS, **61/61**, exit 0.
+- [Correctness] `python3 enforcement/validators/task_state.py selfcheck` → PASS.
+- [Correctness] `VEMO_DIFF_RANGE=4b0ca43...HEAD bash enforcement/ci/pre-commit` → PASS, reproduces the failed
+  GitHub range locally with the fixed backstop.
+- [Governance] `python3 enforcement/validators/task_state.py verify-run` → PASS, receipt
+  `.vemo/run/receipt.json`, log `.vemo/run/T-20260702-trust-chain-fixes-20260703-152937.log`.
 
 ### Re-review Acceptance Result — 2026-07-03T10:18
 - [Build] `python3 eval/run.py` → PASS, 54/54, exit 0, evidence `eval/out/report.json`.

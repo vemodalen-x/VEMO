@@ -73,6 +73,7 @@ CHECK_INDEX = (
     ("hook", "hook e2e: session-start exit 0 + orientation"),
     ("hook", "hook e2e: telemetry recorded blocks + session_start"),
     ("git", "pre-commit e2e: staged secret exits 1 + reason"),
+    ("git", "pre-commit e2e: range with multiple task scopes exits 0"),
     ("hook", "hook e2e: task-approved destructive cmd allowed + logged"),
     ("hook", "hook e2e: Stop below acceptance -> exit 0 + reminder"),
     ("hook", "hook e2e: Stop/SubagentStop telemetry recorded"),
@@ -451,6 +452,40 @@ def run_git_checks(r):
     p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True)
     r.chk("git", "pre-commit e2e: staged secret exits 1 + reason", p.stdout + p.stderr,
           lambda g: p.returncode == 1 and "secret-scan" in g)
+    shutil.rmtree(d)
+
+    d = sandbox()
+    install_precommit_fixture(d)
+    subprocess.run(["git", "config", "user.email", "eval@example.invalid"], cwd=d, check=True)
+    subprocess.run(["git", "config", "user.name", "VEMO Eval"], cwd=d, check=True)
+    subprocess.run(["git", "commit", "--allow-empty", "-m", "base"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                          text=True, check=True).stdout.strip()
+    os.makedirs(os.path.join(d, "src", "core"), exist_ok=True)
+    open(os.path.join(d, "tasks", "T1.md"), "w", encoding="utf-8").write(
+        task('["src/core/**", "tasks/T1.md", ".vemo/judge.jsonl"]', state="AcceptancePassed", risk="R2",
+             status="passed", build_exit="0", evidence=".vemo/run/1.log", verdict="pass", task_id="T1"))
+    open(os.path.join(d, "src", "core", "x.py"), "w", encoding="utf-8").write("x = 1\n")
+    run(d, "judge-record", "--task", "T1", "--verdict", "pass", "--evidence", "r2-1")
+    run(d, "judge-record", "--task", "T1", "--verdict", "pass", "--evidence", "r2-2")
+    subprocess.run(["git", "add", "tasks/T1.md", "src/core/x.py", ".vemo/judge.jsonl"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    subprocess.run(["git", "commit", "-m", "r2 task"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    os.makedirs(os.path.join(d, "eval"), exist_ok=True)
+    open(os.path.join(d, "tasks", "T2.md"), "w", encoding="utf-8").write(
+        task('["eval/**", "tasks/T2.md"]', state="AcceptancePassed", risk="R1",
+             status="passed", build_exit="0", evidence=".vemo/run/1.log", task_id="T2"))
+    open(os.path.join(d, "eval", "run.py"), "w", encoding="utf-8").write("print('ok')\n")
+    subprocess.run(["git", "add", "tasks/T2.md", "eval/run.py"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    subprocess.run(["git", "commit", "-m", "r1 task"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
+                       env=dict(os.environ, VEMO_DIFF_RANGE=f"{base}...HEAD"))
+    r.chk("git", "pre-commit e2e: range with multiple task scopes exits 0", p.stdout + p.stderr,
+          lambda g: p.returncode == 0)
     shutil.rmtree(d)
 
 
