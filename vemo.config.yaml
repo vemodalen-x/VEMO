@@ -11,7 +11,7 @@
 # └───────────────────────────────────────────────────────────────────────────┘
 
 vemo:
-  version: "1.1.0"
+  version: "1.2.0"
   upstream: ""            # optional: a VEMO upstream repo for sync/contribute/release
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +90,9 @@ risk_tiers:
       - ".github/**"
       - "vemo.config*.yaml"
       - "specs/**"
+      # audit-visibility files: one ignore line can hide judge provenance / receipts from git+CI
+      - ".gitignore"
+      - ".gitattributes"
     gates:        [plan, human_review, acceptance, procedure]
     judge:        true
 
@@ -141,6 +144,8 @@ concurrency:
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN BUDGET / STOP RULES — Mythos-class models "run until the harness cuts them off".
 # Hard-stop when unattended (auto on); advisory when a human is present.
+# Also detects STUCK LOOPS: the same Bash command 3× in a row = no progress (an agent that
+# repeats itself has stopped thinking — 2026 Codex/harness practice) -> same stop/advisory path.
 # ─────────────────────────────────────────────────────────────────────────────
 run_budget:
   enabled: true

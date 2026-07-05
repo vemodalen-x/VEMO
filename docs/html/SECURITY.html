@@ -101,6 +101,10 @@ img{max-width:100%}
 <td>command guard (hook): <code>rm -rf</code>, <code>git reset --hard</code>, <code>git clean -f</code>, plain <code>--force</code> push, <code>find -delete</code>, out-of-repo redirects, privilege escalation, pipe-to-shell. Escape hatch = user-approved <code>approved_commands:</code> in the task file</td>
 </tr>
 <tr>
+<td>Git-gate evasion / tamper</td>
+<td>command guard (hook) blocks <code>--no-verify</code> on commit/push/merge, <code>core.hooksPath</code> redirection, and writes into <code>.git/</code>; CI re-runs the same gates server-side regardless</td>
+</tr>
+<tr>
 <td>Hand-editing binaries / model weights</td>
 <td>blob guard (hook); vendor drops under <code>exclusions.third_party</code> exempt</td>
 </tr>
@@ -114,7 +118,7 @@ img{max-width:100%}
 </tr>
 <tr>
 <td>Forged or under-counted judge verdict</td>
-<td><code>judge.verdict</code> in front-matter must match the judge's own <code>judge-record</code> entries in append-only <code>.vemo/judge.jsonl</code>; a pasted <code>pass</code>, a later <code>fail</code>, or too few pass records blocks at commit/push/CI</td>
+<td><code>judge.verdict</code> in front-matter must match the judge's own <code>judge-record</code> entries in append-only <code>.vemo/judge.jsonl</code>; a pasted <code>pass</code>, a later <code>fail</code>, or too few pass records blocks at commit/push/CI. The log is <strong>tracked by git</strong> (<code>selfcheck</code> fails if it's gitignored): CI can read it, and history makes edits to it visible</td>
 </tr>
 <tr>
 <td>Self-classifying a risky change as trivial</td>

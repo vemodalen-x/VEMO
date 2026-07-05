@@ -57,6 +57,11 @@ CHECK_INDEX = (
     ("validator", "safety_invariant_of_capability=true"),
     ("validator", "rule-of-two: 3/3 trifecta BLOCKED"),
     ("validator", "rule-of-two: 2/3 allowed"),
+    ("validator", "context: brief <=20 lines with tier/task/gates/budget"),
+    ("validator", "judge-brief: dossier has CLAIMS/GATES/LENS (git-less sandbox degrades)"),
+    ("validator", "heartbeat: stamps the task file in place"),
+    ("validator", "multi-task acceptance: unaccepted sibling in range BLOCKED"),
+    ("validator", "tier: .gitignore is R2 (audit visibility)"),
     ("hook", "hook e2e: in-scope edit exit 0"),
     ("hook", "hook e2e: out-of-scope edit exit 2 + reason"),
     ("hook", "hook e2e: binary blob exit 2 (safety#6)"),
@@ -81,6 +86,8 @@ CHECK_INDEX = (
     ("budget", "hook e2e: budget exceeded + auto ON -> hard stop exit 2"),
     ("budget", "hook e2e: budget exceeded + human present -> advisory exit 0"),
     ("budget", "budget: files counts writes only (1, not 2)"),
+    ("budget", "stuck-loop: 3x same Bash + human -> advisory exit 0"),
+    ("budget", "stuck-loop: 3x same Bash + auto ON -> hard stop exit 2"),
     ("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)"),
 )
 
@@ -370,6 +377,36 @@ def run_validator_checks(r):
     r.chk("validator", "rule-of-two: 2/3 allowed", run(d, "trifecta-check"), lambda g: g.startswith("ok"))
     shutil.rmtree(d)
 
+    d = sandbox(task=task('["src/**"]'))
+    brief = run(d, "context")
+    r.chk("validator", "context: brief <=20 lines with tier/task/gates/budget", brief,
+          lambda g: len(g.splitlines()) <= 20 and "tier=" in g and "task T" in g
+          and "gate acceptance-before-push:" in g and "budget:" in g)
+    dossier = run(d, "judge-brief", "--lens", "safety")
+    r.chk("validator", "judge-brief: dossier has CLAIMS/GATES/LENS (git-less sandbox degrades)", dossier,
+          lambda g: "CLAIMS:" in g and "GATES" in g and "LENS safety" in g and "RULES:" in g)
+    hb = run(d, "heartbeat")
+    body = open(os.path.join(d, "tasks", "T.md"), encoding="utf-8").read()
+    r.chk("validator", "heartbeat: stamps the task file in place", hb,
+          lambda g: g.startswith("heartbeat:T=") and "heartbeat: 2026-06-16T20:00" not in body)
+    shutil.rmtree(d)
+
+    d = sandbox(task=task('["src/a/**"]', state="AcceptancePassed", risk="R1", status="passed",
+                          build_exit="0", evidence=".vemo/run/1.log", task_id="TA"))
+    os.makedirs(os.path.join(d, ".vemo", "run"))
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("ok\n")
+    open(os.path.join(d, "tasks", "T2.md"), "w", encoding="utf-8").write(task('["src/b/**"]', task_id="TB"))
+    r.chk("validator", "multi-task acceptance: unaccepted sibling in range BLOCKED",
+          run(d, "gate-check", "--gate", "acceptance-before-push",
+              "--task-file", "tasks/T.md", "--task-file", "tasks/T2.md"),
+          lambda g: g.startswith("block:") and "[task=TB]" in g)
+    shutil.rmtree(d)
+
+    d = sandbox()
+    r.chk("validator", "tier: .gitignore is R2 (audit visibility)",
+          run(d, "tier-required", "--paths", ".gitignore"), lambda g: g == "R2")
+    shutil.rmtree(d)
+
 
 def run_ci_checks(r):
     if not r.has_group("ci"):
@@ -507,6 +544,19 @@ def run_budget_checks(r):
     hook(d, "budget", {"tool_name": "Edit", "tool_input": {"file_path": d + "/src/w.py"}, "session_id": "s9"})
     st = run(d, "budget-status", "--session", "s9")
     r.chk("budget", "budget: files counts writes only (1, not 2)", st, lambda g: "files=1/" in g)
+    shutil.rmtree(d)
+
+    same_cmd = {"tool_name": "Bash", "tool_input": {"command": "pytest tests/test_x.py"}, "session_id": "s10"}
+    d = sandbox(task=task('["src/**"]'))
+    hook(d, "budget", same_cmd)
+    hook(d, "budget", same_cmd)
+    rc, err = hook(d, "budget", same_cmd)
+    r.chk("budget", "stuck-loop: 3x same Bash + human -> advisory exit 0", (rc, err),
+          lambda g: g[0] == 0 and "stuck-loop" in g[1] and "advisory" in g[1])
+    json.dump({"enabled": True, "max_auto_tier": "R1"}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w", encoding="utf-8"))
+    rc, err = hook(d, "budget", same_cmd)
+    r.chk("budget", "stuck-loop: 3x same Bash + auto ON -> hard stop exit 2", (rc, err),
+          lambda g: g[0] == 2 and "stuck-loop" in g[1] and "STOP RULE" in g[1])
     shutil.rmtree(d)
 
 

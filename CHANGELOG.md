@@ -3,6 +3,39 @@
 All notable changes to VEMO are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.2.0] — agent-loop economy ("overhead scales with risk, not activity")
+
+A 2026 peer-benchmark review (Anthropic long-horizon harnesses, OpenAI Codex guardrails/AGENTS.md,
+OWASP Agentic Top 10) plus a first-principles token-economy audit. The dominant cost was the judge
+re-exploring the repo to reconstruct state; the fix is to hand judgment context to the gate's own code
+and keep raw config out of the loop.
+
+### Added — token economy (context is for judgment, subprocesses are for facts)
+- **`vemo context`**: a ≤20-line machine-read session brief (tier · mode · task · gate status · budget ·
+  rules). The SessionStart hook prints it, and `AGENTS.md` step 1 now runs it — replacing "bulk-read
+  `vemo.config.yaml` + specs" at the start of every session.
+- **`vemo judge-brief [--lens <l>]`**: an evidence dossier for a judge pass — claims, machine-computed
+  gate results, receipt, per-file scope verdicts, and a lens-specific checklist — so judge tokens go to
+  what machines cannot check (claims-vs-evidence semantics, completeness, gaming) instead of re-exploring.
+- **`vemo heartbeat`**: stamps the active task's `heartbeat:` in place, so liveness costs no agent context.
+- **Execution Log one-line discipline** (`specs/task.spec.md`): the log is a flight recorder, not a diary.
+
+### Added — 2026 peer-practice guardrails
+- **Stuck-loop detection**: the same Bash command 3× in a row = no progress (Codex "duplicate-call"
+  practice). Advisory when a human is present; a hard stop under unattended auto mode.
+- **`.gitignore` / `.gitattributes` are now R2** (audit-visibility files: one ignore line can hide judge
+  provenance or receipts from git + CI).
+
+### Fixed
+- **Multi-task push gate**: `acceptance-before-push` and `required-judge` now evaluate **every** task file
+  in the pushed range (the pre-push hook reads git's stdin refs; CI shares one `VEMO_DIFF_RANGE`), closing
+  a gap where a multi-task push was gated on only the first task.
+- **`vemo selfcheck` propagates its real exit code** (was always exit 0 through the CLI wrapper).
+
+### Governance / release hygiene
+- Desensitized internal references from the tracked task records; added editor/IDE state to `.gitignore`.
+- Conformance eval grown to **68 checks** (from 60), all green.
+
 ## [1.1.0] — trust-chain rework ("the labels are now checked")
 
 Driven by a first-principles audit (`doc/vemo-first-principles-critique.md` in the parent workspace):

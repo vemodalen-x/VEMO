@@ -80,23 +80,40 @@ img{max-width:100%}
 <main><div class="content"><h1 id="changelog">Changelog</h1>
 <p>All notable changes to VEMO are documented here.
 Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: <a href="https://semver.org/">SemVer</a>.</p>
-<h2 id="unreleased">[Unreleased]</h2>
+<h2 id="120-agent-loop-economy-overhead-scales-with-risk-not-activity">[1.2.0] — agent-loop economy ("overhead scales with risk, not activity")</h2>
+<p>A 2026 peer-benchmark review (Anthropic long-horizon harnesses, OpenAI Codex guardrails/AGENTS.md,
+OWASP Agentic Top 10) plus a first-principles token-economy audit. The dominant cost was the judge
+re-exploring the repo to reconstruct state; the fix is to hand judgment context to the gate's own code
+and keep raw config out of the loop.</p>
+<h3 id="added-token-economy-context-is-for-judgment-subprocesses-are-for-facts">Added — token economy (context is for judgment, subprocesses are for facts)</h3>
+<ul>
+<li><strong><code>vemo context</code></strong>: a ≤20-line machine-read session brief (tier · mode · task · gate status · budget ·
+  rules). The SessionStart hook prints it, and <code>AGENTS.md</code> step 1 now runs it — replacing "bulk-read
+  <code>vemo.config.yaml</code> + specs" at the start of every session.</li>
+<li><strong><code>vemo judge-brief [--lens &lt;l&gt;]</code></strong>: an evidence dossier for a judge pass — claims, machine-computed
+  gate results, receipt, per-file scope verdicts, and a lens-specific checklist — so judge tokens go to
+  what machines cannot check (claims-vs-evidence semantics, completeness, gaming) instead of re-exploring.</li>
+<li><strong><code>vemo heartbeat</code></strong>: stamps the active task's <code>heartbeat:</code> in place, so liveness costs no agent context.</li>
+<li><strong>Execution Log one-line discipline</strong> (<code>specs/task.spec.md</code>): the log is a flight recorder, not a diary.</li>
+</ul>
+<h3 id="added-2026-peer-practice-guardrails">Added — 2026 peer-practice guardrails</h3>
+<ul>
+<li><strong>Stuck-loop detection</strong>: the same Bash command 3× in a row = no progress (Codex "duplicate-call"
+  practice). Advisory when a human is present; a hard stop under unattended auto mode.</li>
+<li><strong><code>.gitignore</code> / <code>.gitattributes</code> are now R2</strong> (audit-visibility files: one ignore line can hide judge
+  provenance or receipts from git + CI).</li>
+</ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
-<li>The required judge gate now enforces the verifier depth reported by <code>verify-plan</code>: high-tier R2 needs two
-  contiguous judge pass records, frontier-tier R2 needs three, and a later fail resets the pass suffix.</li>
-<li>Low/medium capability R1 work now has a real judge requirement at the push gate, while high/frontier R1
-  keeps the self-verify fast path.</li>
-<li>The pre-commit secret diff scan no longer uses <code>git diff | grep -q</code> under <code>pipefail</code>, which could turn a
-  real secret match into a SIGPIPE-based miss. Eval now covers the staged-diff secret path.</li>
-<li>CI now runs <code>task_state.py verify-run</code> before the push gate, so configured build/smoke checks create the
-  machine receipt that <code>acceptance-before-push</code> requires.</li>
+<li><strong>Multi-task push gate</strong>: <code>acceptance-before-push</code> and <code>required-judge</code> now evaluate <strong>every</strong> task file
+  in the pushed range (the pre-push hook reads git's stdin refs; CI shares one <code>VEMO_DIFF_RANGE</code>), closing
+  a gap where a multi-task push was gated on only the first task.</li>
+<li><strong><code>vemo selfcheck</code> propagates its real exit code</strong> (was always exit 0 through the CLI wrapper).</li>
 </ul>
-<h3 id="changed">Changed</h3>
+<h3 id="governance-release-hygiene">Governance / release hygiene</h3>
 <ul>
-<li>Clarified that <code>capability.tier</code> is vendor-neutral. Model names in <code>model_routing</code> and agent front-matter
-  are advisory routing hints, not governance trust anchors.</li>
-<li>Updated config and CLI wording from <code>R2 judge</code> to the generalized required-judge semantics.</li>
+<li>Desensitized internal references from the tracked task records; added editor/IDE state to <code>.gitignore</code>.</li>
+<li>Conformance eval grown to <strong>68 checks</strong> (from 60), all green.</li>
 </ul>
 <h2 id="110-trust-chain-rework-the-labels-are-now-checked">[1.1.0] — trust-chain rework ("the labels are now checked")</h2>
 <p>Driven by a first-principles audit (<code>doc/vemo-first-principles-critique.md</code> in the parent workspace):
@@ -155,9 +172,33 @@ governed agent did not simply type.</p>
   counters; checkpoint/re-anchor advisory notes.</li>
 <li><strong>Destructive-command escape hatch</strong> made real: task-file <code>approved_commands:</code> +
   <code>auto_mode.preauthorized_commands</code> (both logged).</li>
-<li><strong>Eval doubled</strong>: 45 checks incl. hook end-to-end (payload → dispatcher → exit code), receipt flow,
-  judge provenance, session binding, monitor mode, budget hard-stop, and agent-cannot-enable-auto.</li>
+<li><strong>Eval more than doubled</strong>: 60 checks incl. hook end-to-end (payload → dispatcher → exit code), receipt
+  flow, judge provenance, session binding, monitor mode, budget hard-stop, and agent-cannot-enable-auto.</li>
 </ul>
+<h3 id="hardened-during-release-review-independent-judge-rounds-multi-model-portability-review">Hardened during release review (independent judge rounds + multi-model portability review)</h3>
+<p>The pre-release R2 task was reviewed by independent governance-judge passes; every FAIL round below left a
+record in the (now tracked) <code>.vemo/judge.jsonl</code>. Fixed as a result:
+- <strong>Judge depth is capability-scaled and mechanical</strong>: <code>required-judge</code> enforces
+  <code>verification.independent_verifiers[capability.tier]</code> contiguous pass records for R2 (high=2, frontier=3;
+  a later fail resets the suffix), and one pass for low/medium-tier R1; high/frontier R1 keeps the
+  self-verify fast path.
+- <strong>Judge provenance is CI-visible</strong>: <code>.vemo/judge.jsonl</code> is tracked by git (<code>.gitignore</code> un-ignores it;
+  <code>.gitattributes</code> union-merges it; <code>selfcheck</code> fails if it is ignored). Server-side CI can now actually
+  verify the required-judge gate — an ignored audit log was invisible to the authority layer.
+- <strong>Git-gate evasion blocked client-side</strong>: the command guard now blocks <code>--no-verify</code> on
+  commit/push/merge, <code>core.hooksPath</code> redirection, and writes into <code>.git/</code> (CI re-runs the same gates
+  regardless).
+- <strong>Pre-commit secret scan SIGPIPE fix</strong>: no more <code>git diff | grep -q</code> under <code>pipefail</code> (a real match
+  could exit 141 and pass); scans a temp diff file, with an eval e2e check.
+- <strong>CI step order</strong>: <code>verify-run</code> executes build/smoke and writes the receipt <em>before</em> the push gate
+  reads it.
+- <strong>VEMO dogfoods its own receipt rule</strong>: <code>paths.build</code> = the conformance eval, <code>paths.smoke</code> = selfcheck,
+  so VEMO's own pushes require a machine receipt.
+- <strong>Multi-model / multi-harness portability made explicit</strong>: <code>docs/ADAPTERS.md</code> documents the three-ring
+  model and the ring-1 adapter contract (stdin JSON → dispatcher, exit 2 = block; minimal foreign payloads
+  are eval-tested); <code>capability.spec §1.5</code> adds a vendor-neutral behavioral rubric for classifying any
+  model into a tier; cross-family judge preference documented; <code>AGENTS.md</code> tells hookless agents what
+  still binds them (git+CI rings).</p>
 <h2 id="100">[1.0.0]</h2>
 <p>First public release.</p>
 <h3 id="governance-model">Governance model</h3>

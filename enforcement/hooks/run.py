@@ -247,12 +247,19 @@ def guard_command(d):
 
 
 def guard_budget(d):
-    """PreToolUse(*): run-budget stop rules. Hard stop only when unattended (auto ON); advisory otherwise."""
+    """PreToolUse(*): run-budget stop rules (count ceilings + stuck-loop detection).
+    Hard stop only when unattended (auto ON); advisory otherwise."""
     t = target_of(d)
     tool = d.get("tool_name", "")
     sid = d.get("session_id")
+    sig = None
+    if tool == "Bash":                          # stuck-loop signal: identical Bash commands repeated
+        cmd = (d.get("tool_input", {}) or {}).get("command", "") or ""
+        if cmd:
+            import hashlib
+            sig = hashlib.sha1(cmd.encode("utf-8", "replace")).hexdigest()[:12]
     try:
-        v = ts.budget_tick(t or None, tool in WRITE_TOOLS, sid)
+        v = ts.budget_tick(t or None, tool in WRITE_TOOLS, sid, sig)
     except Exception:
         return 0                                # without a counter we cannot count; other guards still apply
     if v.startswith("stop:"):
@@ -263,12 +270,12 @@ def guard_budget(d):
             pass
         if auto_on and not monitor():
             log("budget_stop", verdict=v, session=sid)
-            print(f"[VEMO] STOP RULE (unattended auto mode): run budget exceeded — {v}. Autonomous run halted.\n"
+            print(f"[VEMO] STOP RULE (unattended auto mode): {v}. Autonomous run halted.\n"
                   f"       A human checkpoint is required. Reset: python3 enforcement/validators/task_state.py "
                   f"budget-reset" + (f" --session {sid}" if sid else ""), file=sys.stderr)
             return 2
         log("budget_advisory", verdict=v, session=sid)
-        print(f"[VEMO] run budget exceeded — {v} (advisory: a human is present, not blocking).", file=sys.stderr)
+        print(f"[VEMO] {v} (advisory: a human is present, not blocking).", file=sys.stderr)
         return 0
     if v.startswith("note:"):
         print(f"[VEMO] {v[5:]}", file=sys.stderr)
@@ -297,17 +304,19 @@ def guard_subagent_stop(d):
 
 def guard_session_start(d):
     """SessionStart: telemetry heartbeat (proof the hooks are alive — `vemo doctor` checks for it)
-    + a one-line orientation for the agent (stdout is added to context)."""
+    + the machine-read context brief (stdout is added to context). The brief replaces bulk-reading
+    vemo.config.yaml/specs at session start — token economy: judgment context, not raw config."""
     sid = d.get("session_id")
     log("session_start", session=sid)
     try:
-        act = ts._active_task(sid)
-        line = ("VEMO: active task %s state=%s risk=%s" %
-                (act[1].get("id"), act[1].get("state"), act[1].get("risk"))) if act else "VEMO: no active task"
-        print(line + " | mode=%s auto=%s | run `vemo status` for detail" %
-              (cfg("enforcement.mode", "enforce"), "on" if ts._auto_state().get("enabled") else "off"))
+        print(ts.context_brief(sid))
     except Exception:
-        pass
+        try:
+            act = ts._active_task(sid)
+            print(("VEMO: active task %s state=%s risk=%s" %
+                   (act[1].get("id"), act[1].get("state"), act[1].get("risk"))) if act else "VEMO: no active task")
+        except Exception:
+            pass
     return 0
 
 

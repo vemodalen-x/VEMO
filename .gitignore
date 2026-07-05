@@ -9,3 +9,8 @@ __pycache__/
 
 # internal iteration artifacts — not for external deployment
 .internal/
+
+# editor / IDE state — never part of the governed surface
+.idea/
+.vscode/
+*.swp

@@ -27,7 +27,7 @@ heartbeat: 2026-07-03T15:26
 
 ## Scope (In / Out)
 - In: enforcement、specs、config、CLI、eval、judge agent、automation skill、CI workflow、docs。
-- Out: presets 内容、VEMO_SKILLS 仓库、消费方项目（skyline 等，另行 governance-sync）。
+- Out: presets 内容、VEMO_SKILLS 仓库、下游消费方项目（另行 governance-sync）。
 
 ## Pass/Fail Criteria (EARS, measurable)
 - [Build] `python3 eval/run.py` SHALL exit 0（全部用例 PASS，含新增 e2e 用例）。
@@ -185,4 +185,4 @@ Key Evidence: eval/out/report.json（60/60）+ selfcheck OK + doctor OK + `vemo 
 log=.vemo/run/T-20260702-trust-chain-fixes-20260703-144043.log）+ verify-plan R2 verifiers=2 ·
 Risk: medium until two fresh independent judge pass records are appended for the revised behavior ·
 Next Action: 两轮独立 judge 通过并记录溯源后，由 vemodalen-x 账号 commit/push（用户已明确授权）；
-消费方项目（skyline-seg-exp 等）经 governance-sync 拉取。
+下游消费方项目经 governance-sync 拉取。

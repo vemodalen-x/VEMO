@@ -17,12 +17,35 @@ ROOT="$(cd "$SELF/../.." && pwd)"
 [ -f "$ROOT/enforcement/validators/task_state.py" ] || ROOT="$(git rev-parse --show-toplevel)"
 export VEMO_ROOT="$ROOT"
 V="python3 $ROOT/enforcement/validators/task_state.py"
-cat >/dev/null || true    # consume the ref lines git feeds pre-push; we gate on task state
+
+# Collect EVERY task file changed in the pushed range (not just the active task) so a multi-task
+# push cannot smuggle an unaccepted task past the gate on the strength of one accepted sibling.
+# git feeds "<local_ref> <local_sha> <remote_ref> <remote_sha>" lines on stdin; CI (no stdin) sets
+# VEMO_DIFF_RANGE instead. No range info -> gate the active task only (same as before).
+TASK_ARGS=()
+add_range_tasks(){ # $1 = a rev range or single rev for `git diff --name-only`
+  while IFS= read -r f; do
+    case "$f" in
+      tasks/_*|tasks/Archive/*) : ;;
+      tasks/*.md) [ -f "$ROOT/$f" ] && TASK_ARGS+=(--task-file "$f") ;;
+    esac
+  done < <(git -C "$ROOT" diff --name-only $1 2>/dev/null || true)
+}
+ZERO=0000000000000000000000000000000000000000
+while read -r _lref lsha _rref rsha; do
+  [ -z "${lsha:-}" ] || [ "$lsha" = "$ZERO" ] && continue   # branch deletion: nothing to gate
+  if [ -n "${rsha:-}" ] && [ "$rsha" != "$ZERO" ]; then
+    add_range_tasks "$rsha..$lsha"
+  else
+    add_range_tasks "$lsha~1..$lsha"                        # new branch: gate at least the tip commit
+  fi
+done || true
+[ ${#TASK_ARGS[@]} -eq 0 ] && [ -n "${VEMO_DIFF_RANGE:-}" ] && add_range_tasks "$VEMO_DIFF_RANGE"
 
 fail=0
 say(){ echo "  ✗ $1" >&2; fail=1; }
 
-acc="$($V gate-check --gate acceptance-before-push 2>&1 || true)"
+acc="$($V gate-check --gate acceptance-before-push ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
 case "$acc" in
   ok) : ;;
   block:no-active-task) : ;;   # nothing claims this push; plan-before-commit already gated code commits
@@ -31,7 +54,7 @@ case "$acc" in
 esac
 
 if [ "$($V config-get --field enforcement.require_judge_on_R2 2>/dev/null)" != "false" ]; then
-  j="$($V gate-check --gate required-judge 2>&1 || true)"
+  j="$($V gate-check --gate required-judge ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
   case "$j" in
     ok|block:no-active-task) : ;;
     block:*) say "required judge: ${j#block:} (verify.spec#3)" ;;

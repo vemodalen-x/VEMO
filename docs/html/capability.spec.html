@@ -103,7 +103,7 @@ Grounded in the Fable 5 / Mythos 5 system-card analysis (see <code>docs/SCALING.
 <tr>
 <td><strong>verification</strong></td>
 <td>—</td>
-<td>executed ground-truth · independent verifiers (panel) · narration monitoring</td>
+<td>executed ground-truth · independent verifier passes · narration monitoring</td>
 </tr>
 <tr>
 <td><strong>boundaries</strong></td>
@@ -123,6 +123,38 @@ Grounded in the Fable 5 / Mythos 5 system-card analysis (see <code>docs/SCALING.
 <code>frontier|high|medium|low</code> based on observed task reliability, context length, tool-use reliability, and
 verification-following behavior. Model names in <code>model_routing</code> are advisory routing hints; they are not the
 governance contract.</p>
+<h3 id="15-classifying-any-model-into-a-tier-the-behavioral-rubric">1.5 Classifying any model into a tier (the behavioral rubric)</h3>
+<p>Classify by what you <strong>observe on your own tasks</strong>, not by benchmark or brand. When in doubt, pick the
+LOWER tier — over-trusting costs more than over-verifying, and the tier only ever relaxes <em>prescription</em>.</p>
+<table>
+<thead>
+<tr>
+<th>tier</th>
+<th>observable behavior (any vendor)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>frontier</strong></td>
+<td>sustains multi-hour/multi-day autonomous plans; writes and runs its own tests unprompted; failure mode is <em>process-gaming</em> (unverified "done", reframing), not fabrication</td>
+</tr>
+<tr>
+<td><strong>high</strong></td>
+<td>reliable single-session self-planning and self-verification on standard (R1) work; occasional unverified completion claims</td>
+</tr>
+<tr>
+<td><strong>medium</strong></td>
+<td>needs explicit handshakes; regularly claims verification it did not run</td>
+</tr>
+<tr>
+<td><strong>low</strong></td>
+<td>needs step-by-step prescription; fabricates paths/APIs under pressure; small autonomous steps only</td>
+</tr>
+</tbody>
+</table>
+<p>A repo worked by <strong>several models</strong> pins <code>tier</code> to the <strong>weakest</strong> model allowed to act in it unattended
+(the config is per-repo, and safety must hold for the worst case). Re-classify when you swap models —
+the tier is the one knob the rest of the framework scales from.</p>
 <h2 id="2-frontier-failure-modes-mechanism-not-a-reminder">2. Frontier failure modes → mechanism (not a reminder)</h2>
 <p>Stronger models fabricate <strong>less</strong> but fail in <strong>new</strong> ways. Each gets a mechanism:</p>
 <table>
@@ -164,6 +196,10 @@ Capability tier relaxes only <em>prescription</em> — never <em>safety</em>. (<
 tiers VEMO escalates the required <strong>sequential independent verifier pass count</strong> anchored in <strong>executed ground
 truth</strong> (tests/build/diff invariants, not opinion), with the human retained for <strong>intent + irreversible only</strong>.
 True concurrent verifier panels remain ROADMAP.</p>
+<p>Independence has two axes, and multi-model setups can buy both: a <strong>fresh context</strong> removes shared session
+state (required — the judge runs in its own context and records via <code>judge-record</code>); a <strong>different model
+family</strong> than the worker removes shared weights-level blind spots (advised whenever the harness offers one —
+see <code>model_routing</code>). Same-family passes still count toward the gate; cross-family passes are worth more.</p>
 <h2 id="5-delegate-what-the-model-now-does-natively">5. Delegate what the model now does natively</h2>
 <p>Fable 5 plans across stages, writes its own tests, delegates to sub-agents, keeps memory. VEMO delegates those
 and <strong>verifies the outputs</strong> — it does not re-spell-out planning/testing. The framework's enduring value is the

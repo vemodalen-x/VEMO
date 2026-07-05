@@ -87,23 +87,26 @@ img{max-width:100%}
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.1.0-0d9488?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.2.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
 [Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
-<img src="../../assets/demo.svg" alt="vemo eval → 54/54 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
+<img src="../../assets/demo.svg" alt="vemo eval → 68/68 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
 
 </div>
 
 <hr>
 <blockquote>
-<p><strong>What it is, plainly:</strong> a small set of Markdown specs + thin scripts you drop into any repository. It works
-with any agent harness that can read Markdown and run hooks (Claude Code, etc.). <strong>Core dependencies: none</strong>
-— Markdown + YAML + a little stdlib Python. Model names are advisory routing hints; the portable control is
-<code>capability.tier</code>, which maps any LLM family to the same verification and safety gates. The governance
-skills/CLI use the <a href="https://cli.github.com/">GitHub CLI</a>.</p>
+<p><strong>What it is, plainly:</strong> a small set of Markdown specs + thin scripts you drop into any repository. It
+enforces in three rings — agent-loop hooks, git gates, server-side CI — and only the first ring is
+harness-specific (Claude Code wiring ships; any harness with a hook API can reuse the same dispatcher —
+see <a href="ADAPTERS.html">docs/ADAPTERS.md</a>). The git+CI rings bind <strong>any agent, any model, any harness</strong>.
+<strong>Core dependencies: none</strong> — Markdown + YAML + a little stdlib Python. Model names are advisory routing
+hints; the portable control is <code>capability.tier</code>, a behavioral, vendor-neutral rubric
+(<code>specs/capability.spec.md</code> §1.5) that maps any LLM family to the same verification and safety gates.
+The governance skills/CLI use the <a href="https://cli.github.com/">GitHub CLI</a>.</p>
 </blockquote>
 <h2 id="the-name">✨ The name</h2>
 <p>VEMO is named after <strong>vemödalen</strong> — a word coined by John Koenig in <em>The Dictionary of Obscure Sorrows</em>:</p>
@@ -249,6 +252,10 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <td>plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task</td>
 </tr>
 <tr>
+<td><code>vemo context</code></td>
+<td>machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config</td>
+</tr>
+<tr>
 <td><code>vemo verify</code></td>
 <td><strong>execute</strong> <code>paths.build/smoke</code> → evidence log + machine receipt (what the push gate trusts)</td>
 </tr>
@@ -263,6 +270,14 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <tr>
 <td><code>vemo eval</code></td>
 <td>executable conformance harness, validator + hook end-to-end (writes <code>eval/out/report.json</code>)</td>
+</tr>
+<tr>
+<td><code>vemo judge-brief [--lens &lt;l&gt;]</code></td>
+<td>evidence dossier for a judge pass (claims · gates · receipt · changes + lens checklist)</td>
+</tr>
+<tr>
+<td><code>vemo heartbeat</code></td>
+<td>stamp the active task's heartbeat in place (no hand-editing the task file)</td>
 </tr>
 <tr>
 <td><code>vemo explain &lt;topic&gt;</code></td>

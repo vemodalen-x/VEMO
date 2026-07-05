@@ -102,10 +102,13 @@ def cmd_init(args):
 HELP = """vemo <command>
   init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   set up VEMO (--minimal = no-install monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
+  context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
   verify                          EXECUTE paths.build/smoke -> evidence log + machine receipt (the push gate reads this)
   doctor                          health check (config + hooks + tools + gates-heartbeat)
   selfcheck                       internal consistency (ENFORCED-BY claims + config keys must have consumers)
   eval                            executable conformance harness (validator + hook end-to-end)
+  judge-brief [--lens <l>]        evidence dossier for a judge pass (claims / gates / receipt / changes + lens checklist)
+  heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
   explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
@@ -122,8 +125,11 @@ def main():
     if c == "doctor": return cmd_doctor()
     if c == "verify":  # stream output live — this actually runs the build/smoke
         return subprocess.run(TS + ["verify-run"]).returncode
-    if c == "selfcheck": print(_ts("selfcheck")); return 0
-    if c == "eval": import subprocess as _s; return _s.run(["python3", os.path.join(ROOT, "eval", "run.py")]).returncode
+    if c == "selfcheck":  # propagate the real exit code — a red selfcheck must fail the caller
+        return subprocess.run(TS + ["selfcheck"]).returncode
+    if c == "eval": return subprocess.run(["python3", os.path.join(ROOT, "eval", "run.py")] + a[1:]).returncode
+    if c in ("context", "judge-brief", "heartbeat"):
+        return subprocess.run(TS + a).returncode
     if c == "init": return cmd_init(a[1:])
     if c == "explain":
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))

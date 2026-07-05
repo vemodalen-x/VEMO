@@ -8,13 +8,13 @@
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.1.0-0d9488?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.2.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
 [Why](#-why-vemo) · [Quickstart](#-quickstart) · [Architecture](#-architecture) · [CLI](#-the-vemo-cli) · [Docs](#-documentation) · [The name](#-the-name) · [Credits](#-credits)
 
-<img src="assets/demo.svg" alt="vemo eval → 60/60 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
+<img src="assets/demo.svg" alt="vemo eval → 68/68 conformance (validator + hook end-to-end); an out-of-scope edit blocked (exit 2)" width="760" />
 
 </div>
 
@@ -126,10 +126,13 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 |---|---|
 | `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + git gates + tasks/) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
+| `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
 | `vemo verify` | **execute** `paths.build/smoke` → evidence log + machine receipt (what the push gate trusts) |
 | `vemo doctor` | health check (config, hooks, tools, stale tasks, gates-heartbeat) |
 | `vemo selfcheck` | internal consistency: ENFORCED-BY claims and config keys must map to real consumers |
 | `vemo eval` | executable conformance harness, validator + hook end-to-end (writes `eval/out/report.json`) |
+| `vemo judge-brief [--lens <l>]` | evidence dossier for a judge pass (claims · gates · receipt · changes + lens checklist) |
+| `vemo heartbeat` | stamp the active task's heartbeat in place (no hand-editing the task file) |
 | `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify` |
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |

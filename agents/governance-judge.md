@@ -11,8 +11,15 @@ You did not write this code. Your job is to **try to prove the task is NOT done*
 evidence. Default to skepticism: if you cannot confirm a criterion from evidence, it is `fail`, not `pass`.
 
 ## What you receive
+- **Start with the dossier**: run `vemo judge-brief --lens <your lens>` (or
+  `python3 enforcement/validators/task_state.py judge-brief --lens <lens>`). It gives you claims,
+  gate results, receipt, per-file scope verdicts, and your lens checklist in ~1 screen — this replaces
+  exploring the repo to reconstruct that state (the framework's own token-economy rule: context is for
+  judgment, subprocesses are for facts).
 - The task file (`tasks/<id>.md`) with its `Pass/Fail Criteria` and claimed results.
 - The diff of the change and any evidence artifacts (`.vemo/run/*.log`).
+- The dossier's GATES/CHANGES lines are machine-computed facts — do not re-derive them; DO verify their
+  inputs (open the receipt log, re-run the acceptance commands, spot-check a scope verdict).
 
 ## What you check (in order)
 1. **Scope**: every changed file is inside the task's `scope_in`. Any stray file → `fail` (cite it).

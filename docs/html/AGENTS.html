@@ -85,7 +85,10 @@ loaded just-in-time. Enforcement lives in <code>enforcement/</code>, not in pros
 </blockquote>
 <h2 id="on-session-start-minimal">On session start (minimal)</h2>
 <ol>
-<li>Load <code>vemo.config.yaml</code> → read <code>capability.tier</code>, <code>model_routing</code>, <code>risk_tiers</code>, <code>enforcement</code>.</li>
+<li>Run <code>vemo context</code> (≤20 lines: tier/mode/task/gate status/budget/rules). <strong>Do NOT bulk-read
+   <code>vemo.config.yaml</code></strong> — the brief is the machine-read digest; ask point questions via
+   <code>vemo tier &lt;paths&gt;</code> / <code>vemo check &lt;path&gt;</code> / <code>vemo explain &lt;topic&gt;</code>. (The SessionStart hook prints
+   the same brief when ring-1 hooks are installed — then this step is already done.)</li>
 <li>Load <code>specs/safety.spec.md</code> (the only always-on spec — the non-negotiables).</li>
 <li>Run the continuity check in <code>specs/concurrency.spec.md</code> (other live tasks? stale? takeover?).</li>
 <li><strong>Do NOT pre-read the rest.</strong> Load specs on demand per <code>specs/_manifest.yaml</code> once the task type is known.</li>
@@ -93,7 +96,7 @@ loaded just-in-time. Enforcement lives in <code>enforcement/</code>, not in pros
 <h2 id="per-request">Per request</h2>
 <ol>
 <li>Classify: <code>non-task</code> / <code>continue-task &lt;id&gt;</code> / <code>new-task</code> (one line, then proceed).</li>
-<li>Assign a <strong>risk tier</strong> (R0/R1/R2) from <code>vemo.config.yaml → risk_tiers</code>. Default to the <em>lowest</em> tier the change qualifies for — velocity first.</li>
+<li>Assign a <strong>risk tier</strong> (R0/R1/R2) via <code>vemo tier &lt;paths...&gt;</code>. Default to the <em>lowest</em> tier the change qualifies for — velocity first.</li>
 <li>Load the specs <code>_manifest.yaml</code> maps to that task type + risk tier. Follow the lifecycle in <code>specs/task.spec.md</code>.</li>
 </ol>
 <h2 id="the-deal-whats-enforced-vs-advised">The deal (what's enforced vs advised)</h2>
@@ -113,6 +116,12 @@ loaded just-in-time. Enforcement lives in <code>enforcement/</code>, not in pros
 <li>Full-auto / unattended mode removes the human-<strong>approval</strong> pauses (auto-decide + <strong>record</strong>), but NEVER relaxes the mechanical guards, risk-tier integrity, <code>acceptance-before-push</code>, or the judge. It is OFF unless a <strong>human at an interactive terminal</strong> runs <code>vemo auto on</code> (the command refuses without a TTY + typed confirmation — you cannot enable it, and must not try; <code>skill/automation-mode</code> covers status/off only).</li>
 <li>At session start, check <code>task_state.py auto-status</code>. If ON and the request's tier ≤ its ceiling, do not stop at approval gates — record each decision to <code>.vemo/auto_decisions.jsonl</code> + the task file's <code>## Auto-Mode Decisions</code>, and proceed. Tiers above the ceiling fall back to human-in-the-loop. See <code>specs/automation.spec.md</code>.</li>
 </ul>
+<h2 id="no-vemo-hooks-in-your-harness">No VEMO hooks in your harness?</h2>
+<p>If you are not running under a harness with VEMO's ring-1 hooks installed (<code>docs/ADAPTERS.md</code>), the git and
+CI gates still bind you — you just lose early warning. Behave as if the hooks fired: run
+<code>python3 enforcement/validators/task_state.py scope-check --path &lt;file&gt;</code> before editing outside obvious
+scope, never use <code>--no-verify</code>/<code>core.hooksPath</code>/writes into <code>.git/</code>, and set <code>VEMO_SESSION</code> when recording
+judge verdicts.</p>
 <h2 id="conflict-order">Conflict order</h2>
 <p><code>enforcement (hooks/CI) &gt; safety.spec &gt; task.spec &gt; verify.spec &gt; domain specs &gt; task file</code>.
 Mechanism always wins over prose. Prose always wins over vibes. Auto mode changes <em>who approves</em> (records instead of asking) — it never changes <em>what the mechanism enforces</em>.</p>

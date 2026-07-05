@@ -194,6 +194,9 @@ to long-horizon/R2/migration only — never R0/R1 (2× cost; "renting a truck to
 <h2 id="5-conclusion-block-every-task">5. Conclusion block (every task)</h2>
 <p><code>Outcome (accepted/partial/rejected) · Decision (continue/stop/rollback) · Key Evidence · Risk · Next Action</code>.
 Failed directions must end <code>stop</code>/<code>rollback</code> with an explicit next-direction note.</p>
+<p><strong>Execution Log discipline (token economy):</strong> one line per event — <code>timestamp what-changed evidence-ref</code>.
+The log is a flight recorder, not a diary: narration/rationale lives in the Conclusion, evidence lives in
+<code>.vemo/run/</code>. Stamp <code>heartbeat:</code> with <code>vemo heartbeat</code> (in-place, machine-written) instead of hand-editing.</p>
 <h2 id="6-anti-bloat-rule-self-governance">6. Anti-bloat rule (self-governance)</h2>
 <p>This spec must stay &lt; 120 lines. New rules are classified <code>baseline</code> (reusable → here) or <code>task-specific</code>
 (→ the task file). Default task-specific. If this file grows past the cap, split a domain overlay instead.</p>

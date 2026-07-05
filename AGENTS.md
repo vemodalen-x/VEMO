@@ -5,14 +5,17 @@
 > (Contrast: a 20-step mandatory read order front-loads context into the "lost-in-the-middle" zone.)
 
 ## On session start (minimal)
-1. Load `vemo.config.yaml` → read `capability.tier`, `model_routing`, `risk_tiers`, `enforcement`.
+1. Run `vemo context` (≤20 lines: tier/mode/task/gate status/budget/rules). **Do NOT bulk-read
+   `vemo.config.yaml`** — the brief is the machine-read digest; ask point questions via
+   `vemo tier <paths>` / `vemo check <path>` / `vemo explain <topic>`. (The SessionStart hook prints
+   the same brief when ring-1 hooks are installed — then this step is already done.)
 2. Load `specs/safety.spec.md` (the only always-on spec — the non-negotiables).
 3. Run the continuity check in `specs/concurrency.spec.md` (other live tasks? stale? takeover?).
 4. **Do NOT pre-read the rest.** Load specs on demand per `specs/_manifest.yaml` once the task type is known.
 
 ## Per request
 1. Classify: `non-task` / `continue-task <id>` / `new-task` (one line, then proceed).
-2. Assign a **risk tier** (R0/R1/R2) from `vemo.config.yaml → risk_tiers`. Default to the *lowest* tier the change qualifies for — velocity first.
+2. Assign a **risk tier** (R0/R1/R2) via `vemo tier <paths...>`. Default to the *lowest* tier the change qualifies for — velocity first.
 3. Load the specs `_manifest.yaml` maps to that task type + risk tier. Follow the lifecycle in `specs/task.spec.md`.
 
 ## The deal (what's enforced vs advised)

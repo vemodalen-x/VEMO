@@ -75,6 +75,10 @@ A gate is **blocked** by mechanism, not by hoping the model complies (see safety
 `Outcome (accepted/partial/rejected) · Decision (continue/stop/rollback) · Key Evidence · Risk · Next Action`.
 Failed directions must end `stop`/`rollback` with an explicit next-direction note.
 
+**Execution Log discipline (token economy):** one line per event — `timestamp what-changed evidence-ref`.
+The log is a flight recorder, not a diary: narration/rationale lives in the Conclusion, evidence lives in
+`.vemo/run/`. Stamp `heartbeat:` with `vemo heartbeat` (in-place, machine-written) instead of hand-editing.
+
 ## 6. Anti-bloat rule (self-governance)
 This spec must stay < 120 lines. New rules are classified `baseline` (reusable → here) or `task-specific`
 (→ the task file). Default task-specific. If this file grows past the cap, split a domain overlay instead.

@@ -86,7 +86,10 @@ exist (label accuracy is itself a safety property). This is the only spec loaded
 <h2 id="enforcement-legend">Enforcement legend</h2>
 <ul>
 <li><code>ENFORCED-BY: hook</code> — blocked client-side in the agent loop (<code>enforcement/hooks/run.py</code>; fast feedback,
-  bypassable by a hostile host — the guarantee is below).</li>
+  bypassable by a hostile host — the guarantee is below). This ring is a <strong>harness adapter</strong>: the Claude Code
+  wiring ships (<code>install.sh</code>); any other harness can pipe the same JSON payload into the same dispatcher
+  (<code>docs/ADAPTERS.md</code>). A harness with no adapter simply has no fast-feedback ring — the git and CI rings
+  below bind <strong>any</strong> agent, any model, any harness.</li>
 <li><code>ENFORCED-BY: git</code> — local <code>pre-commit</code> / <code>pre-push</code> (survives a hookless agent; <code>--no-verify</code> defers to CI).</li>
 <li><code>ENFORCED-BY: ci</code> — server-side (<code>enforcement/ci/vemo-ci.yml</code> + branch protection). <strong>This is the
   authoritative layer</strong>; everything client-side is fast feedback for it.</li>
@@ -115,7 +118,8 @@ exist (label accuracy is itself a safety property). This is the only spec loaded
 <p><strong>No destructive / out-of-repo commands</strong> without explicit approval recorded in the task file
    (<code>approved_commands:</code> list): broad <code>rm -rf</code>, <code>git reset --hard</code>, <code>git checkout -- &lt;file&gt;</code>,
    <code>git clean -f</code>, plain <code>git push --force</code>, <code>find -delete</code>, <code>xargs rm</code>, writes outside <code>repo_root</code>,
-   privilege escalation, pipe-to-shell installs.
+   privilege escalation, pipe-to-shell installs — and <strong>git-gate evasion/tamper</strong>: <code>--no-verify</code> on
+   commit/push/merge, <code>core.hooksPath</code> redirection, writes into <code>.git/</code>.
    <code>ENFORCED-BY: hook</code> → <code>enforcement/hooks/run.py</code> (command guard, PreToolUse on Bash).
    <em>Honest coverage note:</em> this is a <strong>blacklist</strong> — it raises the bar, it cannot be complete. For untrusted
    work, pair VEMO with OS/container sandboxing (see <code>SECURITY.md</code>); VEMO is a cooperative-host layer.</p>
@@ -136,6 +140,10 @@ exist (label accuracy is itself a safety property). This is the only spec loaded
 hook registration, or rewriting these rules takes the <em>highest</em>-ceremony path (human review + judge), not the
 lowest. Additionally <code>selfcheck</code> (run in CI) flags hooks deregistered from <code>.claude/settings.json</code> and
 <code>ENFORCED-BY</code> tags pointing at missing mechanisms. <code>ENFORCED-BY: git+ci</code> via risk-tier integrity.</p>
+<p>The judge provenance log <code>.vemo/judge.jsonl</code> is <strong>tracked by git</strong> (the rest of <code>.vemo/</code> is per-machine
+runtime state and stays ignored): the required-judge gate's authority is CI, and CI can only read records
+that are in the repo — while git history is what makes an append-only log tamper-evident. <code>selfcheck</code> fails
+if the log is gitignored.</p>
 <h2 id="when-a-gate-fires">When a gate fires</h2>
 <ul>
 <li>The action is refused with a one-line reason + the rule id. The agent must address the <strong>cause</strong>, not retry

@@ -88,11 +88,16 @@ def budget_reset(session=None):
     return "reset"
 
 
-def budget_tick(path=None, write=False, session=None):
+STUCK_REPEATS = 3   # N identical consecutive Bash commands = a loop that stopped making progress
+
+
+def budget_tick(path=None, write=False, session=None, sig=None):
     cfg, r = _run_cfg(), _read_run(session)
     r["tool_calls"] = int(r.get("tool_calls", 0)) + 1
     if path and write:   # only WRITE-type tools count as "touched" — reading is not touching
         files = set(r.get("files", [])); files.add(_rel(path)); r["files"] = sorted(files)
+    if sig:              # duplicate-call chain (Bash only): repeated identical edits/reads are normal, retries are not
+        r["recent_bash"] = (r.get("recent_bash", []) + [sig])[-(STUCK_REPEATS + 1):]
     _save_run(r, session)
     if not cfg.get("enabled"):
         return "ok"
@@ -101,6 +106,10 @@ def budget_tick(path=None, write=False, session=None):
         return "stop:max_tool_calls(%d)" % calls
     if len(r.get("files", [])) > int(cfg.get("max_files_touched", 10**9)):
         return "stop:max_files_touched(%d)" % len(r["files"])
+    recent = r.get("recent_bash", [])
+    if sig and len(recent) >= STUCK_REPEATS and len(set(recent[-STUCK_REPEATS:])) == 1:
+        return ("stop:stuck-loop(same Bash command %dx — an agent that repeats itself has stopped making "
+                "progress; change approach, or escalate to the human)" % STUCK_REPEATS)
     try:
         mins = (datetime.now() - datetime.fromisoformat(r.get("started"))).total_seconds() / 60
         if mins > float(cfg.get("max_wall_clock_min", 10**9)):
@@ -470,48 +479,55 @@ def _read_receipt():
         return None
 
 
+def _acceptance_gate_result(fm, cfg):
+    """acceptance-before-push for ONE task (gate_check loops every task in the checked set —
+    a multi-task push range must not let non-first tasks ride through unchecked)."""
+    risk = str(fm.get("risk") or "R0")
+    if risk.startswith("R0"):
+        return "ok"                       # R0 lifecycle has no acceptance gate (velocity path)
+    order = ["PlanCreated", "ReviewApproved", "ImplementationDone",
+             "AcceptancePassed", "ProcedureCompleted", "Archived"]
+    st = fm.get("state", "PlanCreated")
+    if st not in order or order.index(st) < order.index("AcceptancePassed"):
+        return f"block:state={st} (need AcceptancePassed before push)"
+    if _dig(cfg, "verification.ground_truth_required"):
+        acc = fm.get("acceptance")
+        if not isinstance(acc, dict):
+            return "block:unparseable-acceptance (front-matter `acceptance:` is not a map)"
+        if acc.get("status") == "passed":
+            if acc.get("build_exit") in (None, "null") or not acc.get("evidence"):
+                return "block:executed-evidence-missing ('passed' acceptance lacks a run trace: need exit code + evidence log)"
+            ev = os.path.join(ROOT, str(acc.get("evidence")))
+            if not (os.path.isfile(ev) and os.path.getsize(ev) > 0):
+                return "block:evidence-file-missing ('%s' does not exist or is empty — a claimed path is not a run trace)" % acc.get("evidence")
+            # If the project configured a real build/smoke, the gate trusts only the machine-written
+            # receipt produced by `verify-run` — not exit codes typed into front-matter.
+            if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke"):
+                rcpt = _read_receipt()
+                if not rcpt:
+                    return "block:no-verify-receipt (paths.build/smoke configured — run `vemo verify` so the gate gets executed ground truth)"
+                if str(rcpt.get("task")) not in (str(fm.get("id")), "adhoc"):
+                    return "block:receipt-task-mismatch (receipt is for '%s', checked task is '%s' — re-run `vemo verify`)" % (rcpt.get("task"), fm.get("id"))
+                if rcpt.get("build_exit") not in (0, None) or rcpt.get("smoke_exit") not in (0, None):
+                    return "block:receipt-failed (verify-run recorded build_exit=%s smoke_exit=%s)" % (rcpt.get("build_exit"), rcpt.get("smoke_exit"))
+    # Under unattended auto mode the judge replaces the absent human reviewer on R1+ (automation.spec#3).
+    if _auto_state().get("enabled") and _dig(cfg, "auto_mode.require_judge") and TIER_RANK.get(risk[:2], 1) >= 2:
+        j = _judge_gate_result(fm, 1)
+        if j != "ok":
+            return "block:auto-mode-requires-judge (%s)" % j[len("block:"):]
+    return "ok"
+
+
 def gate_check(gate, session=None, task_files=None):
     tasks = _task_context(task_files, session)
     if not tasks:
         return "block:no-active-task"
-    act = tasks[0]
-    fm = act[1]
-    risk = str(fm.get("risk") or "R0")
     if gate == "acceptance-before-push":
-        if risk.startswith("R0"):
-            return "ok"                       # R0 lifecycle has no acceptance gate (velocity path)
-        order = ["PlanCreated", "ReviewApproved", "ImplementationDone",
-                 "AcceptancePassed", "ProcedureCompleted", "Archived"]
-        st = fm.get("state", "PlanCreated")
-        if st not in order or order.index(st) < order.index("AcceptancePassed"):
-            return f"block:state={st} (need AcceptancePassed before push)"
         cfg = _load_config()
-        if _dig(cfg, "verification.ground_truth_required"):
-            acc = fm.get("acceptance")
-            if not isinstance(acc, dict):
-                return "block:unparseable-acceptance (front-matter `acceptance:` is not a map)"
-            if acc.get("status") == "passed":
-                if acc.get("build_exit") in (None, "null") or not acc.get("evidence"):
-                    return "block:executed-evidence-missing ('passed' acceptance lacks a run trace: need exit code + evidence log)"
-                ev = os.path.join(ROOT, str(acc.get("evidence")))
-                if not (os.path.isfile(ev) and os.path.getsize(ev) > 0):
-                    return "block:evidence-file-missing ('%s' does not exist or is empty — a claimed path is not a run trace)" % acc.get("evidence")
-                # If the project configured a real build/smoke, the gate trusts only the machine-written
-                # receipt produced by `verify-run` — not exit codes typed into front-matter.
-                if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke"):
-                    rcpt = _read_receipt()
-                    if not rcpt:
-                        return "block:no-verify-receipt (paths.build/smoke configured — run `vemo verify` so the gate gets executed ground truth)"
-                    if str(rcpt.get("task")) not in (str(fm.get("id")), "adhoc"):
-                        return "block:receipt-task-mismatch (receipt is for '%s', active task is '%s' — re-run `vemo verify`)" % (rcpt.get("task"), fm.get("id"))
-                    if rcpt.get("build_exit") not in (0, None) or rcpt.get("smoke_exit") not in (0, None):
-                        return "block:receipt-failed (verify-run recorded build_exit=%s smoke_exit=%s)" % (rcpt.get("build_exit"), rcpt.get("smoke_exit"))
-        # Under unattended auto mode the judge replaces the absent human reviewer on R1+ (automation.spec#3).
-        st_auto = _auto_state()
-        if st_auto.get("enabled") and _dig(_load_config(), "auto_mode.require_judge") and TIER_RANK.get(risk[:2], 1) >= 2:
-            j = _judge_gate_result(fm, 1)
-            if j != "ok":
-                return "block:auto-mode-requires-judge (%s)" % j[len("block:"):]
+        for _, fm in tasks:
+            v = _acceptance_gate_result(fm, cfg)
+            if v != "ok":
+                return v if len(tasks) == 1 else "%s [task=%s]" % (v, fm.get("id"))
         return "ok"
     if gate in ("r2-judge", "required-judge"):
         for _, candidate in tasks:
@@ -576,6 +592,127 @@ def verify_plan(risk):
     narration = "required" if (_dig(cfg, "verification.require_intent_narration") and tier in ("frontier", "high")) else "advised"
     human = "intent + irreversible only" if tier in ("frontier", "high") else "intent + plan-review + irreversible"
     return f"tier={tier} risk={risk} ground_truth={gt} verifiers={verifiers} narration={narration} human_gate={human}"
+
+
+def context_brief(session=None):
+    """≤20-line machine brief replacing 'read the whole config + specs' at session start.
+    Facts only, produced by the gate's own code — the token-economy rule: context is for judgment,
+    subprocesses are for facts."""
+    cfg = _load_config()
+    lines = ["VEMO %s | tier=%s mode=%s auto=%s telemetry=%s" % (
+        _dig(cfg, "vemo.version") or "?", _dig(cfg, "capability.tier"),
+        _dig(cfg, "enforcement.mode"), "on" if _auto_state().get("enabled") else "off",
+        _dig(cfg, "observability.telemetry"))]
+    act = _active_task(session)
+    if act:
+        fm = act[1]
+        scope = fm.get("scope_in") or []
+        lines.append("task %s risk=%s state=%s heartbeat=%s" % (
+            fm.get("id"), fm.get("risk"), fm.get("state"), fm.get("heartbeat")))
+        lines.append("scope_in (%d globs): %s%s" % (len(scope), ", ".join(scope[:6]), " …" if len(scope) > 6 else ""))
+    else:
+        lines.append("task none — create from tasks/_TASK_TEMPLATE.md before editing (plan-before-commit gates commits)")
+    for g in ("acceptance-before-push", "required-judge"):
+        try:
+            lines.append("gate %s: %s" % (g, gate_check(g, session)))
+        except Exception as e:
+            lines.append("gate %s: error:%s" % (g, type(e).__name__))
+    rcpt = _read_receipt()
+    lines.append("receipt: %s" % ("task=%s build_exit=%s smoke_exit=%s" % (
+        rcpt.get("task"), rcpt.get("build_exit"), rcpt.get("smoke_exit")) if rcpt else "none (`vemo verify` writes it)"))
+    lines.append("budget: %s" % budget_status(session))
+    lines.append("rules: mechanical gates are non-negotiable (safety.spec); specs load on demand via "
+                 "specs/_manifest.yaml; do NOT bulk-read vemo.config.yaml — ask `vemo tier/check/explain`")
+    return "\n".join(lines)
+
+
+LENS_CHECKS = {
+    "correctness": [
+        "re-run the acceptance commands YOURSELF (eval/selfcheck) — exit codes + fresh report mtime vs clock",
+        "negative-test at least one NEW assertion (make it fail once — a check that cannot fail is fake)",
+        "receipt log content matches the claims (open the .vemo/run/*.log, don't trust the summary)",
+        "timestamp sanity: no log/heartbeat newer than the real clock; evidence not older than the change it proves",
+        "evidence covers the FULL scope of each claim, not a convenient subset",
+    ],
+    "safety": [
+        "scope: every changed path (table above) matches scope_in — spot-verify a sample yourself",
+        "diff has no secrets / destructive side effects / out-of-scope deletions",
+        "live-fire one guard per new pattern (pipe a payload; expect exit 2) + one benign no-false-positive",
+        "judge history retained (no deleted fail rows); front-matter verdict mirrors the jsonl tail",
+        "no reframing: bugs stay bugs in docs/CHANGELOG; safety invariant holds at tier=frontier (spot check)",
+    ],
+}
+
+
+def judge_brief(session=None, lens="correctness", task_files=None):
+    """Dossier for the governance judge: machine-checked facts up front so judge tokens go to what
+    machines cannot check (claims-vs-evidence semantics, completeness, gaming) instead of re-exploring."""
+    tasks = _task_context(task_files, session)
+    if not tasks:
+        return "no-active-task"
+    out = []
+    for path, fm in tasks:
+        out.append("TASK %s | risk=%s state=%s file=%s" % (fm.get("id"), fm.get("risk"), fm.get("state"),
+                                                           os.path.relpath(path, ROOT)))
+        acc = fm.get("acceptance") or {}
+        out.append("CLAIMS: acceptance.status=%s build_exit=%s smoke_exit=%s evidence=%s | judge.verdict=%s" % (
+            acc.get("status"), acc.get("build_exit"), acc.get("smoke_exit"), acc.get("evidence"),
+            _dig(fm, "judge.verdict")))
+        try:
+            body = open(path, encoding="utf-8").read()
+            m = re.search(r"## Pass/Fail Criteria[^\n]*\n(.*?)(?=\n## )", body, re.S)
+            if m:
+                out.append("CRITERIA:")
+                out += ["  " + ln.strip() for ln in m.group(1).strip().splitlines() if ln.strip()][:12]
+        except OSError:
+            pass
+        rows = _judge_records(fm.get("id"))
+        out.append("JUDGE HISTORY (%d rows): %s" % (len(rows), "; ".join(
+            "%s=%s" % (r.get("ts"), r.get("verdict")) for r in rows[-5:]) or "none"))
+    out.append("GATES (machine-checked facts — do not re-derive, do verify their inputs):")
+    for g in ("acceptance-before-push", "required-judge", "plan-before-commit"):
+        try:
+            out.append("  %s: %s" % (g, gate_check(g, session, task_files)))
+        except Exception as e:
+            out.append("  %s: error:%s" % (g, type(e).__name__))
+    try:
+        out.append("  trifecta: %s" % trifecta_check(session))
+    except Exception:
+        pass
+    rcpt = _read_receipt()
+    out.append("RECEIPT: %s" % (json.dumps(rcpt) if rcpt else "none"))
+    try:
+        p = subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "-uall"],
+                           capture_output=True, text=True, timeout=15)
+        changed = [ln[3:].strip() for ln in p.stdout.splitlines() if ln.strip()]
+        out.append("CHANGES (%d files, scope verdict each):" % len(changed))
+        for f in changed[:50]:
+            out.append("  %-14s %s" % (scope_check(os.path.join(ROOT, f), session, task_files), f))
+        if len(changed) > 50:
+            out.append("  … %d more (run git status yourself)" % (len(changed) - 50))
+    except Exception:
+        out.append("CHANGES: (git unavailable — inspect the diff yourself)")
+    out.append("LENS %s — your checklist (disjoint from the other pass; do not redo its items):" % lens)
+    out += ["  [ ] " + c for c in LENS_CHECKS.get(lens, LENS_CHECKS["correctness"])]
+    out.append("RULES: record verdict FIRST via judge-record (a verdict without provenance is treated as "
+               "forged); cite file:line or command+exit per violation; you judge, you do not fix.")
+    return "\n".join(out)
+
+
+def heartbeat_touch(session=None, task_files=None):
+    """Mechanized heartbeat: update the task file's front-matter in place — zero agent context spent
+    on read-modify-write. concurrency.spec liveness without the token tax."""
+    tasks = _task_context(task_files, session)
+    if not tasks:
+        return "error:no-active-task"
+    path, fm = tasks[0]
+    now = datetime.now().isoformat(timespec="minutes")
+    txt = open(path, encoding="utf-8").read()
+    new, n = re.subn(r"(?m)^heartbeat:.*$", "heartbeat: %s" % now, txt, count=1)
+    if not n:
+        return "error:no-heartbeat-field"
+    open(path, "w", encoding="utf-8").write(new)
+    return "heartbeat:%s=%s" % (fm.get("id"), now)
 
 
 def trifecta_check(session=None):
@@ -776,6 +913,7 @@ def main():
     aa = sub.add_parser("auto-allows"); aa.add_argument("--tier", required=True)
     bt = sub.add_parser("budget-tick"); bt.add_argument("--path", default=None)
     bt.add_argument("--write", action="store_true"); bt.add_argument("--session", default=None)
+    bt.add_argument("--sig", default=None)
     br = sub.add_parser("budget-reset"); br.add_argument("--session", default=None)
     bs = sub.add_parser("budget-status"); bs.add_argument("--session", default=None)
     cg = sub.add_parser("config-get"); cg.add_argument("--field", required=True)
@@ -785,6 +923,11 @@ def main():
     jr.add_argument("--verdict", required=True, choices=["pass", "fail"])
     jr.add_argument("--evidence", default=""); jr.add_argument("--confidence", default="")
     bd = sub.add_parser("bind"); bd.add_argument("--session", required=True); bd.add_argument("--task", required=True)
+    cx = sub.add_parser("context"); cx.add_argument("--session", default=None)
+    jb = sub.add_parser("judge-brief"); jb.add_argument("--lens", default="correctness", choices=sorted(LENS_CHECKS))
+    jb.add_argument("--session", default=None); jb.add_argument("--task-file", action="append", default=[])
+    hb = sub.add_parser("heartbeat"); hb.add_argument("--session", default=None)
+    hb.add_argument("--task-file", action="append", default=[])
     sub.add_parser("selfcheck"); tc = sub.add_parser("trifecta-check"); tc.add_argument("--session", default=None)
     a = ap.parse_args()
     if a.cmd == "scope-check":
@@ -815,7 +958,7 @@ def main():
               and (a.tier != "R2" or st.get("allow_r2")))
         print("yes" if ok else "no")
     elif a.cmd == "budget-tick":
-        print(budget_tick(a.path, a.write, a.session))
+        print(budget_tick(a.path, a.write, a.session, a.sig))
     elif a.cmd == "budget-reset":
         print(budget_reset(a.session))
     elif a.cmd == "budget-status":
@@ -832,6 +975,12 @@ def main():
         print(judge_record(a.task, a.verdict, a.evidence, a.confidence))
     elif a.cmd == "bind":
         print(bind_session(a.session, a.task))
+    elif a.cmd == "context":
+        print(context_brief(a.session))
+    elif a.cmd == "judge-brief":
+        print(judge_brief(a.session, a.lens, a.task_file))
+    elif a.cmd == "heartbeat":
+        print(heartbeat_touch(a.session, a.task_file))
     elif a.cmd == "selfcheck":
         sys.exit(selfcheck())
     elif a.cmd == "trifecta-check":
