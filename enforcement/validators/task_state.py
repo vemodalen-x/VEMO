@@ -497,11 +497,11 @@ def _acceptance_gate_result(fm, cfg):
         if acc.get("status") == "passed":
             if acc.get("build_exit") in (None, "null") or not acc.get("evidence"):
                 return "block:executed-evidence-missing ('passed' acceptance lacks a run trace: need exit code + evidence log)"
-            ev = os.path.join(ROOT, str(acc.get("evidence")))
-            if not (os.path.isfile(ev) and os.path.getsize(ev) > 0):
-                return "block:evidence-file-missing ('%s' does not exist or is empty — a claimed path is not a run trace)" % acc.get("evidence")
-            # If the project configured a real build/smoke, the gate trusts only the machine-written
-            # receipt produced by `verify-run` — not exit codes typed into front-matter.
+            # If the project configured a real build/smoke, the gate trusts the machine-written receipt
+            # produced by `verify-run` — not exit codes (or a log path) typed into front-matter. The
+            # receipt's OWN log is the executed ground truth, freshly produced by the gate's side THIS run;
+            # the front-matter `evidence:` path is a human cache that may point at a gitignored/rotated log
+            # absent on a clean CI checkout (which is exactly where the guarantee must hold).
             if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke"):
                 rcpt = _read_receipt()
                 if not rcpt:
@@ -510,6 +510,14 @@ def _acceptance_gate_result(fm, cfg):
                     return "block:receipt-task-mismatch (receipt is for '%s', checked task is '%s' — re-run `vemo verify`)" % (rcpt.get("task"), fm.get("id"))
                 if rcpt.get("build_exit") not in (0, None) or rcpt.get("smoke_exit") not in (0, None):
                     return "block:receipt-failed (verify-run recorded build_exit=%s smoke_exit=%s)" % (rcpt.get("build_exit"), rcpt.get("smoke_exit"))
+                rlog = os.path.join(ROOT, str(rcpt.get("log") or ""))
+                if not (os.path.isfile(rlog) and os.path.getsize(rlog) > 0):
+                    return "block:receipt-log-missing (receipt references '%s' but it is absent/empty — re-run `vemo verify`)" % rcpt.get("log")
+            else:
+                # No build/smoke configured: the front-matter evidence file is the only run trace we have.
+                ev = os.path.join(ROOT, str(acc.get("evidence")))
+                if not (os.path.isfile(ev) and os.path.getsize(ev) > 0):
+                    return "block:evidence-file-missing ('%s' does not exist or is empty — a claimed path is not a run trace)" % acc.get("evidence")
     # Under unattended auto mode the judge replaces the absent human reviewer on R1+ (automation.spec#3).
     if _auto_state().get("enabled") and _dig(cfg, "auto_mode.require_judge") and TIER_RANK.get(risk[:2], 1) >= 2:
         j = _judge_gate_result(fm, 1)

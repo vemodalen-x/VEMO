@@ -31,6 +31,14 @@ and keep raw config out of the loop.
   in the pushed range (the pre-push hook reads git's stdin refs; CI shares one `VEMO_DIFF_RANGE`), closing
   a gap where a multi-task push was gated on only the first task.
 - **`vemo selfcheck` propagates its real exit code** (was always exit 0 through the CLI wrapper).
+- **Acceptance gate is now clean-checkout-correct**: when `paths.build/smoke` are configured, the gate's
+  evidence anchor is the machine receipt's **own** log (executed ground truth produced by `verify-run`
+  this run), not the front-matter `evidence:` path — which is a human cache that points at a gitignored /
+  rotated log absent on a fresh CI checkout, exactly where the guarantee must hold. (With no build
+  configured, the front-matter evidence file is still required.)
+- **Conformance eval is hermetic**: it clears an inherited `VEMO_DIFF_RANGE` at startup, so its throwaway
+  `git init` sandboxes are never handed a range that only resolves in the real repo (surfaced when eval
+  runs as `paths.build` inside `vemo verify` after CI exports the range).
 
 ### Governance / release hygiene
 - Desensitized internal references from the tracked task records; added editor/IDE state to `.gitignore`.

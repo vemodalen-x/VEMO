@@ -109,6 +109,14 @@ and keep raw config out of the loop.</p>
   in the pushed range (the pre-push hook reads git's stdin refs; CI shares one <code>VEMO_DIFF_RANGE</code>), closing
   a gap where a multi-task push was gated on only the first task.</li>
 <li><strong><code>vemo selfcheck</code> propagates its real exit code</strong> (was always exit 0 through the CLI wrapper).</li>
+<li><strong>Acceptance gate is now clean-checkout-correct</strong>: when <code>paths.build/smoke</code> are configured, the gate's
+  evidence anchor is the machine receipt's <strong>own</strong> log (executed ground truth produced by <code>verify-run</code>
+  this run), not the front-matter <code>evidence:</code> path — which is a human cache that points at a gitignored /
+  rotated log absent on a fresh CI checkout, exactly where the guarantee must hold. (With no build
+  configured, the front-matter evidence file is still required.)</li>
+<li><strong>Conformance eval is hermetic</strong>: it clears an inherited <code>VEMO_DIFF_RANGE</code> at startup, so its throwaway
+  <code>git init</code> sandboxes are never handed a range that only resolves in the real repo (surfaced when eval
+  runs as <code>paths.build</code> inside <code>vemo verify</code> after CI exports the range).</li>
 </ul>
 <h3 id="governance-release-hygiene">Governance / release hygiene</h3>
 <ul>

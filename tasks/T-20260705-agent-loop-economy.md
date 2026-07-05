@@ -9,7 +9,7 @@ acceptance:
   status: passed
   build_exit: 0
   smoke_exit: 0
-  evidence: ".vemo/run/T-20260705-agent-loop-economy-20260705-223057.log"
+  evidence: ".vemo/run/T-20260705-agent-loop-economy-20260705-225130.log"
 judge:
   required: true
   verdict: pass
@@ -18,7 +18,7 @@ judge:
   confidence: high
 approved_commands: []
 owning_chat: chat-20260705-fable-loop-econ
-heartbeat: 2026-07-05T22:37
+heartbeat: 2026-07-05T22:51
 ---
 
 # T-agent-loop-economy — 2026 同行对标复审：loop 经济性 + 缺口修复（v1.2.0）
@@ -61,11 +61,16 @@ Top10）修复本轮 code review 发现的缺口，并落地 token 经济性 P0�
 - 2026-07-05T22:30 发布级 code review（3 只读 agent：脱敏/文档符合设计/架构可加载）：脱敏内部项目名、
   README CLI 表补 3 verb + demo 68/68、VERSION/config/badge→1.2.0、CHANGELOG 1.2.0、.gitignore 补 IDE、
   docs/html 全量重生成。eval 68/68、selfcheck OK、verify 收据 build0/smoke0。
+- 2026-07-05T22:51 首次 push 后 CI 红 → 两处发布硬化（全新 clone 完整复现 CI 序列验证 eval/backstop/
+  verify/push-gate 全 exit 0）：(1) acceptance 门在配置 build/smoke 时以「收据自身日志」为证据锚（而非
+  front-matter 缓存路径——CI 全新检出里它指向 gitignored 日志必失败）；(2) eval 启动清除继承的
+  VEMO_DIFF_RANGE 保证沙箱 hermetic（否则 CI 导出 range 后 verify-run 内 eval 的 git 沙箱用例崩）。
+  归档 T-20260702/03 → tasks/Archive/（终态，避免旧任务单一收据重触发多任务门）。
 
 ## Acceptance Result
 - [Build] `python3 eval/run.py` → **68/68 PASS, exit 0**（新增 7 用例：context/judge-brief/heartbeat/
   multi-task-acceptance/.gitignore-R2/stuck×2），evidence `eval/out/report.json` + verify 收据
-  `.vemo/run/T-20260705-agent-loop-economy-20260705-223057.log`（build_exit 0, smoke_exit 0）。
+  `.vemo/run/T-20260705-agent-loop-economy-20260705-225130.log`（build_exit 0, smoke_exit 0）。
 - [Correctness] `vemo context` → 8 行机读简报（tier/mode/task/gate/budget/rules），≤20 行达标。
 - [Correctness] `vemo judge-brief --lens correctness` → 输出 CLAIMS/CRITERIA/JUDGE HISTORY/GATES/RECEIPT/
   CHANGES(逐文件 scope 判定)/LENS 清单/RULES；git-less sandbox 优雅降级（eval 断言覆盖）。

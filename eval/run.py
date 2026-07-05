@@ -573,6 +573,13 @@ def run_auto_checks(r):
 
 
 def main(argv):
+    # Hermetic sandboxes: VEMO_DIFF_RANGE is a REAL-repo concept (the pushed range). Our git checks
+    # run pre-commit against throwaway `git init` sandboxes, so an inherited range points at revisions
+    # that do not exist there. CI exports VEMO_DIFF_RANGE for the backstop/push-gate steps; if eval runs
+    # after that (e.g. inside `vemo verify` as paths.build), the leak would break the sandbox git check.
+    # Drop it here so eval behaves identically however it is invoked. (The multi-task git check sets its
+    # own VEMO_DIFF_RANGE per-subprocess, so this does not weaken it.)
+    os.environ.pop("VEMO_DIFF_RANGE", None)
     args = parse_args(argv)
     runner = Runner(args)
     if args.list:
