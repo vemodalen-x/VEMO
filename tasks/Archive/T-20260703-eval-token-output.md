@@ -1,7 +1,7 @@
 ---
 id: T-20260703-eval-token-output
 risk: R1
-state: AcceptancePassed
+state: Archived
 scope_in: ["eval/run.py", "tasks/T-20260703-eval-token-output.md"]
 scope_out: ["enforcement/**", "specs/**", "vemo.config.yaml", ".github/**"]
 trifecta: []

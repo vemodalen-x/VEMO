@@ -1,7 +1,7 @@
 ---
 id: T-20260702-trust-chain-fixes
 risk: R2
-state: AcceptancePassed
+state: Archived
 scope_in: ["enforcement/**", "specs/**", "vemo.config.yaml", "bin/**", "eval/**", "agents/**", "skill/automation-mode/**", ".github/**", "AGENTS.md", "SECURITY.md", "README.md", "CHANGELOG.md", "VERSION", "docs/**", "tasks/**", ".claude/**", ".vemo/**", ".gitignore", ".gitattributes"]
 scope_out: ["presets/**", "assets/**", ".internal/**"]
 trifecta: []
