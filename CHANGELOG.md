@@ -3,6 +3,25 @@
 All notable changes to VEMO are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.3.0] — skill quality bar + registry consistency audit
+
+Ports the sibling skill-home's transparent skill scorer into VEMO and adds a catalog<->disk consistency
+audit, closing the gap where `selfcheck` only asserted a SKILL.md *exists*. Additive and self-contained:
+the verdict engine (`task_state.py`) is untouched; the conformance eval grows 68->71 and stays green.
+
+### Added
+- **`enforcement/validators/skill_check.py`** — a transparent, gating skill quality bar (frontmatter
+  present, name==dir, description well-formed, `_catalog.md`<->disk parity, cited backing scripts resolve,
+  no duplicate names) plus a **consistency audit** (orphan catalog rows / unlisted skills / dangling
+  backing scripts / mis-placed names). Description-quality cues are advisory, never gating — VEMO skills
+  are noun-named (no gerund rule). Hermetic `selftest`; fail-closed.
+- **`vemo skill-score` / `vemo skill-audit`** verbs.
+- **eval `skill` group** (3 checks: score, audit, selftest) — conformance now 71/71.
+
+### Notes
+- No new `vemo.config.yaml` key: `selfcheck`'s every-key-has-a-consumer contract is unchanged.
+- `docs/html/` regeneration via `docs/build_html.py` is a docs-sync follow-up (needs the `markdown` pkg).
+
 ## [1.2.0] — agent-loop economy ("overhead scales with risk, not activity")
 
 A 2026 peer-benchmark review (Anthropic long-horizon harnesses, OpenAI Codex guardrails/AGENTS.md,

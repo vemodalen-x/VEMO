@@ -80,6 +80,25 @@ img{max-width:100%}
 <main><div class="content"><h1 id="changelog">Changelog</h1>
 <p>All notable changes to VEMO are documented here.
 Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: <a href="https://semver.org/">SemVer</a>.</p>
+<h2 id="130-skill-quality-bar-registry-consistency-audit">[1.3.0] — skill quality bar + registry consistency audit</h2>
+<p>Ports the sibling skill-home's transparent skill scorer into VEMO and adds a catalog&lt;-&gt;disk consistency
+audit, closing the gap where <code>selfcheck</code> only asserted a SKILL.md <em>exists</em>. Additive and self-contained:
+the verdict engine (<code>task_state.py</code>) is untouched; the conformance eval grows 68-&gt;71 and stays green.</p>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong><code>enforcement/validators/skill_check.py</code></strong> — a transparent, gating skill quality bar (frontmatter
+  present, name==dir, description well-formed, <code>_catalog.md</code>&lt;-&gt;disk parity, cited backing scripts resolve,
+  no duplicate names) plus a <strong>consistency audit</strong> (orphan catalog rows / unlisted skills / dangling
+  backing scripts / mis-placed names). Description-quality cues are advisory, never gating — VEMO skills
+  are noun-named (no gerund rule). Hermetic <code>selftest</code>; fail-closed.</li>
+<li><strong><code>vemo skill-score</code> / <code>vemo skill-audit</code></strong> verbs.</li>
+<li><strong>eval <code>skill</code> group</strong> (3 checks: score, audit, selftest) — conformance now 71/71.</li>
+</ul>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>No new <code>vemo.config.yaml</code> key: <code>selfcheck</code>'s every-key-has-a-consumer contract is unchanged.</li>
+<li><code>docs/html/</code> regeneration via <code>docs/build_html.py</code> is a docs-sync follow-up (needs the <code>markdown</code> pkg).</li>
+</ul>
 <h2 id="120-agent-loop-economy-overhead-scales-with-risk-not-activity">[1.2.0] — agent-loop economy ("overhead scales with risk, not activity")</h2>
 <p>A 2026 peer-benchmark review (Anthropic long-horizon harnesses, OpenAI Codex guardrails/AGENTS.md,
 OWASP Agentic Top 10) plus a first-principles token-economy audit. The dominant cost was the judge
