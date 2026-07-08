@@ -115,7 +115,8 @@ HELP = """vemo <command>
   tier <paths...>                 required risk tier for the given paths
   check <path>                    is a path inside the active task's scope?
   skill-score                     quality bar for VEMO's own skills (frontmatter/name/catalog parity/backing scripts)
-  skill-audit                     catalog<->disk consistency audit of the skill registry"""
+  skill-audit                     catalog<->disk consistency audit of the skill registry
+  skill-roster                    list VEMO's own skills (name + purpose) — what the agent can invoke"""
 
 
 def main():
@@ -144,7 +145,7 @@ def main():
         print(_ts("tier-required", "--paths", *(a[1:] or ["."]))); return 0
     if c == "check":
         print(_ts("scope-check", "--path", a[1] if len(a) > 1 else ".")); return 0
-    if c in ("skill-score", "skill-audit"):
+    if c in ("skill-score", "skill-audit", "skill-roster"):
         sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
         return subprocess.run(["python3", sk, c.split("-", 1)[1]]).returncode
     print("unknown command:", c, "\n" + HELP); return 2

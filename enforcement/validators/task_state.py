@@ -629,6 +629,12 @@ def context_brief(session=None):
     lines.append("receipt: %s" % ("task=%s build_exit=%s smoke_exit=%s" % (
         rcpt.get("task"), rcpt.get("build_exit"), rcpt.get("smoke_exit")) if rcpt else "none (`vemo verify` writes it)"))
     lines.append("budget: %s" % budget_status(session))
+    skdir = os.path.join(ROOT, "skill")
+    if os.path.isdir(skdir):
+        names = sorted(d for d in os.listdir(skdir)
+                       if os.path.isdir(os.path.join(skdir, d)) and not d.startswith("_"))
+        if names:
+            lines.append("skills (%d): %s — `vemo skill-roster` for purpose+usage" % (len(names), ", ".join(names)))
     lines.append("rules: mechanical gates are non-negotiable (safety.spec); specs load on demand via "
                  "specs/_manifest.yaml; do NOT bulk-read vemo.config.yaml — ask `vemo tier/check/explain`")
     return "\n".join(lines)
