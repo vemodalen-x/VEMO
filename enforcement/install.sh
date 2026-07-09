@@ -6,12 +6,22 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT"
 echo "[VEMO] installing enforcement into $ROOT"
 
+PYTHON_BIN="${PYTHON:-}"
+if [ -z "$PYTHON_BIN" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  fi
+fi
+
 # 1) Claude Code hooks → merge enforcement/hooks/hooks.json into .claude/settings.json (dedup by command)
 mkdir -p .claude .vemo
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "$ROOT" <<'PY'
+if [ -n "$PYTHON_BIN" ]; then
+  "$PYTHON_BIN" - "$ROOT" "$PYTHON_BIN" <<'PY'
 import json, os, sys
 root = sys.argv[1]
+python_bin = sys.argv[2]
 settings = os.path.join(root, ".claude", "settings.json")
 src = os.path.join(root, "enforcement", "hooks", "hooks.json")
 cur = {}
@@ -22,6 +32,14 @@ if os.path.exists(settings):
         cur = {}
 add = json.load(open(src)).get("hooks", {})
 cur.setdefault("hooks", {})
+
+
+def normalize(entry):
+    for hook in entry.get("hooks", []):
+        cmd = hook.get("command")
+        if isinstance(cmd, str) and cmd.startswith("python3 "):
+            hook["command"] = python_bin + cmd[len("python3"):]
+    return entry
 
 
 def sig(entry):
@@ -37,21 +55,26 @@ for ev, lst in add.items():
     kept = [e for e in cur["hooks"].get(ev, []) if not is_legacy(e)]   # migrate off deleted .sh guards
     seen = {sig(e) for e in kept}
     for e in lst:
+        e = normalize(e)
         if sig(e) not in seen:
             kept.append(e); seen.add(sig(e))
     cur["hooks"][ev] = kept
 json.dump(cur, open(settings, "w"), indent=2)
-print("  ✓ hooks registered in .claude/settings.json (deduped; legacy .sh entries migrated)")
+print(f"  ✓ hooks registered in .claude/settings.json using {python_bin} (deduped; legacy .sh entries migrated)")
 PY
 else
-  echo "  ! python3 not found — hooks NOT registered. python3 is REQUIRED for client-side guards;"
-  echo "    the git/CI backstop below still applies, but install python3 for in-loop enforcement."
+  echo "  ! neither python3 nor python found — hooks NOT registered."
+  echo "    the git/CI backstop below still applies, but install Python for in-loop enforcement."
 fi
 
 # 2) git backstops: pre-commit (plan/scope/tier/judge/secret) + pre-push (acceptance + required judge provenance)
 mkdir -p .git/hooks
 cp enforcement/ci/pre-commit .git/hooks/pre-commit
 cp enforcement/ci/pre-push  .git/hooks/pre-push
+if [ -n "$PYTHON_BIN" ] && [ "$PYTHON_BIN" != "python3" ]; then
+  sed -i.bak "s|V=\"python3 |V=\"$PYTHON_BIN |" .git/hooks/pre-commit .git/hooks/pre-push
+  rm -f .git/hooks/pre-commit.bak .git/hooks/pre-push.bak
+fi
 chmod +x .git/hooks/pre-commit .git/hooks/pre-push
 echo "  ✓ git pre-commit + pre-push backstops installed"
 

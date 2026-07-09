@@ -15,6 +15,8 @@ cd your-repo
 ```bash
 python3 bin/vemo init --preset python     # or: node | cpp | docs
 ```
+On Windows, use `python bin/vemo ...` if `python3` is not installed.
+
 That installs the hooks + git pre-commit/pre-push, creates `tasks/`, and preconfigures build/test for
 your stack. (Prefer to look before you leap? `vemo init --preset python --dry-run`.)
 
@@ -43,6 +45,7 @@ auto mode, run budgets) builds on this one idea: *the important rules are mechan
 python3 bin/vemo status      # tier / enforcement / budget / auto mode / active task
 python3 bin/vemo explain gates
 ```
+On Windows, use `python bin/vemo status`.
 
 ## Next
 - Going unattended (CI / overnight)? → [HOWTO: auto mode](MENTAL_MODEL.md#auto-mode) — but read the stop-rules note.

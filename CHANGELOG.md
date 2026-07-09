@@ -3,6 +3,18 @@
 All notable changes to VEMO are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `docs/DIAGNOSTIC_PROMPTING.md`: a framework-level pattern for diagnostic coaching/tutoring prompts, abstracting
+  intake -> map -> constraint -> plan -> loop -> boundary from Human 3.0 and Mr. Ranedeer-style references without
+  copying external prompt text.
+- `docs/PLAYBOOK_ADOPTION.md`: migration guidance for converting repo-local agent playbooks into VEMO mechanisms.
+
+### Fixed
+- CLI and installer Python dispatch now use the current interpreter or fall back from `python3` to `python`, improving
+  Windows compatibility.
+
 ## [1.9.0] — 2026-07-09
 
 Version-line realignment onto the public `v1.8.0` tag baseline + destructive-command gate hardening.

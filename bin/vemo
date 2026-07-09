@@ -10,7 +10,8 @@ import sys, os, subprocess, shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # bin/ -> repo root
 os.environ.setdefault("VEMO_ROOT", ROOT)
-TS = ["python3", os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
+PY = sys.executable or "python3"
+TS = [PY, os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
 
 
 def _ts(*args):
@@ -56,7 +57,7 @@ def cmd_doctor():
     print(_ts("doctor"))
     hooks = os.path.exists(os.path.join(ROOT, ".claude", "settings.json"))
     print("  hooks installed :", "yes" if hooks else "no  (run: vemo init)")
-    for tool in ("git", "python3"):
+    for tool in ("git", "python"):
         print(f"  {tool:15}:", "found" if shutil.which(tool) else "MISSING")
     return 0
 
@@ -130,7 +131,7 @@ def main():
         return subprocess.run(TS + ["verify-run"]).returncode
     if c == "selfcheck":  # propagate the real exit code — a red selfcheck must fail the caller
         return subprocess.run(TS + ["selfcheck"]).returncode
-    if c == "eval": return subprocess.run(["python3", os.path.join(ROOT, "eval", "run.py")] + a[1:]).returncode
+    if c == "eval": return subprocess.run([PY, os.path.join(ROOT, "eval", "run.py")] + a[1:]).returncode
     if c in ("context", "judge-brief", "heartbeat"):
         return subprocess.run(TS + a).returncode
     if c == "init": return cmd_init(a[1:])
@@ -138,7 +139,7 @@ def main():
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))
         return 0
     if c == "auto":
-        return subprocess.run(["python3", os.path.join(ROOT, "enforcement", "automation", "vemo-auto")] + a[1:]).returncode
+        return subprocess.run([PY, os.path.join(ROOT, "enforcement", "automation", "vemo-auto")] + a[1:]).returncode
     if c == "budget":
         print(_ts("budget-" + (a[1] if len(a) > 1 else "status"))); return 0
     if c == "tier":
@@ -147,7 +148,7 @@ def main():
         print(_ts("scope-check", "--path", a[1] if len(a) > 1 else ".")); return 0
     if c in ("skill-score", "skill-audit", "skill-roster"):
         sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
-        return subprocess.run(["python3", sk, c.split("-", 1)[1]]).returncode
+        return subprocess.run([PY, sk, c.split("-", 1)[1]]).returncode
     print("unknown command:", c, "\n" + HELP); return 2
 
 

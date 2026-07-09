@@ -76,6 +76,7 @@ cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,preset
 
 # 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
 python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
+# Windows: use `python bin/vemo ...` if `python3` is not installed.
 export PATH="$PWD/bin:$PATH"                  # so you can just type `vemo`
 
 # 3) make it AUTHORITATIVE: server-side CI + branch protection (local hooks are fast feedback only)
@@ -162,6 +163,8 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 |---|---|
 | See the whole picture (usage + architecture diagrams) | 🖼️ [docs/GUIDE.html](docs/GUIDE.html) |
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
+| Design diagnostic coaching/tutoring agent flows | [docs/DIAGNOSTIC_PROMPTING.md](docs/DIAGNOSTIC_PROMPTING.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |
 | Threat model · roadmap | [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) |

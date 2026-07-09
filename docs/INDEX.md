@@ -7,6 +7,8 @@
 |---|---|---|
 | **See the whole picture (usage + architecture diagrams)** | Visual guide | 🖼️ [GUIDE.html](GUIDE.html) |
 | **Get it working in 5 min** | Tutorial | [QUICKSTART.md](QUICKSTART.md) |
+| **Migrate an existing agent playbook into VEMO** | How-to | [PLAYBOOK_ADOPTION.md](PLAYBOOK_ADOPTION.md) |
+| **Design diagnostic coaching/tutoring agent flows** | How-to | [DIAGNOSTIC_PROMPTING.md](DIAGNOSTIC_PROMPTING.md) |
 | **Understand how VEMO thinks** | Explanation | [MENTAL_MODEL.md](MENTAL_MODEL.md) |
 | **Know why it works as models get stronger** | Explanation | [SCALING.md](SCALING.md) |
 | **Run VEMO under another harness / other model vendors** | Reference | [ADAPTERS.md](ADAPTERS.md) |
