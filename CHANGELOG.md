@@ -3,6 +3,32 @@
 All notable changes to VEMO are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.9.0] — 2026-07-09
+
+Version-line realignment onto the public `v1.8.0` tag baseline + destructive-command gate hardening.
+
+### Changed
+- **Versioning realigned onto the public `v1.8.0` tag.** VEMO's git tags and VERSION file had drifted
+  (the sole tag `v1.8.0` sits above an internal `1.2.0`->`1.4.0` dev line). Releases now continue ABOVE
+  `v1.8.0`; `v1.9.0` is the first unified tag/VERSION/CHANGELOG release. Prior internal `[1.4.0]`/`[1.3.0]`/
+  `[1.2.0]` entries below are retained as development history; the published `v1.8.0` tag commit is unchanged.
+
+### Fixed
+- **DESTRUCTIVE-command gate: closed pre-existing coverage gaps** (`enforcement/hooks/run.py`),
+  surfaced by adversarial review, all in the SAFE (tightening) direction:
+  - `git push` force is caught with the force flag in ANY short-flag position — `-f` / `-fu` / `-vf`
+    (not only trailing) — alongside `--force`; `--force-with-lease` / `--force-if-includes` and a
+    force-free `git push -u`/`-v` stay allowed.
+  - `rm` recursive-force deletes are caught in ANY flag form — `-rf` / `-Rf` (capital-R synonym) / `-fr` /
+    `-r -f` (split) / `--recursive --force` (long) — via two segment-scoped lookaheads (recursive AND force).
+  - ANY target is covered, including `./relative` paths (the old pattern only matched `/ ~ * ..`).
+  - Non-recursive `rm`, recursive-without-force, and plain `git push` stay allowed (no over-block).
+
+### Verification
+- `python3 eval/run.py` 83/83 · `vemo selfcheck` OK · `python3 enforcement/hooks/run.py --selftest` OK
+  (two-way) · `vemo verify` receipt (build/smoke exit 0). R2: 2 independent governance-judge passes
+  recorded in `.vemo/judge.jsonl` before merge.
+
 ## [1.4.0] — 2026-07-08
 
 Ports two improvements reviewed from the sibling Wildmeerkat framework (v2.16.0/v2.17.0).
