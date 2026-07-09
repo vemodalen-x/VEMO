@@ -343,11 +343,6 @@ def remove_tree(path):
     shutil.rmtree(path, onerror=retry)
 
 
-def py_exit_cmd(code):
-    exe = sys.executable.replace("\\", "/")
-    return f'{exe} -c "import sys; sys.exit({code})"'
-
-
 def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null",
          evidence="", trifecta="[]", verdict="null", approved="[]", task_id="T"):
     return (f"---\nid: {task_id}\nrisk: {risk}\nstate: {state}\nscope_in: {scope}\ntrifecta: {trifecta}\n"
@@ -421,18 +416,20 @@ def run_validator_checks(r):
 
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', lambda m: m.group(1) + py_exit_cmd(0))])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python3 .vemo/run/pass_build.py')])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    open(os.path.join(d, ".vemo", "run", "pass_build.py"), "w", encoding="utf-8").write("import sys\nsys.exit(0)\n")
     r.chk("validator", "receipt: build configured + NO receipt -> BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "no-verify-receipt")
     r.chk("validator", "receipt: verify-run executes and passes", run(d, "verify-run"), lambda g: g.startswith("pass"))
     r.chk("validator", "receipt: gate ok after verify-run", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
     remove_tree(d)
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', lambda m: m.group(1) + py_exit_cmd(1))])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python3 .vemo/run/fail_build.py')])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    open(os.path.join(d, ".vemo", "run", "fail_build.py"), "w", encoding="utf-8").write("import sys\nsys.exit(1)\n")
     run(d, "verify-run")
     r.chk("validator", "receipt: failing build -> receipt-failed BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "receipt-failed")
     remove_tree(d)
