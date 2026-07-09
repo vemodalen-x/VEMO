@@ -20,7 +20,7 @@ acceptance:
   status: passed
   build_exit: 0
   smoke_exit: 0
-  evidence: ".vemo/run/T-20260709-diagnostic-prompting-framework-20260709-220940.log"
+  evidence: ".vemo/run/T-20260709-diagnostic-prompting-framework-20260709-221245.log"
 judge:
   required: true
   verdict: pass
@@ -61,4 +61,4 @@ Add diagnostic prompting guidance and Windows-compatible command dispatch to VEM
 - PASS: GitHub Actions failure root cause identified as missing task scope, not failing eval/build.
 
 ## Conclusion
-Outcome: accepted. Decision: continue. Key Evidence: `.vemo/run/T-20260709-diagnostic-prompting-framework-20260709-220940.log` and GitHub Actions log for run 29022745459. Risk: med. Next Action: commit task provenance and push.
+Outcome: accepted. Decision: continue. Key Evidence: `.vemo/run/T-20260709-diagnostic-prompting-framework-20260709-221245.log` and GitHub Actions log for run 29022745459. Risk: med. Next Action: commit task provenance and push.

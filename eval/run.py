@@ -343,6 +343,11 @@ def remove_tree(path):
     shutil.rmtree(path, onerror=retry)
 
 
+def py_exit_cmd(code):
+    exe = sys.executable.replace("\\", "/")
+    return f'{exe} -c "import sys; sys.exit({code})"'
+
+
 def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null",
          evidence="", trifecta="[]", verdict="null", approved="[]", task_id="T"):
     return (f"---\nid: {task_id}\nrisk: {risk}\nstate: {state}\nscope_in: {scope}\ntrifecta: {trifecta}\n"
@@ -416,7 +421,7 @@ def run_validator_checks(r):
 
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python -c "import sys; sys.exit(0)"')])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', lambda m: m.group(1) + py_exit_cmd(0))])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
     r.chk("validator", "receipt: build configured + NO receipt -> BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "no-verify-receipt")
@@ -425,7 +430,7 @@ def run_validator_checks(r):
     remove_tree(d)
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python -c "import sys; sys.exit(1)"')])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', lambda m: m.group(1) + py_exit_cmd(1))])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
     run(d, "verify-run")
