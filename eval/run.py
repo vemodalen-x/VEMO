@@ -100,6 +100,10 @@ CHECK_INDEX = (
     ("hook", "hook e2e: false-heredoc marker cannot hide a real destructive command"),
     ("hook", "hook e2e: commented-out heredoc opener cannot hide a real destructive command"),
     ("hook", "hook: strip_data_regions selftest passes"),
+    ("hook", "hook e2e: git push -f (short force flag) blocked"),
+    ("hook", "hook e2e: rm split/long recursive-force flags blocked"),
+    ("hook", "hook e2e: rm -rf relative ./ target blocked"),
+    ("hook", "hook e2e: git push --force-with-lease allowed (no over-block)"),
 )
 
 SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
@@ -505,6 +509,19 @@ def run_hook_checks(r):
     sp = subprocess.run(["python3", HOOK, "--selftest"], capture_output=True, text=True)
     r.chk("hook", "hook: strip_data_regions selftest passes", (sp.returncode, sp.stdout),
           lambda g: g[0] == 0 and "selftest OK" in g[1])
+
+    # DESTRUCTIVE hardening (v1.9.0): short/split/long force+recursive flags and ./relative targets are
+    # caught; --force-with-lease stays allowed (tightening = safe direction, but must not over-block).
+    d = sandbox(task=task('["src/**"]'))
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git push -f origin main"}})
+    r.chk("hook", "hook e2e: git push -f (short force flag) blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "rm -r -f /tmp/xdir"}})
+    r.chk("hook", "hook e2e: rm split/long recursive-force flags blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "rm -rf ./buildXYZ"}})
+    r.chk("hook", "hook e2e: rm -rf relative ./ target blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin main"}})
+    r.chk("hook", "hook e2e: git push --force-with-lease allowed (no over-block)", (rc, err), lambda g: g[0] == 0)
+    shutil.rmtree(d)
 
 
 def run_git_checks(r):

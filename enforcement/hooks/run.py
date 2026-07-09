@@ -46,11 +46,16 @@ SECRET_RE = re.compile(
     r'|BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY', re.I)
 
 DESTRUCTIVE = [
-    (r'(^|[^a-zA-Z])rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(/|~|\*|\.\.)', "broad recursive delete"),
+    # recursive AND force, in ANY form/order (rm -rf / -fr / -r -f / --recursive --force) and for ANY
+    # target (incl. ./relative) — two lookaheads for "has a recursive flag" and "has a force flag" within
+    # the same command segment (stops at | ; & newline). Both required, matching the original -rf intent.
+    (r'(^|[^a-zA-Z])rm\b(?=[^|;&\n]*(?:-[a-zA-Z]*[rR]|--recursive))(?=[^|;&\n]*(?:-[a-zA-Z]*f|--force))',
+     "recursive force delete (rm -rf / -Rf / -r -f / --recursive --force, any target)"),
     (r'git\s+reset\s+--hard', "git reset --hard"),
     (r'git\s+checkout\s+--\s', "git checkout -- (discards working changes)"),
     (r'git\s+clean\s+(-[a-zA-Z]*f|[^|;&]*--force)', "git clean -f (deletes untracked files)"),
-    (r'git\s+push\s+[^|;&]*--force(?!-with-lease)', "git push --force (rewrites remote history)"),
+    (r'git\s+push\b[^|;&\n]*?(?:--force\b(?!-with-lease|-if-includes)|(?<![\w-])-[a-zA-Z]*f)',
+     "git push --force/-f (rewrites remote history; force in any short-flag position)"),
     (r'find\s[^|;&]*-delete', "find -delete"),
     (r'xargs\s+[^|;&]*\brm\b', "xargs rm"),
     (r'(^|\s)(sudo|doas)\s', "privilege escalation"),
@@ -410,7 +415,23 @@ def _selftest():
     # false-positive FIXED: a danger only ECHOED / printed is not blocked (the one miss-safe transform)
     assert not hits("echo 'to undo run git reset --hard'"), "echo literal"
     assert not hits("printf '%s' 'git reset --hard'"), "printf literal"
-    print("run.py selftest OK: strip_data_regions (echo/printf args only — miss-safe; heredoc+comment kept)")
+    # DESTRUCTIVE hardening: short/split/long flags + relative targets are now caught...
+    assert hits("git" + " push -f origin main"), "git push -f (short force flag)"
+    assert hits("rm" + " -r -f /x"), "rm -r -f (split flags)"
+    assert hits("rm" + " --recursive --force /x"), "rm --recursive --force (long flags)"
+    assert hits("rm" + " -rf ./build"), "rm -rf ./relative-target"
+    assert hits("rm" + " -Rf /x"), "rm -Rf (capital -R recursive synonym)"
+    assert hits("rm" + " -R -f /x"), "rm -R -f (capital split)"
+    assert hits("git" + " push -fu origin main"), "git push -fu (force + trailing flag letter)"
+    assert hits("git" + " push -fvn origin x"), "git push -fvn (force mid short-flag cluster)"
+    # ...without over-blocking the safe forms
+    assert not hits("git" + " push --force-with-lease origin main"), "--force-with-lease is safe"
+    assert not hits("git" + " push -u origin main"), "git push -u (set-upstream, no force)"
+    assert not hits("git" + " push -v origin main"), "git push -v (verbose, no force)"
+    assert not hits("git" + " push origin main"), "plain push"
+    assert not hits("rm" + " notes.txt"), "non-recursive rm"
+    assert not hits("rm" + " -r somedir"), "recursive without force"
+    print("run.py selftest OK: strip_data_regions + DESTRUCTIVE hardening (short/split/long flags, ./targets)")
 
 
 if __name__ == "__main__":
