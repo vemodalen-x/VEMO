@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VAL = os.path.join(ROOT, "enforcement", "validators", "task_state.py")
 HOOK = os.path.join(ROOT, "enforcement", "hooks", "run.py")
 
-GROUPS = ("validator", "ci", "hook", "git", "budget", "auto")
+GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill")
 
 CHECK_INDEX = (
     ("validator", "scope: in-scope allowed"),
@@ -89,6 +89,9 @@ CHECK_INDEX = (
     ("budget", "stuck-loop: 3x same Bash + human -> advisory exit 0"),
     ("budget", "stuck-loop: 3x same Bash + auto ON -> hard stop exit 2"),
     ("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)"),
+    ("skill", "skill-score: VEMO's own skills pass the quality bar"),
+    ("skill", "skill-audit: catalog<->disk parity + no dangling backing scripts"),
+    ("skill", "skill_check selftest passes"),
 )
 
 SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
@@ -572,6 +575,25 @@ def run_auto_checks(r):
         shutil.rmtree(tmp)
 
 
+def run_skill_checks(r):
+    if not r.has_group("skill"):
+        return
+    sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
+
+    def sc(*args):
+        return subprocess.run(["python3", sk, *args], capture_output=True, text=True)
+
+    p = sc("score", "--root", ROOT)
+    r.chk("skill", "skill-score: VEMO's own skills pass the quality bar", (p.returncode, p.stdout),
+          lambda g: g[0] == 0 and "skill-score: PASS" in g[1])
+    p = sc("audit", "--root", ROOT)
+    r.chk("skill", "skill-audit: catalog<->disk parity + no dangling backing scripts", (p.returncode, p.stdout),
+          lambda g: g[0] == 0 and "skill-audit: OK" in g[1])
+    p = sc("selftest")
+    r.chk("skill", "skill_check selftest passes", (p.returncode, p.stdout),
+          lambda g: g[0] == 0 and "selftest]" in g[1])
+
+
 def main(argv):
     # Hermetic sandboxes: VEMO_DIFF_RANGE is a REAL-repo concept (the pushed range). Our git checks
     # run pre-commit against throwaway `git init` sandboxes, so an inherited range points at revisions
@@ -602,6 +624,7 @@ def main(argv):
         run_git_checks(runner)
         run_budget_checks(runner)
         run_auto_checks(runner)
+        run_skill_checks(runner)
     except FailFast:
         pass
     return runner.report()

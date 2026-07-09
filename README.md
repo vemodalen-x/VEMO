@@ -8,7 +8,7 @@
 
 **Governance for AI coding agents that *accelerates* developers — mechanism over prose, and it *proves* its gates fire.**
 
-![version](https://img.shields.io/badge/version-1.2.0-0d9488?style=for-the-badge)
+![version](https://img.shields.io/badge/version-1.3.0-0d9488?style=for-the-badge)
 ![license](https://img.shields.io/badge/license-MIT-3b82f6?style=for-the-badge)
 [![Stars](https://img.shields.io/github/stars/vemodalen-x/VEMO?style=for-the-badge&color=f6c915)](https://github.com/vemodalen-x/VEMO/stargazers)
 
@@ -137,6 +137,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
 | `vemo tier <paths…>` / `vemo check <path>` | required risk tier / is a path in scope? |
+| `vemo skill-score` / `vemo skill-audit` | quality bar for VEMO's own skills (frontmatter / naming / catalog parity) / catalog-vs-disk consistency audit |
 
 ## 🧩 Skills
 
