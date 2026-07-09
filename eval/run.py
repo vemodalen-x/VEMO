@@ -14,9 +14,82 @@ import subprocess
 import sys
 import tempfile
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VAL = os.path.join(ROOT, "enforcement", "validators", "task_state.py")
 HOOK = os.path.join(ROOT, "enforcement", "hooks", "run.py")
+
+
+def bash_exe():
+    if os.name != "nt":
+        return "bash"
+    candidates = []
+    try:
+        p = subprocess.run(["git", "--exec-path"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", check=True)
+        git_root = os.path.abspath(os.path.join(p.stdout.strip(), "..", "..", ".."))
+        candidates.append(os.path.join(git_root, "usr", "bin", "bash.exe"))
+    except Exception:
+        pass
+    candidates.extend([
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\usr\bin\bash.exe",
+    ])
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate
+    return "bash"
+
+
+BASH = bash_exe()
+
+
+def python3_shim_dir():
+    if os.name != "nt":
+        return None
+    d = os.path.join(tempfile.gettempdir(), "vemo_eval_python3_shim")
+    os.makedirs(d, exist_ok=True)
+    exe = sys.executable.replace("\\", "/")
+    sh = os.path.join(d, "python3")
+    cmd = os.path.join(d, "python3.cmd")
+    open(sh, "w", encoding="utf-8").write(
+        "#!/usr/bin/env sh\n"
+        "if command -v cygpath >/dev/null 2>&1 && [ \"$#\" -gt 0 ]; then\n"
+        "  first=\"$1\"\n"
+        "  case \"$first\" in\n"
+        "    /*) first=\"$(cygpath -w \"$first\")\"; shift; exec \"" + exe + "\" \"$first\" \"$@\" ;;\n"
+        "  esac\n"
+        "fi\n"
+        "exec \"" + exe + "\" \"$@\"\n"
+    )
+    open(cmd, "w", encoding="utf-8").write(f'@echo off\r\n"{sys.executable}" %*\r\n')
+    try:
+        os.chmod(sh, 0o755)
+    except OSError:
+        pass
+    return d
+
+
+PYTHON3_SHIM = python3_shim_dir()
+
+
+def child_env(**extra):
+    env = dict(os.environ)
+    path_parts = []
+    if PYTHON3_SHIM:
+        path_parts.append(PYTHON3_SHIM)
+    if os.name == "nt" and os.path.isabs(BASH):
+        git_usr = os.path.dirname(BASH)
+        git_root = os.path.abspath(os.path.join(git_usr, "..", ".."))
+        path_parts.extend([git_usr, os.path.join(git_root, "bin")])
+    if path_parts:
+        env["PATH"] = os.pathsep.join(path_parts + [env.get("PATH", "")])
+    env.update(extra)
+    return env
 
 GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill")
 
@@ -228,15 +301,16 @@ def normalize_csv(values, lower=False):
 
 
 def run(root, *args):
-    env = dict(os.environ, VEMO_ROOT=root)
-    return subprocess.run(["python3", VAL, *args], capture_output=True, text=True, env=env).stdout.strip()
+    env = child_env(VEMO_ROOT=root)
+    return subprocess.run([sys.executable, VAL, *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=env).stdout.strip()
 
 
 def hook(root, guard, payload):
     """Feed a real hook payload to the dispatcher; return (exit_code, stderr)."""
-    env = dict(os.environ, VEMO_ROOT=root)
-    p = subprocess.run(["python3", HOOK, guard], input=json.dumps(payload),
-                       capture_output=True, text=True, env=env)
+    env = child_env(VEMO_ROOT=root)
+    p = subprocess.run([sys.executable, HOOK, guard], input=json.dumps(payload),
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     return p.returncode, p.stderr.strip()
 
 
@@ -255,6 +329,18 @@ def sandbox(tier=None, task=None, cfg_sub=()):
     if task:
         open(os.path.join(d, "tasks", "T.md"), "w", encoding="utf-8").write(task)
     return d
+
+
+def remove_tree(path):
+    """Best-effort temp cleanup that handles read-only Git object files on Windows."""
+    def retry(func, target, _exc):
+        try:
+            os.chmod(target, 0o700)
+            func(target)
+        except OSError:
+            pass
+
+    shutil.rmtree(path, onerror=retry)
 
 
 def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null",
@@ -291,7 +377,7 @@ def run_validator_checks(r):
     d = sandbox(task=task('["src/feature/**"]'))
     r.chk("validator", "scope: in-scope allowed", run(d, "scope-check", "--path", d + "/src/feature/x.py"), "in-scope")
     r.chk("validator", "scope: out-of-scope flagged", run(d, "scope-check", "--path", d + "/src/other/x.py"), "out-of-scope")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox()
     r.chk("validator", "tier: README->R0", run(d, "tier-required", "--paths", "README.md"), lambda g: g == "R0")
@@ -302,49 +388,49 @@ def run_validator_checks(r):
     r.chk("validator", "tier: .claude/settings.json is R2 (self-protection)", run(d, "tier-required", "--paths", ".claude/settings.json"), lambda g: g == "R2")
     r.chk("validator", "tier: vemo.config.yaml is R2 (self-protection)", run(d, "tier-required", "--paths", "vemo.config.yaml"), lambda g: g == "R2")
     r.chk("validator", "tier: specs/** is R2 (self-protection)", run(d, "tier-required", "--paths", "specs/safety.spec.md"), lambda g: g == "R2")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     dh, df = sandbox(tier="high"), sandbox(tier="frontier")
     r.chk("validator", "monotonic: frontier verifiers > high", "",
           lambda _: vnum(run(df, "verify-plan", "--risk", "R2")) > vnum(run(dh, "verify-plan", "--risk", "R2")))
-    shutil.rmtree(dh)
-    shutil.rmtree(df)
+    remove_tree(dh)
+    remove_tree(df)
 
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed"))
     r.chk("validator", "exec-evidence: 'passed' w/o run trace BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "executed-evidence-missing")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence="totally/fake/nonexistent.log"))
     r.chk("validator", "exec-evidence: FAKE evidence path BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "evidence-file-missing")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"))
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("$ true\n[exit 0]\n")
     r.chk("validator", "exec-evidence: real evidence file ok", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["docs/**"]', state="ImplementationDone", risk="R0"))
     r.chk("validator", "R0: acceptance-before-push exempt", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"true"')])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python -c "import sys; sys.exit(0)"')])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
     r.chk("validator", "receipt: build configured + NO receipt -> BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "no-verify-receipt")
     r.chk("validator", "receipt: verify-run executes and passes", run(d, "verify-run"), lambda g: g.startswith("pass"))
     r.chk("validator", "receipt: gate ok after verify-run", run(d, "gate-check", "--gate", "acceptance-before-push"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log"),
-                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1"false"')])
+                cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python -c "import sys; sys.exit(1)"')])
     os.makedirs(os.path.join(d, ".vemo", "run"))
     open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
     run(d, "verify-run")
     r.chk("validator", "receipt: failing build -> receipt-failed BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "receipt-failed")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
     r.chk("validator", "judge: front-matter pass w/o provenance BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-no-provenance")
@@ -352,26 +438,26 @@ def run_validator_checks(r):
     r.chk("validator", "judge: high-tier R2 one pass still BLOCKED", run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e-2")
     r.chk("validator", "judge: high-tier R2 required pass count ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
     run(d, "judge-record", "--task", "T", "--verdict", "fail")
     r.chk("validator", "judge: provenance says FAIL, front-matter says pass -> BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-provenance-mismatch")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(tier="low", task=task('["src/**"]', risk="R1", verdict="pass"))
     r.chk("validator", "judge: low-tier R1 requires provenance", run(d, "gate-check", "--gate", "required-judge"), "judge-no-provenance")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "low-r1")
     r.chk("validator", "judge: low-tier R1 one pass ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(tier="high", task=task('["src/**"]', risk="R1", verdict="null"))
     r.chk("validator", "judge: high-tier R1 self-verifies (no judge required)", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=("---\nid: T\nrisk: R1\nstate: ImplementationDone\nscope_in: [\"src/**\"]\n"
                       "acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: \".vemo/run/1.log\" }\n"
                       "judge: { required: false, verdict: null }\nowning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n"))
     r.chk("validator", "parser: inline-map acceptance parses (spec example)", run(d, "get", "--field", "acceptance.status"), lambda g: g == "passed")
     r.chk("validator", "parser: inline-map gate-check does not crash", run(d, "gate-check", "--gate", "acceptance-before-push"), "block:")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/a/**"]', task_id="TA"))
     open(os.path.join(d, "tasks", "T2.md"), "w", encoding="utf-8").write(
@@ -380,17 +466,17 @@ def run_validator_checks(r):
     run(d, "bind", "--session", "s-A", "--task", "TA")
     r.chk("validator", "bind: bound session checked against ITS OWN task", run(d, "scope-check", "--path", d + "/src/a/x.py", "--session", "s-A"), "in-scope")
     r.chk("validator", "bind: bound session out-of-scope on the other task's area", run(d, "scope-check", "--path", d + "/src/b/x.py", "--session", "s-A"), "out-of-scope")
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox()
     r.chk("validator", "safety_invariant_of_capability=true", run(d, "config-get", "--field", "enforcement.safety_invariant_of_capability"), lambda g: str(g).lower() == "true")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', trifecta='[private_data, untrusted_content, external_comms]'))
     r.chk("validator", "rule-of-two: 3/3 trifecta BLOCKED", run(d, "trifecta-check"), "block:rule-of-two")
-    shutil.rmtree(d)
+    remove_tree(d)
     d = sandbox(task=task('["src/**"]', trifecta='[private_data, external_comms]'))
     r.chk("validator", "rule-of-two: 2/3 allowed", run(d, "trifecta-check"), lambda g: g.startswith("ok"))
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]'))
     brief = run(d, "context")
@@ -404,7 +490,7 @@ def run_validator_checks(r):
     body = open(os.path.join(d, "tasks", "T.md"), encoding="utf-8").read()
     r.chk("validator", "heartbeat: stamps the task file in place", hb,
           lambda g: g.startswith("heartbeat:T=") and "heartbeat: 2026-06-16T20:00" not in body)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/a/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log", task_id="TA"))
@@ -415,12 +501,12 @@ def run_validator_checks(r):
           run(d, "gate-check", "--gate", "acceptance-before-push",
               "--task-file", "tasks/T.md", "--task-file", "tasks/T2.md"),
           lambda g: g.startswith("block:") and "[task=TB]" in g)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox()
     r.chk("validator", "tier: .gitignore is R2 (audit visibility)",
           run(d, "tier-required", "--paths", ".gitignore"), lambda g: g == "R2")
-    shutil.rmtree(d)
+    remove_tree(d)
 
 
 def run_ci_checks(r):
@@ -468,12 +554,12 @@ def run_hook_checks(r):
     tele = open(os.path.join(d, ".vemo", "telemetry.jsonl"), encoding="utf-8").read()
     r.chk("hook", "hook e2e: telemetry recorded blocks + session_start", tele,
           lambda g: "scope_block_out" in g and "session_start" in g)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]', approved='["git reset --hard HEAD~1"]'))
     rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git reset --hard HEAD~1"}})
     r.chk("hook", "hook e2e: task-approved destructive cmd allowed + logged", (rc, err), lambda g: g[0] == 0)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]'))
     rc, err = hook(d, "stop", {"session_id": "eval-s1"})
@@ -482,15 +568,15 @@ def run_hook_checks(r):
     tele = open(os.path.join(d, ".vemo", "telemetry.jsonl"), encoding="utf-8").read()
     r.chk("hook", "hook e2e: Stop/SubagentStop telemetry recorded", tele,
           lambda g: rc2 == 0 and "stop_below_acceptance" in g and "subagent_stop" in g)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/feature/**"]'), cfg_sub=[(r'(?m)^(\s*mode:\s*)enforce', r'\1monitor')])
     rc, err = hook(d, "edit", edit_payload(d + "/src/other/x.py"))
     r.chk("hook", "hook e2e: monitor mode logs but does NOT block", (rc, err), lambda g: g[0] == 0 and "monitor mode" in g[1])
-    shutil.rmtree(d)
+    remove_tree(d)
 
-    # data-region precision (strip_data_regions): a dangerous command that is only QUOTED — in an echo,
-    # a quoted-delimiter heredoc body, or a comment line the agent is writing — must NOT hard-block,
+    # data-region precision (strip_data_regions): a dangerous command that is only QUOTED 鈥?in an echo,
+    # a quoted-delimiter heredoc body, or a comment line the agent is writing 鈥?must NOT hard-block,
     # while a really-executed one still does (covered by the destructive-command check above).
     d = sandbox(task=task('["src/**"]'))
     rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo 'to undo, run git reset --hard'"}})
@@ -505,8 +591,9 @@ def run_hook_checks(r):
     r.chk("hook", "hook e2e: false-heredoc marker cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
     rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "# cleanup: <<'W'\ngit reset --hard HEAD~9\nW"}})
     r.chk("hook", "hook e2e: commented-out heredoc opener cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
-    shutil.rmtree(d)
-    sp = subprocess.run(["python3", HOOK, "--selftest"], capture_output=True, text=True)
+    remove_tree(d)
+    sp = subprocess.run([sys.executable, HOOK, "--selftest"], capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
     r.chk("hook", "hook: strip_data_regions selftest passes", (sp.returncode, sp.stdout),
           lambda g: g[0] == 0 and "selftest OK" in g[1])
 
@@ -521,7 +608,7 @@ def run_hook_checks(r):
     r.chk("hook", "hook e2e: rm -rf relative ./ target blocked", (rc, err), lambda g: g[0] == 2)
     rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin main"}})
     r.chk("hook", "hook e2e: git push --force-with-lease allowed (no over-block)", (rc, err), lambda g: g[0] == 0)
-    shutil.rmtree(d)
+    remove_tree(d)
 
 
 def run_git_checks(r):
@@ -535,10 +622,12 @@ def run_git_checks(r):
     os.makedirs(os.path.join(d, "src"))
     open(os.path.join(d, "src", "secret.py"), "w", encoding="utf-8").write(SECRET_FIXTURE + "\n")
     subprocess.run(["git", "add", "src/secret.py"], cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True)
+    p = subprocess.run([BASH, "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
+                       env=child_env(),
+                       encoding="utf-8", errors="replace")
     r.chk("git", "pre-commit e2e: staged secret exits 1 + reason", p.stdout + p.stderr,
           lambda g: p.returncode == 1 and "secret-scan" in g)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox()
     install_precommit_fixture(d)
@@ -547,7 +636,7 @@ def run_git_checks(r):
     subprocess.run(["git", "commit", "--allow-empty", "-m", "base"], cwd=d,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
-                          text=True, check=True).stdout.strip()
+                          text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
     os.makedirs(os.path.join(d, "src", "core"), exist_ok=True)
     open(os.path.join(d, "tasks", "T1.md"), "w", encoding="utf-8").write(
         task('["src/core/**", "tasks/T1.md", ".vemo/judge.jsonl"]', state="AcceptancePassed", risk="R2",
@@ -568,11 +657,12 @@ def run_git_checks(r):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     subprocess.run(["git", "commit", "-m", "r1 task"], cwd=d,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-    p = subprocess.run(["bash", "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
-                       env=dict(os.environ, VEMO_DIFF_RANGE=f"{base}...HEAD"))
+    p = subprocess.run([BASH, "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace",
+                       env=child_env(VEMO_DIFF_RANGE=f"{base}...HEAD"))
     r.chk("git", "pre-commit e2e: range with multiple task scopes exits 0", p.stdout + p.stderr,
           lambda g: p.returncode == 0)
-    shutil.rmtree(d)
+    remove_tree(d)
 
 
 def run_budget_checks(r):
@@ -586,14 +676,14 @@ def run_budget_checks(r):
     json.dump({"enabled": False}, open(os.path.join(d, ".vemo", "auto_mode.json"), "w", encoding="utf-8"))
     rc, err = hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/x.py"}})
     r.chk("budget", "hook e2e: budget exceeded + human present -> advisory exit 0", (rc, err), lambda g: g[0] == 0 and "advisory" in g[1])
-    shutil.rmtree(d)
+    remove_tree(d)
 
     d = sandbox(task=task('["src/**"]'))
     hook(d, "budget", {"tool_name": "Read", "tool_input": {"file_path": d + "/src/r.py"}, "session_id": "s9"})
     hook(d, "budget", {"tool_name": "Edit", "tool_input": {"file_path": d + "/src/w.py"}, "session_id": "s9"})
     st = run(d, "budget-status", "--session", "s9")
     r.chk("budget", "budget: files counts writes only (1, not 2)", st, lambda g: "files=1/" in g)
-    shutil.rmtree(d)
+    remove_tree(d)
 
     same_cmd = {"tool_name": "Bash", "tool_input": {"command": "pytest tests/test_x.py"}, "session_id": "s10"}
     d = sandbox(task=task('["src/**"]'))
@@ -606,7 +696,7 @@ def run_budget_checks(r):
     rc, err = hook(d, "budget", same_cmd)
     r.chk("budget", "stuck-loop: 3x same Bash + auto ON -> hard stop exit 2", (rc, err),
           lambda g: g[0] == 2 and "stuck-loop" in g[1] and "STOP RULE" in g[1])
-    shutil.rmtree(d)
+    remove_tree(d)
 
 
 def run_auto_checks(r):
@@ -614,11 +704,12 @@ def run_auto_checks(r):
         return
     tmp = tempfile.mkdtemp(prefix="vemo_eval_")
     try:
-        p = subprocess.run(["python3", os.path.join(ROOT, "enforcement", "automation", "vemo-auto"), "on"],
-                           input="", capture_output=True, text=True, env=dict(os.environ, VEMO_ROOT=tmp))
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "enforcement", "automation", "vemo-auto"), "on"],
+                           input="", capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           env=child_env(VEMO_ROOT=tmp))
         r.chk("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)", p.stdout, "REFUSED")
     finally:
-        shutil.rmtree(tmp)
+        remove_tree(tmp)
 
 
 def run_skill_checks(r):
@@ -627,7 +718,8 @@ def run_skill_checks(r):
     sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
 
     def sc(*args):
-        return subprocess.run(["python3", sk, *args], capture_output=True, text=True)
+        return subprocess.run([sys.executable, sk, *args], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
 
     p = sc("score", "--root", ROOT)
     r.chk("skill", "skill-score: VEMO's own skills pass the quality bar", (p.returncode, p.stdout),
