@@ -3,6 +3,40 @@
 All notable changes to VEMO are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](https://semver.org/).
 
+## [1.4.0] — 2026-07-08
+
+Ports two improvements reviewed from the sibling Wildmeerkat framework (v2.16.0/v2.17.0).
+
+### Fixed
+- **Danger-command gate false-positives** (`enforcement/hooks/run.py`): `guard_command` matched the
+  DESTRUCTIVE patterns against the raw command, so a dangerous command that was merely ECHOED
+  (`echo 'run git reset --hard to undo'`) was hard-blocked (exit 2). Added `strip_data_regions` to
+  reduce an `echo`/`printf` segment to just its command name before matching — but ONLY when the segment
+  has no command substitution (`$(`/backtick) and no redirect (`>`/`<`), so the builtin's literal
+  arguments are provably pure data. This is the one STRUCTURALLY miss-safe transform: a real command can
+  only sit in its own segment (after a `|`/`&`/`&&`/`;`/newline splitter — the full bash command-separator
+  set), which is preserved; a `;`/newline inside a quoted echo arg merely over-splits (over-block = the
+  safe side). Heredoc-body and comment-line stripping were also tried but REMOVED — reliably telling
+  quoted/commented data from live code ACROSS lines needs a real shell parser, not a regex. Adversarial
+  review found four bypasses in that heredoc/comment stripping (a `<<'W'` look-alike quoted / commented /
+  backslash-escaped; a quote closing on a `#` line) — plus a fifth in the echo strip itself (a missing
+  bare-`&` background separator, now added). All are fixed/removed; those forms now simply keep matching
+  (a harmless over-block). Fail-safe: any error returns the raw command. Everything except echo/printf
+  literal args — real commands, `&`/`&&`/`;` segments, `$()`/backticks, heredocs, comments, and all
+  redirect operators/targets — is preserved byte-for-byte -> zero new missed blocks, proven by a two-way
+  `run.py --selftest` (incl. all five review carriers) + hook e2e checks.
+
+### Added
+- **`vemo skill-roster`** + a one-line skills listing in the `vemo context` session brief
+  (`skill_check.py roster`, reusing `collect()`), so the agent sees which skills exist at session start
+  and under-invokes them less. Read-only, additive.
+- eval `hook`/`skill` groups gain 8 checks -> conformance 71 -> 79/79.
+
+### Verification
+- `python3 eval/run.py` 79/79 · `vemo selfcheck` OK · `python3 enforcement/hooks/run.py --selftest` OK ·
+  `vemo verify` receipt (build/smoke exit 0). R2: 2 independent governance-judge passes recorded in
+  `.vemo/judge.jsonl` before merge.
+
 ## [1.3.0] — skill quality bar + registry consistency audit
 
 Ports the sibling skill-home's transparent skill scorer into VEMO and adds a catalog<->disk consistency

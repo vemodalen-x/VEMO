@@ -92,6 +92,14 @@ CHECK_INDEX = (
     ("skill", "skill-score: VEMO's own skills pass the quality bar"),
     ("skill", "skill-audit: catalog<->disk parity + no dangling backing scripts"),
     ("skill", "skill_check selftest passes"),
+    ("skill", "skill-roster lists the on-disk skills"),
+    ("hook", "hook e2e: dangerous cmd quoted in echo NOT blocked (data-region)"),
+    ("hook", "hook e2e: backslash-escaped heredoc opener cannot hide a real destructive command"),
+    ("hook", "hook e2e: cross-line-quote comment carrier cannot hide a real destructive command"),
+    ("hook", "hook e2e: danger after a bare & (background op) cannot hide behind an echo"),
+    ("hook", "hook e2e: false-heredoc marker cannot hide a real destructive command"),
+    ("hook", "hook e2e: commented-out heredoc opener cannot hide a real destructive command"),
+    ("hook", "hook: strip_data_regions selftest passes"),
 )
 
 SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
@@ -477,6 +485,27 @@ def run_hook_checks(r):
     r.chk("hook", "hook e2e: monitor mode logs but does NOT block", (rc, err), lambda g: g[0] == 0 and "monitor mode" in g[1])
     shutil.rmtree(d)
 
+    # data-region precision (strip_data_regions): a dangerous command that is only QUOTED — in an echo,
+    # a quoted-delimiter heredoc body, or a comment line the agent is writing — must NOT hard-block,
+    # while a really-executed one still does (covered by the destructive-command check above).
+    d = sandbox(task=task('["src/**"]'))
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo 'to undo, run git reset --hard'"}})
+    r.chk("hook", "hook e2e: dangerous cmd quoted in echo NOT blocked (data-region)", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "cat \\<<'W'\ngit reset --hard HEAD~9\nW"}})
+    r.chk("hook", "hook e2e: backslash-escaped heredoc opener cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "eval '\n#c' ; rm -rf /"}})
+    r.chk("hook", "hook e2e: cross-line-quote comment carrier cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "echo x & rm -rf /"}})
+    r.chk("hook", "hook e2e: danger after a bare & (background op) cannot hide behind an echo", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": 'echo "see <<\'EOF\'"\ngit reset --hard HEAD~9\nEOF'}})
+    r.chk("hook", "hook e2e: false-heredoc marker cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "# cleanup: <<'W'\ngit reset --hard HEAD~9\nW"}})
+    r.chk("hook", "hook e2e: commented-out heredoc opener cannot hide a real destructive command", (rc, err), lambda g: g[0] == 2)
+    shutil.rmtree(d)
+    sp = subprocess.run(["python3", HOOK, "--selftest"], capture_output=True, text=True)
+    r.chk("hook", "hook: strip_data_regions selftest passes", (sp.returncode, sp.stdout),
+          lambda g: g[0] == 0 and "selftest OK" in g[1])
+
 
 def run_git_checks(r):
     if not r.has_group("git"):
@@ -592,6 +621,9 @@ def run_skill_checks(r):
     p = sc("selftest")
     r.chk("skill", "skill_check selftest passes", (p.returncode, p.stdout),
           lambda g: g[0] == 0 and "selftest]" in g[1])
+    p = sc("roster", "--root", ROOT)
+    r.chk("skill", "skill-roster lists the on-disk skills", (p.returncode, p.stdout),
+          lambda g: g[0] == 0 and "VEMO skills (" in g[1])
 
 
 def main(argv):

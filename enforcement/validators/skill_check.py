@@ -162,6 +162,18 @@ def audit_consistency(root):
     return {"skills": len(rows), "issues": issues, "pass": not issues}
 
 
+# ── roster (agent/human visibility of what skills exist) ─────────────────────────
+def roster(root):
+    """Compact 'what skills exist' listing (name + short purpose) for `vemo skill-roster` and the
+    session brief. Reuses collect() so it never drifts from the on-disk skills."""
+    out = []
+    for r in collect(root):
+        desc = (r["description"] or "").strip()
+        short = re.split(r"(?<=[.。])\s", desc)[0] if desc else ""
+        out.append((r["name_dir"], short[:96]))
+    return out
+
+
 # ── hermetic selftest (no model / network) ──────────────────────────────────────
 def _mk(root, name, fm_name=None, desc="Do a thing. Use when a thing must be done.", script=None, cite=None):
     d = os.path.join(root, "skill", name)
@@ -243,7 +255,7 @@ def _print_audit(rep):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for c in ("score", "audit"):
+    for c in ("score", "audit", "roster"):
         sp = sub.add_parser(c)
         sp.add_argument("--root", default=ROOT)
     sub.add_parser("selftest")
@@ -256,6 +268,12 @@ def main():
         rep = audit_consistency(a.root)
         _print_audit(rep)
         return 0 if rep["pass"] else 1
+    if a.cmd == "roster":
+        rows = roster(a.root)
+        print("VEMO skills (%d):" % len(rows))
+        for name, short in rows:
+            print("  %-30s %s" % (name, short))
+        return 0
     if a.cmd == "selftest":
         return selftest()
     return 2

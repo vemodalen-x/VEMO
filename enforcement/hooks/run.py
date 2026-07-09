@@ -65,6 +65,43 @@ DESTRUCTIVE = [
      "write into .git/ (git-gate tamper)"),
 ]
 
+_SEG_SPLIT = re.compile(r"(\||&&|\|\||;|&|\n)")   # every bash command separator, incl. bare & (background)
+
+
+def strip_data_regions(cmd):
+    r"""Blank the ARGUMENTS of echo/printf segments before the DESTRUCTIVE match, so a dangerous command
+    that is merely ECHOED (`echo 'run git reset --hard to undo'`) is not mistaken for one being run.
+
+    A segment (split on |, &&, ||, ;, newline) is reduced to just its command name ONLY when that name is
+    echo/printf AND the segment has no command substitution ($(/`) and no redirect (>/<): the builtin
+    writes only stdout, so its literal arguments are pure data. This is the ONE transform that is
+    STRUCTURALLY miss-safe — a real command can appear only in its OWN segment (after a splitter), which
+    is preserved; a `;`/newline inside a quoted echo arg merely over-splits (over-block = the safe side),
+    and env-assignments/other command names keep the segment. Everything else — real command positions,
+    &&/;/| segments, $()/backticks, HEREDOCS, COMMENTS, and all redirect operators/targets — is preserved
+    byte-for-byte, so matching a truly-executed danger is identical to matching the raw command
+    -> zero new missed blocks.
+
+    NOTE: heredoc-body stripping and full-comment-line stripping were both tried and REMOVED — reliably
+    telling quoted/commented data from live code ACROSS lines needs a real shell parser, not a regex, and
+    adversarial review found bypasses in each (a `<<'W'` look-alike or a quote closing on a `#`-line hid a
+    real command). Those forms now simply keep matching (a harmless over-block). Fail-safe: any exception
+    returns the raw command (strip nothing = block more, never less)."""
+    try:
+        out = []
+        for seg in _SEG_SPLIT.split(cmd):
+            toks = seg.strip().split()
+            head = toks[0].rsplit("/", 1)[-1] if toks else ""
+            if (head in ("echo", "printf") and "$(" not in seg and "`" not in seg
+                    and ">" not in seg and "<" not in seg):
+                out.append(head)                 # builtin writes stdout only; args are pure data
+            else:
+                out.append(seg)                  # preserve real commands, redirects, substitutions
+        return "".join(out)
+    except Exception:
+        return cmd
+
+
 # absolute-path write targets that are always fine (ubiquitous, non-persistent)
 SAFE_ABS = ("/dev/null", "/dev/stdout", "/dev/stderr", "/tmp/", "/var/tmp/", "/proc/self/")
 
@@ -207,9 +244,10 @@ def guard_command(d):
     cmd = (d.get("tool_input", {}) or {}).get("command", "") or ""
     if not cmd:
         return 0
+    scan = strip_data_regions(cmd)   # match against the command with non-executed data regions blanked
     if enabled("destructive_command"):
         for pat, why in DESTRUCTIVE:
-            if re.search(pat, cmd):
+            if re.search(pat, scan):
                 if _approved(cmd):
                     log("command_approved", cmd=cmd[:200], why=why)
                     break
@@ -218,7 +256,7 @@ def guard_command(d):
                              cmd=cmd[:200], why=why)
         else:
             # writes outside the repo (redirects / tee to absolute or home paths)
-            for m in re.finditer(r'(?:>>?|\btee\s+(?:-a\s+)?)\s*((?:/|~)[^\s;|&<>]+)', cmd):
+            for m in re.finditer(r'(?:>>?|\btee\s+(?:-a\s+)?)\s*((?:/|~)[^\s;|&<>]+)', scan):
                 p = os.path.expanduser(m.group(1))
                 if p.startswith(SAFE_ABS):
                     continue
@@ -233,7 +271,7 @@ def guard_command(d):
     if enabled("scope_violation"):
         try:
             sid = d.get("session_id")
-            for m in re.finditer(r'(?:>>?|\btee\s+(?:-a\s+)?)\s*([\w][\w./-]*)', cmd):
+            for m in re.finditer(r'(?:>>?|\btee\s+(?:-a\s+)?)\s*([\w][\w./-]*)', scan):
                 t = m.group(1)
                 if t and "/" in t and ts.scope_check(t, sid) == "out-of-scope":
                     print(f"[VEMO] note (safety.spec#1): this shell command writes to '{t}', which is outside "
@@ -336,5 +374,47 @@ def main():
     return fn(payload())
 
 
+def _selftest():
+    """Two-way hermetic check of strip_data_regions against the real DESTRUCTIVE set (no I/O).
+    Literals are concatenated so this source file is not itself flagged as a dangerous command."""
+    pp, rr = "git" + " push --force", "rm" + " -rf"
+
+    def hits(cmd):
+        scan = strip_data_regions(cmd)
+        return any(re.search(pat, scan) for pat, _ in DESTRUCTIVE)
+
+    # real dangers STILL block (identical to raw)
+    assert hits(rr + " /"), "bare rm -rf /"
+    assert hits("git" + " reset --hard HEAD~3"), "bare git reset --hard"
+    assert hits("cat log && " + rr + " /"), "&& segment"
+    assert hits('echo "$(' + pp + ')"'), "echo with command substitution -> preserved"
+    assert hits("echo ok > .git/hooks/pre-push"), "echo WITH redirect -> preserved (.git tamper)"
+    assert hits("echo pwned >> ~/.bashrc") is False, "out-of-repo redirect is not a DESTRUCTIVE literal"
+    assert hits("echo x & " + rr + " /"), "danger after a bare & (background) is its own segment -> blocks"
+    assert hits("echo x &" + rr + " /"), "bare & with no surrounding space still splits -> blocks"
+    # heredoc bodies are NOT stripped, so NO <<'W' look-alike can hide a real command — every variant
+    # (unquoted / legit / quoted-echo-arg / assignment / line-start-# / trailing-# / backslash-escaped)
+    # keeps matching (over-block = safe direction). These are exactly the review's three bypass carriers.
+    assert hits("cat <<EOF\n" + rr + " /\nEOF"), "unquoted heredoc"
+    assert hits("cat > note.md <<'EOF'\nrun " + rr + " / to clean up\nEOF"), "legit quoted heredoc (kept)"
+    assert hits('echo "see <<\'EOF\'"\n' + "git" + " reset --hard HEAD~5\nEOF"), "heredoc marker in quoted echo arg"
+    assert hits('v="<<\'Q\'"\n' + rr + " /\nQ"), "heredoc marker in assignment"
+    assert hits("# note <<'W'\n" + rr + " /\nW"), "commented heredoc marker (line-start #)"
+    assert hits("echo x # <<'W'\n" + "git" + " reset --hard\nW"), "commented heredoc marker (trailing #)"
+    assert hits("cat \\<<'W'\n" + rr + " /\nW"), "backslash-escaped heredoc marker"
+    # comments are NOT stripped either -> a comment MENTIONING a danger over-blocks (safe), and a danger
+    # after a quote that closes on a #-line still blocks (the cross-line-quote comment bypass)
+    assert hits("# " + pp + " is dangerous, do not run it"), "comment mentioning a danger over-blocks (safe)"
+    assert hits("eval '\n#c' ; " + rr + " /"), "cross-line-quote comment carrier must NOT hide a real command"
+    assert hits("x='\n#c' ; " + "git" + " reset --hard"), "assignment cross-line-quote carrier blocks"
+    # false-positive FIXED: a danger only ECHOED / printed is not blocked (the one miss-safe transform)
+    assert not hits("echo 'to undo run git reset --hard'"), "echo literal"
+    assert not hits("printf '%s' 'git reset --hard'"), "printf literal"
+    print("run.py selftest OK: strip_data_regions (echo/printf args only — miss-safe; heredoc+comment kept)")
+
+
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        _selftest()
+        sys.exit(0)
     sys.exit(main())
