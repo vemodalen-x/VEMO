@@ -6,6 +6,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- `vemo fleet`: a stdlib-only, user-local control plane for registering, discovering, assessing, and preview-first
+  onboarding Git projects across one PC. Includes canonical project ids, JSON reports, strict mode, managed-file
+  hashes, dirty/conflict refusal, optional byte-identical VEMO_SKILLS binding, and a privacy-minimized hash-chained
+  mutation log. Cross-process registry/audit locks prevent lost updates during concurrent Windows sessions.
+- Progressive `solo`, `team`, and `regulated` governance profiles plus standards/readiness documentation. Profiles are
+  adoption targets and explicitly do not claim certification.
+- Fleet unit tests are part of the conformance harness, including nested repositories, Git worktrees, dry-run safety,
+  conflict handling, registry deduplication, launcher isolation, JSON contracts, and audit tamper detection.
 - `docs/DIAGNOSTIC_PROMPTING.md`: a framework-level pattern for diagnostic coaching/tutoring prompts, abstracting
   intake -> map -> constraint -> plan -> loop -> boundary from Human 3.0 and Mr. Ranedeer-style references without
   copying external prompt text.

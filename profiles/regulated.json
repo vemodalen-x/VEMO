@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "regulated",
+  "display_name": "Regulated Ready",
+  "maturity": 3,
+  "description": "Evidence-oriented controls for higher-assurance projects; readiness is not certification.",
+  "required_checks": ["git_repository", "vemo_config", "agents_router", "task_template", "scope_guard", "secret_scan", "local_hooks", "ci_workflow", "security_policy", "contributing_policy", "codeowners", "dependency_updates", "judge_provenance", "evidence_receipt", "audit_telemetry", "release_provenance"],
+  "recommended_checks": [],
+  "manual_controls": ["Enforce protected branches, two-party review, least privilege, and periodic access review.", "Define evidence retention, incident response, recovery objectives, and approved exceptions.", "Verify release attestations and dependency provenance against documented trust policies."],
+  "standards": {
+    "NIST SSDF 1.1": ["PO.1", "PO.2", "PO.3", "PO.4", "PS.1", "PS.2", "PS.3", "PW.1", "PW.4", "PW.7", "PW.8", "PW.9", "RV.1", "RV.2", "RV.3"],
+    "NIST CSF 2.0": ["GV.OC", "GV.RM", "GV.RR", "GV.PO", "GV.OV", "GV.SC", "ID.AM", "PR.PS", "DE.CM", "RS.MA", "RC.RP"],
+    "SLSA 1.2": ["Source L2 target", "Build L2 target"],
+    "OWASP Agentic Top 10 2026": ["Least privilege", "Human approval", "Execution isolation", "Auditability"]
+  }
+}

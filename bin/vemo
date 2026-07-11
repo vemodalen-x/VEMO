@@ -34,6 +34,8 @@ EXPLAIN = {
                   "model -> less prescription, more self-verify. Raise it when you upgrade the model.",
     "presets": "`vemo init --preset python|node|cpp|docs` writes a stack overlay (vemo.config.preset.yaml) so "
                "VEMO is preconfigured for your repo type. Convention over configuration.",
+    "fleet": "`vemo fleet` is the private local control plane for all Git projects on this PC: discover, "
+             "register, assess, and preview-first onboard against progressive policy profiles.",
     "verify": "`vemo verify` EXECUTES paths.build/paths.smoke and writes an evidence log + a machine "
               "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
               "typed into front-matter. Executed ground truth, produced by the gate's own side.",
@@ -115,6 +117,7 @@ HELP = """vemo <command>
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
   check <path>                    is a path inside the active task's scope?
+  fleet <command>                 install | discover | register | status | onboard | profiles | audit
   skill-score                     quality bar for VEMO's own skills (frontmatter/name/catalog parity/backing scripts)
   skill-audit                     catalog<->disk consistency audit of the skill registry
   skill-roster                    list VEMO's own skills (name + purpose) — what the agent can invoke"""
@@ -146,6 +149,9 @@ def main():
         print(_ts("tier-required", "--paths", *(a[1:] or ["."]))); return 0
     if c == "check":
         print(_ts("scope-check", "--path", a[1] if len(a) > 1 else ".")); return 0
+    if c == "fleet":
+        fleet = os.path.join(ROOT, "bin", "vemo_fleet.py")
+        return subprocess.run([PY, fleet, "--source-root", ROOT] + a[1:]).returncode
     if c in ("skill-score", "skill-audit", "skill-roster"):
         sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
         return subprocess.run([PY, sk, c.split("-", 1)[1]]).returncode

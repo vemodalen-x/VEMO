@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "solo",
+  "display_name": "Solo Baseline",
+  "maturity": 1,
+  "description": "Low-friction local governance for individual and experimental projects.",
+  "required_checks": ["git_repository", "vemo_config", "agents_router", "task_template", "scope_guard", "secret_scan"],
+  "recommended_checks": ["local_hooks", "ci_workflow", "security_policy", "audit_telemetry"],
+  "manual_controls": ["Back up important data and define recovery expectations."],
+  "standards": {
+    "NIST SSDF 1.1": ["PO.1", "PS.1", "PW.4", "RV.1"],
+    "NIST CSF 2.0": ["GV.PO", "ID.AM", "PR.PS"]
+  }
+}
