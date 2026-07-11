@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "team",
+  "display_name": "Team Managed",
+  "maturity": 2,
+  "description": "Shared development controls with authoritative CI, ownership, and review evidence.",
+  "required_checks": ["git_repository", "vemo_config", "agents_router", "task_template", "scope_guard", "secret_scan", "local_hooks", "ci_workflow", "security_policy", "contributing_policy", "judge_provenance"],
+  "recommended_checks": ["codeowners", "dependency_updates", "evidence_receipt", "audit_telemetry", "release_provenance"],
+  "manual_controls": ["Require the VEMO CI check and pull-request review on protected branches.", "Assign accountable owners for governance, release, and incident response."],
+  "standards": {
+    "NIST SSDF 1.1": ["PO.2", "PO.3", "PS.2", "PW.7", "RV.1"],
+    "NIST CSF 2.0": ["GV.RR", "GV.SC", "PR.PS", "DE.CM"],
+    "SLSA 1.2": ["Source L1", "Build L1"]
+  }
+}

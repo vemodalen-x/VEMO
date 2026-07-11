@@ -138,7 +138,26 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
 | `vemo tier <paths…>` / `vemo check <path>` | required risk tier / is a path in scope? |
+| `vemo fleet <command>` | PC-wide inventory, profiles, readiness reports, preview-first onboarding, audit verification |
 | `vemo skill-score` / `vemo skill-audit` | quality bar for VEMO's own skills (frontmatter / naming / catalog parity) / catalog-vs-disk consistency audit |
+
+### One PC, many projects
+
+Install a user-local launcher once, discover Git projects without changing them, then opt projects into a policy
+profile explicitly:
+
+```powershell
+python bin\vemo fleet install
+python bin\vemo fleet install --apply
+vemo fleet discover C:\Users\User\Documents --max-depth 6
+vemo fleet register C:\work\product-a --profile solo
+vemo fleet status --json
+vemo fleet onboard C:\work\product-a --profile solo  # dry-run; add --skills-root and --apply only by consent
+```
+
+Fleet is local-first: its registry and hash-chained audit log stay under `VEMO_HOME`; discovery and status are
+read-only; onboarding refuses dirty worktrees and project-owned conflicts. See [docs/FLEET.md](docs/FLEET.md) for the
+operating model and [docs/STANDARDS.md](docs/STANDARDS.md) for the NIST SSDF/CSF, SLSA, OWASP, and OpenSSF mapping.
 
 ## 🧩 Skills
 
@@ -165,6 +184,8 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
 | Design diagnostic coaching/tutoring agent flows | [docs/DIAGNOSTIC_PROMPTING.md](docs/DIAGNOSTIC_PROMPTING.md) |
+| Govern every Git project on one PC | [docs/FLEET.md](docs/FLEET.md) |
+| Understand standards and commercial readiness mapping | [docs/STANDARDS.md](docs/STANDARDS.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |
 | Threat model · roadmap | [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) |

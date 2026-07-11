@@ -91,7 +91,7 @@ def child_env(**extra):
     env.update(extra)
     return env
 
-GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill")
+GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill", "fleet")
 
 CHECK_INDEX = (
     ("validator", "scope: in-scope allowed"),
@@ -166,6 +166,7 @@ CHECK_INDEX = (
     ("skill", "skill-audit: catalog<->disk parity + no dangling backing scripts"),
     ("skill", "skill_check selftest passes"),
     ("skill", "skill-roster lists the on-disk skills"),
+    ("fleet", "fleet unit suite passes"),
     ("hook", "hook e2e: dangerous cmd quoted in echo NOT blocked (data-region)"),
     ("hook", "hook e2e: backslash-escaped heredoc opener cannot hide a real destructive command"),
     ("hook", "hook e2e: cross-line-quote comment carrier cannot hide a real destructive command"),
@@ -737,6 +738,18 @@ def run_skill_checks(r):
           lambda g: g[0] == 0 and "VEMO skills (" in g[1])
 
 
+def run_fleet_checks(r):
+    if not r.has_group("fleet"):
+        return
+    p = subprocess.run(
+        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=child_env(),
+    )
+    r.chk("fleet", "fleet unit suite passes", (p.returncode, p.stdout + p.stderr),
+          lambda g: g[0] == 0 and "OK" in g[1])
+
+
 def main(argv):
     # Hermetic sandboxes: VEMO_DIFF_RANGE is a REAL-repo concept (the pushed range). Our git checks
     # run pre-commit against throwaway `git init` sandboxes, so an inherited range points at revisions
@@ -768,6 +781,7 @@ def main(argv):
         run_budget_checks(runner)
         run_auto_checks(runner)
         run_skill_checks(runner)
+        run_fleet_checks(runner)
     except FailFast:
         pass
     return runner.report()
