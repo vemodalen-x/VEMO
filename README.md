@@ -128,12 +128,13 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + git gates + tasks/) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
-| `vemo verify` | **execute** `paths.build/smoke` → evidence log + machine receipt (what the push gate trusts) |
+| `vemo verify [--no-cache]` | execute the task's focused/full/release profile; reuse only a matching scope fingerprint |
 | `vemo doctor` | health check (config, hooks, tools, stale tasks, gates-heartbeat) |
 | `vemo selfcheck` | internal consistency: ENFORCED-BY claims and config keys must map to real consumers |
 | `vemo eval` | executable conformance harness, validator + hook end-to-end (writes `eval/out/report.json`) |
-| `vemo judge-brief [--lens <l>]` | evidence dossier for a judge pass (claims · gates · receipt · changes + lens checklist) |
+| `vemo judge-brief [--lens <l>] [--range <r>]` | staged/range-only dossier; excludes other tasks' untracked files |
 | `vemo heartbeat` | stamp the active task's heartbeat in place (no hand-editing the task file) |
+| `vemo task create\|note\|state` | create/update task records with tool-written RFC3339 UTC timestamps |
 | `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify` |
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |

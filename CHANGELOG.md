@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- Cost-proportional verification profiles: `focused` runs task-local test/lint/smoke, `full` runs repository
+  build/smoke, and `release` adds the configured package scan. Successful runs reuse a scope-and-command SHA-256
+  cache; `--no-cache` forces execution and stale receipts are blocked.
+- Tool-owned task mutation commands (`vemo task create|note|state`) and RFC3339 UTC timestamps across heartbeat,
+  receipts, judge provenance, budgets, and stale-task checks.
 - `vemo fleet`: a stdlib-only, user-local control plane for registering, discovering, assessing, and preview-first
   onboarding Git projects across one PC. Includes canonical project ids, JSON reports, strict mode, managed-file
   hashes, dirty/conflict refusal, optional byte-identical VEMO_SKILLS binding, and a privacy-minimized hash-chained
@@ -20,6 +25,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 - `docs/PLAYBOOK_ADOPTION.md`: migration guidance for converting repo-local agent playbooks into VEMO mechanisms.
 
 ### Fixed
+- `vemo verify` now executes configured leading `python3` commands with the current interpreter on Windows,
+  avoiding the non-runnable WindowsApps launcher placeholder (`9009`) while preserving Unix behavior.
+- Workflow risk classification now uses patch semantics: pure additive Python/dependency initialization may be R1,
+  while gate, trigger, permission, security, release, deploy, and attestation changes remain R2. Path-only queries
+  stay fail-safe R2. Shell/working-directory changes, command chaining, release uploads, and deleted-workflow
+  semantics are explicitly fail-safe. Critical class strength is ordered, and release-class tasks mechanically
+  require the release verification profile/package scan. Workflow renames are evaluated as delete+add, so moving a
+  workflow out of `.github/workflows` remains a security R2 change.
+- Judge dossiers default to the staged index (or an explicit range), excluding unrelated untracked worktree files.
+  Narrow CI R2 changes require one judge pass; security, permissions, and release changes retain full depth.
+  Judge provenance is bound to a task-scoped staged/range snapshot, so rework invalidates stale passes without
+  coupling independent tasks in the same push range; the mirrored task `judge:` cache is normalized out.
 - CLI and installer Python dispatch now use the current interpreter or fall back from `python3` to `python`, improving
   Windows compatibility.
 

@@ -14,7 +14,8 @@
   freshest-heartbeat (single-task repos never notice).
 
 ## 2. Heartbeat & staleness
-- `heartbeat` (ISO-8601) updates on every meaningful state write (phase change, acceptance change, exec note).
+- `heartbeat` is tool-written RFC3339 UTC (`Z`) and updates on every meaningful state write (phase change,
+  acceptance change, exec note). Legacy naive values are interpreted in the machine's local timezone.
 - A task is **stale** when `now - heartbeat > concurrency.stale_threshold_hours` (default 4).
 - Staleness is evaluated during the session-start continuity check, and `vemo doctor` flags stale live
   tasks mechanically (takeover candidates).
@@ -31,6 +32,10 @@ On resume, scan live task front-matter:
 mechanically verifiable — this protocol is convention plus an audit trail, and the spec does not claim
 otherwise. What IS mechanical: session-bound scope checks (§1), stale detection (`doctor`), and the
 front-matter diff that makes every takeover visible in review.
+
+Judge isolation is mechanical: `vemo judge-brief` reads the staged index by default, or an explicit
+`--range`; it never scans unrelated untracked/worktree files from other live tasks. Explicit ranges reject
+empty/option-shaped values and fail closed when Git cannot resolve them; only git-less default staging degrades.
 
 ## 4. Thin index (optional)
 A `tasks/_index.md` may snapshot live tasks (id, state, owning_chat, heartbeat) for fast discovery,

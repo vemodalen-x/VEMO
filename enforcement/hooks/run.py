@@ -25,7 +25,7 @@ Config it honors (vemo.config.yaml → enforcement / observability):
 Exit contract (Claude Code): exit 2 = block the action, stderr is fed back to the agent; exit 0 = allow.
 """
 import sys, os, json, re
-from datetime import datetime
+from datetime import datetime, timezone
 
 SELF = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.environ.get("VEMO_ROOT") or os.path.dirname(os.path.dirname(SELF))
@@ -124,7 +124,8 @@ def cfg(field, default=None):
 def log(event, **kw):
     try:
         os.makedirs(os.path.dirname(TELE), exist_ok=True)
-        row = {"ts": datetime.now().isoformat(timespec="seconds"), "event": event, **kw}
+        row = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+               "event": event, **kw}
         with open(TELE, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     except OSError:

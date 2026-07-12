@@ -23,8 +23,8 @@ Parses a YAML subset (nested maps, block/inline lists, inline {} maps) directly.
 Failure semantics: an internal error prints `error:<reason>` and exits 3 — callers treat that as
 BLOCK for safety-critical gates (fail closed), never as silent pass.
 """
-import sys, os, glob, fnmatch, argparse, re, json, subprocess
-from datetime import datetime, timedelta
+import sys, os, glob, fnmatch, argparse, re, json, subprocess, hashlib, shutil
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.environ.get("VEMO_ROOT") or os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip() or "."
 TASKS_DIR = os.path.join(ROOT, "tasks")
@@ -35,12 +35,36 @@ SESSION_MAP = os.path.join(ROOT, ".vemo", "session_task.json")
 JUDGE_LOG = os.path.join(ROOT, ".vemo", "judge.jsonl")
 RUN_DIR = os.path.join(ROOT, ".vemo", "run")
 RECEIPT = os.path.join(RUN_DIR, "receipt.json")
+CACHE = os.path.join(RUN_DIR, "cache.json")
 TIER_RANK = {"R0": 1, "R1": 2, "R2": 3}
+CHANGE_CLASS_RANK = {
+    "standard": 1, "ci-init": 1, "ci-narrow": 2,
+    "security": 3, "permissions": 4, "release": 5,
+}
 
 # Binary / model-blob extensions safety.spec#6 forbids the agent to edit (vendor drops under
 # exclusions.third_party are exempt — importing a prebuilt lib is a human supply-chain decision).
 BLOB_EXT = (".a", ".so", ".dll", ".exe", ".lib", ".bin", ".o", ".obj", ".dylib",
             ".pt", ".pth", ".onnx", ".tflite", ".gguf", ".safetensors", ".caffemodel", ".weights")
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
+
+
+def _utc_stamp(timespec="seconds"):
+    return _utc_now().isoformat(timespec=timespec).replace("+00:00", "Z")
+
+
+def _parse_timestamp(value):
+    """Parse RFC3339 plus legacy naive local timestamps, returning aware UTC."""
+    raw = str(value or "").strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(raw)
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()
+    return parsed.astimezone(timezone.utc)
 
 
 def _auto_state():
@@ -52,7 +76,7 @@ def _auto_state():
     exp = st.get("expires_at")
     if st.get("enabled") and exp:
         try:
-            if datetime.now() > datetime.fromisoformat(exp):
+            if _utc_now() > _parse_timestamp(exp):
                 return {"enabled": False, "expired": True}
         except ValueError:
             pass
@@ -74,7 +98,7 @@ def _read_run(session=None):
     try:
         return json.load(open(_run_state_path(session), encoding="utf-8"))
     except (OSError, ValueError):
-        return {"started": datetime.now().isoformat(timespec="minutes"), "tool_calls": 0, "files": []}
+        return {"started": _utc_stamp(), "tool_calls": 0, "files": []}
 
 
 def _save_run(r, session=None):
@@ -84,7 +108,7 @@ def _save_run(r, session=None):
 
 
 def budget_reset(session=None):
-    _save_run({"started": datetime.now().isoformat(timespec="minutes"), "tool_calls": 0, "files": []}, session)
+    _save_run({"started": _utc_stamp(), "tool_calls": 0, "files": []}, session)
     return "reset"
 
 
@@ -111,7 +135,7 @@ def budget_tick(path=None, write=False, session=None, sig=None):
         return ("stop:stuck-loop(same Bash command %dx — an agent that repeats itself has stopped making "
                 "progress; change approach, or escalate to the human)" % STUCK_REPEATS)
     try:
-        mins = (datetime.now() - datetime.fromisoformat(r.get("started"))).total_seconds() / 60
+        mins = (_utc_now() - _parse_timestamp(r.get("started"))).total_seconds() / 60
         if mins > float(cfg.get("max_wall_clock_min", 10**9)):
             return "stop:max_wall_clock_min(%d)" % mins
     except (ValueError, TypeError):
@@ -335,6 +359,15 @@ def _max_task_risk(tasks):
     return best
 
 
+def _max_task_change(tasks):
+    best = "standard"
+    for _, fm in tasks:
+        value = str(fm.get("change_class") or "standard")
+        if CHANGE_CLASS_RANK.get(value, 3) > CHANGE_CLASS_RANK.get(best, 1):
+            best = value
+    return best
+
+
 def bind_session(session, task_id):
     hit = None
     for path in glob.glob(os.path.join(TASKS_DIR, "*.md")):
@@ -390,7 +423,93 @@ def blob_check(target):
     return "blob:%s" % rel
 
 
-def tier_required(paths):
+def _workflow_diff_lines(diff_text):
+    """Return +/- hunk lines for workflow files only; diff metadata is excluded."""
+    lines, current, saw_header = [], None, False
+    for raw in (diff_text or "").splitlines():
+        if raw.startswith("diff --git "):
+            saw_header = True
+            m = re.search(r" b/(.+)$", raw)
+            current = m.group(1).replace("\\", "/") if m else None
+            continue
+        if raw.startswith("+++ "):
+            saw_header = True
+            value = raw[4:].strip()
+            if value != "/dev/null":
+                current = value[2:] if value.startswith("b/") else value
+                current = current.replace("\\", "/")
+            continue
+        if raw.startswith(("--- ", "@@")) or not raw.startswith(("+", "-")):
+            continue
+        if not saw_header or (current and current.startswith(".github/workflows/")):
+            lines.append((raw[0], raw[1:].strip()))
+    return lines
+
+
+def _workflow_removed(diff_text):
+    current = None
+    for raw in (diff_text or "").splitlines():
+        if raw.startswith("diff --git "):
+            m = re.search(r" a/(.+?) b/", raw)
+            current = m.group(1).replace("\\", "/") if m else None
+        elif raw.startswith("+++ /dev/null") and current and current.startswith(".github/workflows/"):
+            return True
+        elif raw.startswith("rename from ") and raw[len("rename from "):].replace("\\", "/").startswith(
+                ".github/workflows/"):
+            return True
+    return False
+
+
+def change_class(paths, diff_text=""):
+    """Classify operational semantics. Metadata/docs never make a CI-only patch look broader."""
+    rels = [_rel(p).replace("\\", "/") for p in paths]
+    operational = [p for p in rels if not (p.startswith("tasks/") or p.startswith("docs/")
+                                            or p.endswith(".md") or p.startswith(".vemo/"))]
+    if not operational:
+        return "standard"
+    if _workflow_removed(diff_text):
+        return "security"
+    lowered = "\n".join(text.lower() for _, text in _workflow_diff_lines(diff_text))
+    if any(p.startswith(("release/", ".github/actions/release")) for p in operational) or re.search(
+            r"\b(release|deploy|publish|attest|provenance|environment:)\b|twine\s+upload|"
+            r"npm\s+publish|docker\s+push|\bpypi\b", lowered):
+        return "release"
+    if re.search(r"\bpermissions\s*:|id-token\s*:|contents\s*:\s*write|packages\s*:\s*write", lowered):
+        return "permissions"
+    if re.search(r"pull_request_target|workflow_run|workflow_call|\bsecrets?\b|\btoken\b|git push|gh release|"
+                 r"gate-check|pre-commit|pre-push|vemo verify|eval/run\.py|security[-_ ]?scan", lowered):
+        return "security"
+
+    workflows = [p for p in operational if p.startswith(".github/workflows/")]
+    if workflows and len(workflows) == len(operational):
+        changed = _workflow_diff_lines(diff_text)
+        allowed = re.compile(
+            r"^(?:|#.*|-?\s*name:\s*(?:set up python|setup python|install dependencies)|"
+            r"-?\s*uses:\s*actions/setup-python@[^\s]+|with:|python-version:|cache:|"
+            r"cache-dependency-path:|"
+            r"-?\s*(?:with|python-version|cache|cache-dependency-path):.*|"
+            r"-?\s*run:\s*(?:[|>-]\s*|(?:python(?:3)?\s+-m\s+pip|pip(?:3)?|uv|poetry)\s+.*(?:install|sync).*)|"
+            r"(?:python(?:3)?\s+-m\s+pip|pip(?:3)?|uv|poetry)\s+.*(?:install|sync)|"
+            r"(?:python(?:3)?\s+-m\s+pip|pip(?:3)?)\s+install.*|"
+            r"(?:requirements[^:]*|pyproject\.toml|poetry\.lock|uv\.lock):?.*)$", re.I)
+        def safe_init_line(sign, text):
+            if sign != "+" or not allowed.match(text):
+                return False
+            if re.fullmatch(r"-?\s*run:\s*[|>-]\s*", text):
+                return True
+            return not any(token in text for token in ("&", "|", ";", "`", "$", "<", ">"))
+
+        if changed and all(safe_init_line(sign, text) for sign, text in changed):
+            return "ci-init"
+        return "ci-narrow"
+
+    if any(p.startswith(("enforcement/", "specs/", ".claude/"))
+           or re.match(r"vemo\.config.*\.ya?ml$", p) for p in operational):
+        return "security"
+    return "standard"
+
+
+def tier_required(paths, diff_text=""):
     """Highest risk tier any of the given paths falls into, per vemo.config.yaml risk_tiers.
     A path matching NO tier gets risk_tiers.unmatched (default R1) — unknown ≠ trivial."""
     cfg = _load_config()
@@ -399,6 +518,7 @@ def tier_required(paths):
     ordered = sorted(((k, v) for k, v in tiers.items() if isinstance(v, dict)),
                      key=lambda kv: -TIER_RANK.get(kv[0].split("_")[0], 0))
     best = "R0"
+    semantic = change_class(paths, diff_text) if diff_text else None
     for p in paths:
         rel = _rel(p)
         code = None
@@ -406,6 +526,10 @@ def tier_required(paths):
             if any(_match(rel, g) for g in (spec or {}).get("match_paths", []) or []):
                 code = name.split("_")[0]
                 break
+        # Path-only classification stays fail-safe R2. A workflow is R1 only with affirmative
+        # diff evidence that every changed line is additive Python/dependency initialization.
+        if rel.replace("\\", "/").startswith(".github/workflows/") and semantic == "ci-init":
+            code = "R1"
         code = code or default
         if TIER_RANK.get(code, 2) > TIER_RANK.get(best, 1):
             best = code
@@ -428,20 +552,72 @@ def _judge_records(task_id):
         return []
 
 
+def _judge_snapshot(fm=None):
+    """Hash only this task's staged/range patch, excluding the provenance log itself."""
+    diff_range = os.environ.get("VEMO_DIFF_RANGE")
+    if diff_range and (diff_range.startswith("-") or any(c in diff_range for c in ("\0", "\n", "\r"))):
+        return "invalid-range"
+    base = ["git", "-C", ROOT, "diff", "--no-renames"]
+    if diff_range:
+        base.append(diff_range)
+    else:
+        base.append("--cached")
+    try:
+        names = subprocess.run(base + ["--name-only", "-z", "--"], capture_output=True, timeout=30)
+        if names.returncode != 0:
+            return "unresolved-range" if diff_range else ""
+        scopes = (fm or {}).get("scope_in") or []
+        active_task_path = None
+        if (fm or {}).get("id"):
+            active_task_path = next((os.path.relpath(path, ROOT).replace("\\", "/")
+                                     for path in glob.glob(os.path.join(TASKS_DIR, "*.md"))
+                                     if _parse_front_matter(path).get("id") == fm.get("id")), None)
+        paths = [raw.decode("utf-8", "surrogateescape").replace("\\", "/")
+                 for raw in names.stdout.split(b"\0") if raw]
+        paths = sorted(path for path in paths if path != ".vemo/judge.jsonl"
+                       and (not scopes or any(_match(path, pattern) for pattern in scopes)))
+        h = hashlib.sha256()
+        for path in paths:
+            if path == active_task_path:
+                if diff_range:
+                    target = diff_range.rsplit("...", 1)[-1].rsplit("..", 1)[-1]
+                    obj = "%s:%s" % (target, path)
+                else:
+                    obj = ":%s" % path
+                content = subprocess.run(["git", "-C", ROOT, "show", obj], capture_output=True, timeout=30)
+                payload = content.stdout if content.returncode == 0 else b"<deleted>"
+                text = payload.decode("utf-8", "surrogateescape")
+                text = re.sub(r"(?ms)^judge:\s*\n(?:^[ \t]+.*\n)*",
+                              "judge:\n  <verdict-cache-excluded>\n", text)
+                payload = text.encode("utf-8", "surrogateescape")
+            else:
+                patch = subprocess.run(base + ["--binary", "--", path], capture_output=True, timeout=30)
+                if patch.returncode != 0:
+                    return "unresolved-range" if diff_range else ""
+                payload = patch.stdout
+            h.update(path.encode("utf-8", "surrogateescape") + b"\0" + payload + b"\0")
+        return h.hexdigest()
+    except OSError:
+        return ""
+
+
 def _judge_provenance(task_id):
     """Last recorded judge verdict for this task from the append-only .vemo/judge.jsonl."""
     rows = _judge_records(task_id)
     return rows[-1] if rows else None
 
 
-def _required_judge_passes(risk, cfg=None, auto=False):
-    """Derive the mechanically required judge-pass count from capability tier and risk."""
+def _required_judge_passes(risk, cfg=None, auto=False, fm=None, change=None):
+    """Derive judge depth from risk, capability, and semantic change class."""
     cfg = cfg or _load_config()
     code = str(risk or "R0")[:2]
+    klass = change or ((fm or {}).get("change_class")) or "standard"
     if code == "R0":
         return 0
     tier = _dig(cfg, "capability.tier") or "high"
     if code == "R2":
+        if klass == "ci-narrow":
+            return 1
         return int(_dig(cfg, "verification.independent_verifiers." + tier) or 1)
     if auto and _dig(cfg, "auto_mode.require_judge"):
         return 1
@@ -459,8 +635,10 @@ def _judge_gate_result(fm, required):
     if not rows:
         return "block:judge-no-provenance (front-matter says pass but .vemo/judge.jsonl has no record — the judge must write its verdict via `task_state.py judge-record`, a pasted verdict does not count)"
     suffix = 0
+    snapshot = _judge_snapshot(fm)
     for row in reversed(rows):
-        if row.get("verdict") == "pass":
+        snapshot_ok = not snapshot or row.get("snapshot") == snapshot
+        if row.get("verdict") == "pass" and snapshot_ok:
             suffix += 1
             continue
         break
@@ -479,10 +657,21 @@ def _read_receipt():
         return None
 
 
+def _verification_gate_result(fm):
+    if str(fm.get("change_class") or "standard") == "release":
+        profile = _dig(fm, "verification.profile")
+        if profile != "release":
+            return "block:release-requires-verification-profile=release (got %s)" % profile
+    return "ok"
+
+
 def _acceptance_gate_result(fm, cfg):
     """acceptance-before-push for ONE task (gate_check loops every task in the checked set —
     a multi-task push range must not let non-first tasks ride through unchecked)."""
     risk = str(fm.get("risk") or "R0")
+    contract = _verification_gate_result(fm)
+    if contract != "ok":
+        return contract
     if risk.startswith("R0"):
         return "ok"                       # R0 lifecycle has no acceptance gate (velocity path)
     order = ["PlanCreated", "ReviewApproved", "ImplementationDone",
@@ -502,14 +691,24 @@ def _acceptance_gate_result(fm, cfg):
             # receipt's OWN log is the executed ground truth, freshly produced by the gate's side THIS run;
             # the front-matter `evidence:` path is a human cache that may point at a gitignored/rotated log
             # absent on a clean CI checkout (which is exactly where the guarantee must hold).
-            if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke"):
+            if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke") or isinstance(fm.get("verification"), dict):
                 rcpt = _read_receipt()
                 if not rcpt:
                     return "block:no-verify-receipt (paths.build/smoke configured — run `vemo verify` so the gate gets executed ground truth)"
                 if str(rcpt.get("task")) not in (str(fm.get("id")), "adhoc"):
                     return "block:receipt-task-mismatch (receipt is for '%s', checked task is '%s' — re-run `vemo verify`)" % (rcpt.get("task"), fm.get("id"))
-                if rcpt.get("build_exit") not in (0, None) or rcpt.get("smoke_exit") not in (0, None):
+                exits = rcpt.get("exit_codes")
+                failed = any(value != 0 for value in exits.values()) if isinstance(exits, dict) \
+                    else rcpt.get("build_exit") not in (0, None) or rcpt.get("smoke_exit") not in (0, None)
+                if failed:
                     return "block:receipt-failed (verify-run recorded build_exit=%s smoke_exit=%s)" % (rcpt.get("build_exit"), rcpt.get("smoke_exit"))
+                try:
+                    profile, commands = _verification_contract(fm, cfg)
+                    current, _ = _scope_fingerprint(fm, profile, commands)
+                    if rcpt.get("fingerprint") and rcpt.get("fingerprint") != current:
+                        return "block:receipt-stale (task scope or verification commands changed; re-run `vemo verify`)"
+                except ValueError as e:
+                    return "block:verification-contract (%s)" % e
                 rlog = os.path.join(ROOT, str(rcpt.get("log") or ""))
                 if not (os.path.isfile(rlog) and os.path.getsize(rlog) > 0):
                     return "block:receipt-log-missing (receipt references '%s' but it is absent/empty — re-run `vemo verify`)" % rcpt.get("log")
@@ -539,8 +738,14 @@ def gate_check(gate, session=None, task_files=None):
         return "ok"
     if gate in ("r2-judge", "required-judge"):
         for _, candidate in tasks:
-            required = _required_judge_passes(str(candidate.get("risk") or "R0"))
+            required = _required_judge_passes(str(candidate.get("risk") or "R0"), fm=candidate)
             result = _judge_gate_result(candidate, required)
+            if result != "ok":
+                return result
+        return "ok"
+    if gate == "verification-contract":
+        for _, candidate in tasks:
+            result = _verification_gate_result(candidate)
             if result != "ok":
                 return result
         return "ok"
@@ -550,56 +755,157 @@ def gate_check(gate, session=None, task_files=None):
 
 
 def judge_record(task, verdict, evidence="", confidence=""):
-    row = {"ts": datetime.now().isoformat(timespec="minutes"), "task": task, "verdict": verdict,
+    task_fm = next((fm for path in glob.glob(os.path.join(TASKS_DIR, "*.md"))
+                    if (fm := _parse_front_matter(path)).get("id") == task), None)
+    row = {"ts": _utc_stamp(), "task": task, "verdict": verdict,
            "session": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("VEMO_SESSION") or "unknown",
-           "evidence": evidence, "confidence": confidence}
+           "snapshot": _judge_snapshot(task_fm), "evidence": evidence, "confidence": confidence}
     os.makedirs(os.path.dirname(JUDGE_LOG), exist_ok=True)
     with open(JUDGE_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return "recorded:%s=%s" % (task, verdict)
 
 
-def verify_run(session=None):
+def _verification_contract(fm, cfg):
+    verification = (fm or {}).get("verification")
+    if not isinstance(verification, dict):
+        commands = [("build", _dig(cfg, "paths.build")), ("smoke", _dig(cfg, "paths.smoke"))]
+        return "legacy", [(name, cmd) for name, cmd in commands if cmd]
+    profile = str(verification.get("profile") or "focused")
+    if profile == "focused":
+        local = verification.get("commands") or {}
+        commands = [(name, local.get(name)) for name in ("test", "lint", "smoke")]
+    elif profile == "full":
+        commands = [("build", _dig(cfg, "paths.build")), ("smoke", _dig(cfg, "paths.smoke"))]
+    elif profile == "release":
+        commands = [("build", _dig(cfg, "paths.build")), ("smoke", _dig(cfg, "paths.smoke")),
+                    ("package_scan", _dig(cfg, "paths.package_scan"))]
+    else:
+        raise ValueError("unknown verification.profile '%s'" % profile)
+    missing = [name for name, cmd in commands if not cmd]
+    if missing:
+        raise ValueError("verification.profile '%s' requires command(s): %s" % (profile, ", ".join(missing)))
+    return profile, commands
+
+
+def _scope_fingerprint(fm, profile, commands):
+    scopes = (fm or {}).get("scope_in") or []
+    try:
+        p = subprocess.run(["git", "-C", ROOT, "ls-files", "-co", "--exclude-standard", "-z"],
+                           capture_output=True, timeout=30)
+        candidates = [x.decode("utf-8", "surrogateescape").replace("\\", "/")
+                      for x in p.stdout.split(b"\0") if x]
+    except OSError:
+        candidates = []
+    selected = sorted(set(rel for rel in candidates
+                          if not rel.startswith(("tasks/", ".vemo/"))
+                          and any(_match(rel, pattern) for pattern in scopes)))
+    h = hashlib.sha256()
+    contract = {"profile": profile, "commands": commands, "files": selected}
+    h.update(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    for rel in selected:
+        h.update(b"\0" + rel.encode("utf-8", "surrogateescape") + b"\0")
+        try:
+            with open(os.path.join(ROOT, rel), "rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    h.update(chunk)
+        except OSError:
+            h.update(b"<missing>")
+    return h.hexdigest(), selected
+
+
+def _read_cache():
+    try:
+        return json.load(open(CACHE, encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _successful_exits(exits):
+    return bool(exits) and all(value == 0 for value in exits.values())
+
+
+def _runtime_command(command):
+    """Use the running interpreter when a configured python3 launcher is absent (notably Windows)."""
+    if (os.name == "nt" or shutil.which("python3") is None) \
+            and re.match(r"^\s*python3(?:\.exe)?(?:\s|$)", command, re.I):
+        return re.sub(r"^\s*python3(?:\.exe)?", lambda _m: '"%s"' % sys.executable,
+                      command, count=1, flags=re.I)
+    return command
+
+
+def _receipt_from_run(task_id, profile, commands, exits, log_rel, fingerprint, files, cached=False,
+                      source_ts=None):
+    non_smoke = [value for name, value in exits.items() if name != "smoke"]
+    build_exit = exits.get("build")
+    if build_exit is None and non_smoke:
+        build_exit = next((value for value in non_smoke if value != 0), 0)
+    return {
+        "ts": _utc_stamp(), "task": task_id, "profile": profile, "cached": cached,
+        "source_ts": source_ts, "fingerprint": fingerprint, "scope_files": files,
+        "commands": [{"name": name, "command": cmd, "exit": exits.get(name)} for name, cmd in commands],
+        "exit_codes": exits, "build_exit": build_exit, "smoke_exit": exits.get("smoke"), "log": log_rel,
+    }
+
+
+def verify_run(session=None, no_cache=False):
     """Execute the configured build/smoke and write evidence + a machine receipt.
     This is the ONLY writer of .vemo/run/receipt.json — the acceptance gate trusts the receipt,
     not exit codes typed into front-matter (executed ground truth, produced by the gate's own side)."""
     cfg = _load_config()
-    build, smoke = _dig(cfg, "paths.build"), _dig(cfg, "paths.smoke")
-    if not build and not smoke:
-        return "no-build-configured (set paths.build / paths.smoke in vemo.config.yaml)"
     act = _active_task(session)
     task_id = act[1].get("id") if act else "adhoc"
+    fm = act[1] if act else {}
+    try:
+        profile, commands = _verification_contract(fm, cfg)
+    except ValueError as e:
+        return "FAIL contract=%s" % e
+    if not commands:
+        return "no-build-configured (set paths.build / paths.smoke in vemo.config.yaml)"
+    fingerprint, files = _scope_fingerprint(fm, profile, commands)
     os.makedirs(RUN_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    cache = _read_cache()
+    cache_on = bool(_dig(cfg, "verification.cache_enabled")) and not no_cache
+    if cache_on and cache and cache.get("fingerprint") == fingerprint \
+            and cache.get("profile") == profile and _successful_exits(cache.get("exit_codes") or {}):
+        log_rel = str(cache.get("log") or "")
+        log_abs = os.path.join(ROOT, log_rel)
+        if os.path.isfile(log_abs) and os.path.getsize(log_abs) > 0:
+            receipt = _receipt_from_run(task_id, profile, commands, cache["exit_codes"], log_rel,
+                                        fingerprint, files, True, cache.get("ts"))
+            json.dump(receipt, open(RECEIPT, "w", encoding="utf-8"), indent=2)
+            return "pass cached=true profile=%s log=%s receipt=.vemo/run/receipt.json" % (profile, log_rel)
+    ts = _utc_now().strftime("%Y%m%dT%H%M%SZ")
     log_rel = os.path.join(".vemo", "run", "%s-%s.log" % (task_id, ts))
     log_abs = os.path.join(ROOT, log_rel)
     exits = {}
     with open(log_abs, "w", encoding="utf-8") as log:
-        for name, cmd in (("build", build), ("smoke", smoke)):
-            if not cmd:
-                exits[name + "_exit"] = None
-                continue
-            log.write("$ %s\n" % cmd); log.flush()
-            p = subprocess.run(cmd, shell=True, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
-            exits[name + "_exit"] = p.returncode
+        for name, cmd in commands:
+            actual = _runtime_command(cmd)
+            log.write("$ %s\n" % actual); log.flush()
+            p = subprocess.run(actual, shell=True, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+            exits[name] = p.returncode
             log.write("[exit %d]\n" % p.returncode); log.flush()
-    receipt = {"ts": ts, "task": task_id, "log": log_rel, **exits}
+    receipt = _receipt_from_run(task_id, profile, commands, exits, log_rel, fingerprint, files)
     json.dump(receipt, open(RECEIPT, "w", encoding="utf-8"), indent=2)
-    ok = all(v in (0, None) for v in exits.values())
-    return "%s build_exit=%s smoke_exit=%s log=%s receipt=.vemo/run/receipt.json" % (
-        "pass" if ok else "FAIL", exits.get("build_exit"), exits.get("smoke_exit"), log_rel)
+    if _successful_exits(exits):
+        json.dump({"ts": receipt["ts"], "profile": profile, "fingerprint": fingerprint,
+                   "exit_codes": exits, "log": log_rel}, open(CACHE, "w", encoding="utf-8"), indent=2)
+    return "%s cached=false profile=%s build_exit=%s smoke_exit=%s log=%s receipt=.vemo/run/receipt.json" % (
+        "pass" if _successful_exits(exits) else "FAIL", profile, receipt.get("build_exit"),
+        receipt.get("smoke_exit"), log_rel)
 
 
-def verify_plan(risk):
+def verify_plan(risk, change="standard"):
     """derive the required VERIFICATION depth from capability.tier × risk (the inverse coupling)."""
     cfg = _load_config()
     tier = _dig(cfg, "capability.tier") or "high"
     gt = "optional" if risk == "R0" else "required"
     panel = int(_dig(cfg, "verification.independent_verifiers." + tier) or 1)
-    verifiers = _required_judge_passes(risk, cfg)
+    verifiers = _required_judge_passes(risk, cfg, change=change)
     narration = "required" if (_dig(cfg, "verification.require_intent_narration") and tier in ("frontier", "high")) else "advised"
     human = "intent + irreversible only" if tier in ("frontier", "high") else "intent + plan-review + irreversible"
-    return f"tier={tier} risk={risk} ground_truth={gt} verifiers={verifiers} narration={narration} human_gate={human}"
+    return f"tier={tier} risk={risk} change_class={change} ground_truth={gt} verifiers={verifiers} narration={narration} human_gate={human}"
 
 
 def context_brief(session=None):
@@ -658,7 +964,7 @@ LENS_CHECKS = {
 }
 
 
-def judge_brief(session=None, lens="correctness", task_files=None):
+def judge_brief(session=None, lens="correctness", task_files=None, diff_range=None):
     """Dossier for the governance judge: machine-checked facts up front so judge tokens go to what
     machines cannot check (claims-vs-evidence semantics, completeness, gaming) instead of re-exploring."""
     tasks = _task_context(task_files, session)
@@ -695,15 +1001,36 @@ def judge_brief(session=None, lens="correctness", task_files=None):
         pass
     rcpt = _read_receipt()
     out.append("RECEIPT: %s" % (json.dumps(rcpt) if rcpt else "none"))
+    explicit_range = diff_range is not None
+    requested_range = diff_range if explicit_range else os.environ.get("VEMO_DIFF_RANGE")
+    if explicit_range and not str(requested_range).strip():
+        raise ValueError("explicit judge range must not be empty")
+    if requested_range and (str(requested_range).startswith("-")
+                            or any(c in str(requested_range) for c in ("\0", "\n", "\r"))):
+        raise ValueError("unsafe judge range syntax")
     try:
-        p = subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "-uall"],
-                           capture_output=True, text=True, timeout=15)
-        changed = [ln[3:].strip() for ln in p.stdout.splitlines() if ln.strip()]
-        out.append("CHANGES (%d files, scope verdict each):" % len(changed))
+        cmd = ["git", "-C", ROOT, "diff", "--no-renames", "--name-only"]
+        source = "staged index"
+        if requested_range:
+            cmd.extend([requested_range, "--"])
+            source = "range %s" % requested_range
+        else:
+            cmd.append("--cached")
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if p.returncode != 0:
+            detail = p.stderr.strip() or "exit %d" % p.returncode
+            if requested_range:
+                raise RuntimeError("git diff failed for %s: %s" % (source, detail))
+            raise OSError("git staged diff unavailable: %s" % detail)
+        changed = [ln.strip().replace("\\", "/") for ln in p.stdout.splitlines() if ln.strip()]
+        out.append("CHANGES (%d files from %s; unrelated untracked/worktree files excluded):" %
+                   (len(changed), source))
         for f in changed[:50]:
             out.append("  %-14s %s" % (scope_check(os.path.join(ROOT, f), session, task_files), f))
         if len(changed) > 50:
-            out.append("  … %d more (run git status yourself)" % (len(changed) - 50))
+            out.append("  ... %d more (inspect the same staged/range diff)" % (len(changed) - 50))
+    except RuntimeError:
+        raise
     except Exception:
         out.append("CHANGES: (git unavailable — inspect the diff yourself)")
     out.append("LENS %s — your checklist (disjoint from the other pass; do not redo its items):" % lens)
@@ -720,13 +1047,136 @@ def heartbeat_touch(session=None, task_files=None):
     if not tasks:
         return "error:no-active-task"
     path, fm = tasks[0]
-    now = datetime.now().isoformat(timespec="minutes")
+    now = _utc_stamp()
     txt = open(path, encoding="utf-8").read()
     new, n = re.subn(r"(?m)^heartbeat:.*$", "heartbeat: %s" % now, txt, count=1)
     if not n:
         return "error:no-heartbeat-field"
-    open(path, "w", encoding="utf-8").write(new)
+    _atomic_write(path, new)
     return "heartbeat:%s=%s" % (fm.get("id"), now)
+
+
+def _atomic_write(path, text):
+    tmp = path + ".tmp-%d" % os.getpid()
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def _one_task(session=None, task_files=None):
+    tasks = _task_context(task_files, session)
+    return tasks[0] if tasks else None
+
+
+def task_create(title, risk, change, scopes, profile="focused"):
+    if risk not in TIER_RANK:
+        return "error:invalid-risk"
+    if change not in CHANGE_CLASS_RANK:
+        return "error:invalid-change-class"
+    if profile not in ("focused", "full", "release"):
+        return "error:invalid-verification-profile"
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48] or "task"
+    day = _utc_now().strftime("%Y%m%d")
+    task_id = "T-%s-%s" % (day, slug)
+    path = os.path.join(TASKS_DIR, task_id + ".md")
+    n = 2
+    while os.path.exists(path):
+        task_id = "T-%s-%s-%d" % (day, slug, n)
+        path = os.path.join(TASKS_DIR, task_id + ".md")
+        n += 1
+    now = _utc_stamp()
+    scope_yaml = json.dumps([(_rel(p) if os.path.isabs(p) else p).replace("\\", "/") for p in scopes],
+                            ensure_ascii=False)
+    local_commands = ("  commands:\n    test: \"\"\n    lint: \"\"\n    smoke: \"\"\n"
+                      if profile == "focused" else "")
+    body = """---
+id: {task_id}
+risk: {risk}
+change_class: {change}
+state: PlanCreated
+scope_in: {scope}
+scope_out: []
+trifecta: []
+verification:
+  profile: {profile}
+{local_commands}acceptance:
+  status: not_run
+  build_exit: null
+  smoke_exit: null
+  evidence: ""
+judge:
+  required: false
+  verdict: null
+approved_commands: []
+owning_chat: ""
+heartbeat: {now}
+---
+
+# {title}
+
+## Goal
+Define the accepted outcome.
+
+## Scope (In / Out)
+- In: mirror `scope_in` above.
+- Out: everything else.
+
+## Pass/Fail Criteria
+- [ ] Add measurable acceptance criteria.
+
+## Plan
+- Add the implementation plan.
+
+## Execution Log
+- {now} Task created by `vemo task create`.
+
+## Acceptance Result
+Not run.
+
+## Conclusion
+Pending.
+""".format(task_id=task_id, risk=risk, change=change, scope=scope_yaml, profile=profile,
+           local_commands=local_commands, now=now, title=title)
+    os.makedirs(TASKS_DIR, exist_ok=True)
+    _atomic_write(path, body)
+    return "created:%s" % os.path.relpath(path, ROOT).replace("\\", "/")
+
+
+def task_note(message, session=None, task_files=None):
+    task = _one_task(session, task_files)
+    if not task:
+        return "error:no-active-task"
+    path, fm = task
+    text = open(path, encoding="utf-8").read()
+    match = re.search(r"(?m)^## Execution Log\s*$", text)
+    if not match:
+        return "error:no-execution-log"
+    following = re.search(r"(?m)^## ", text[match.end():])
+    pos = match.end() + (following.start() if following else len(text[match.end():]))
+    note = "- %s %s\n" % (_utc_stamp(), message.strip())
+    prefix = text[:pos].rstrip() + "\n" + note + "\n"
+    _atomic_write(path, prefix + text[pos:].lstrip("\n"))
+    heartbeat_touch(session, [path])
+    return "noted:%s" % fm.get("id")
+
+
+def task_state(state, session=None, task_files=None):
+    allowed = {"PlanCreated", "ReviewApproved", "ImplementationDone", "AcceptancePassed",
+               "ProcedureCompleted", "Archived"}
+    if state not in allowed:
+        return "error:invalid-state"
+    task = _one_task(session, task_files)
+    if not task:
+        return "error:no-active-task"
+    path, fm = task
+    now = _utc_stamp()
+    text = open(path, encoding="utf-8").read()
+    text, n_state = re.subn(r"(?m)^state:.*$", "state: %s" % state, text, count=1)
+    text, n_hb = re.subn(r"(?m)^heartbeat:.*$", "heartbeat: %s" % now, text, count=1)
+    if not (n_state and n_hb):
+        return "error:missing-state-or-heartbeat-field"
+    _atomic_write(path, text)
+    return "state:%s=%s at=%s" % (fm.get("id"), state, now)
 
 
 def trifecta_check(session=None):
@@ -751,7 +1201,7 @@ KNOWN_KEYS = {
     "capability.tier": "verify_plan/specs",
     "model_routing": "ADVISORY (read by humans + agent prose; no mechanical router — see config note)",
     "verification.ground_truth_required": "gate_check", "verification.require_intent_narration": "verify_plan",
-    "verification.independent_verifiers": "verify_plan/gate_check",
+    "verification.cache_enabled": "verify-run", "verification.independent_verifiers": "verify_plan/gate_check",
     "risk_tiers.unmatched": "tier_required", "risk_tiers.*": "tier_required (match_paths) / specs (gates, judge)",
     "enforcement.mode": "hooks/run.py", "enforcement.hooks": "vemo status", "enforcement.ci_backstop": "vemo status",
     "enforcement.block_on": "hooks/run.py (guard enable list)",
@@ -762,7 +1212,7 @@ KNOWN_KEYS = {
     "enforcement.rule_of_two": "trifecta_check",
     "paths.tasks": "reserved", "paths.task_archive": "reserved", "paths.specs": "reserved",
     "paths.repo_root": "reserved", "paths.test_entry": "verify-run (docs)", "paths.build": "verify-run",
-    "paths.smoke": "verify-run",
+    "paths.smoke": "verify-run", "paths.package_scan": "verify-run (release profile)",
     "concurrency.stale_threshold_hours": "doctor (stale-task warning)",
     "run_budget.enabled": "budget_tick", "run_budget.max_tool_calls": "budget_tick",
     "run_budget.max_files_touched": "budget_tick", "run_budget.max_wall_clock_min": "budget_tick",
@@ -890,8 +1340,8 @@ def doctor():
             if not fm or fm.get("state") == "Archived":
                 continue
             try:
-                hb = datetime.fromisoformat(str(fm.get("heartbeat")))
-                if datetime.now() - hb > timedelta(hours=thr):
+                hb = _parse_timestamp(fm.get("heartbeat"))
+                if _utc_now() - hb > timedelta(hours=thr):
                     notes.append("stale task %s (heartbeat %s > %.0fh old) — takeover candidate" %
                                  (os.path.basename(path), fm.get("heartbeat"), thr))
             except (ValueError, TypeError):
@@ -921,7 +1371,11 @@ def main():
     g = sub.add_parser("gate-check");  g.add_argument("--gate", required=True); g.add_argument("--session", default=None)
     g.add_argument("--task-file", action="append", default=[])
     t = sub.add_parser("tier-required"); t.add_argument("--paths", nargs="+", required=True)
+    t.add_argument("--diff-file", default=None)
+    cc = sub.add_parser("change-class"); cc.add_argument("--paths", nargs="+", required=True)
+    cc.add_argument("--diff-file", default=None)
     tr = sub.add_parser("task-risk"); tr.add_argument("--task-file", action="append", default=[])
+    tcx = sub.add_parser("task-change-class"); tcx.add_argument("--task-file", action="append", default=[])
     ge = sub.add_parser("get"); ge.add_argument("--field", required=True)
     sub.add_parser("active"); sub.add_parser("doctor"); sub.add_parser("auto-status")
     aa = sub.add_parser("auto-allows"); aa.add_argument("--tier", required=True)
@@ -932,7 +1386,9 @@ def main():
     bs = sub.add_parser("budget-status"); bs.add_argument("--session", default=None)
     cg = sub.add_parser("config-get"); cg.add_argument("--field", required=True)
     vp = sub.add_parser("verify-plan"); vp.add_argument("--risk", required=True)
+    vp.add_argument("--change-class", default="standard", choices=sorted(CHANGE_CLASS_RANK))
     vr = sub.add_parser("verify-run"); vr.add_argument("--session", default=None)
+    vr.add_argument("--no-cache", action="store_true")
     jr = sub.add_parser("judge-record"); jr.add_argument("--task", required=True)
     jr.add_argument("--verdict", required=True, choices=["pass", "fail"])
     jr.add_argument("--evidence", default=""); jr.add_argument("--confidence", default="")
@@ -940,8 +1396,18 @@ def main():
     cx = sub.add_parser("context"); cx.add_argument("--session", default=None)
     jb = sub.add_parser("judge-brief"); jb.add_argument("--lens", default="correctness", choices=sorted(LENS_CHECKS))
     jb.add_argument("--session", default=None); jb.add_argument("--task-file", action="append", default=[])
+    jb.add_argument("--range", default=None)
     hb = sub.add_parser("heartbeat"); hb.add_argument("--session", default=None)
     hb.add_argument("--task-file", action="append", default=[])
+    create = sub.add_parser("task-create"); create.add_argument("--title", required=True)
+    create.add_argument("--risk", required=True, choices=sorted(TIER_RANK))
+    create.add_argument("--change-class", default="standard", choices=sorted(CHANGE_CLASS_RANK))
+    create.add_argument("--scope", nargs="+", required=True)
+    create.add_argument("--profile", default="focused", choices=["focused", "full", "release"])
+    note = sub.add_parser("task-note"); note.add_argument("--message", required=True)
+    note.add_argument("--session", default=None); note.add_argument("--task-file", action="append", default=[])
+    state = sub.add_parser("task-state"); state.add_argument("--state", required=True)
+    state.add_argument("--session", default=None); state.add_argument("--task-file", action="append", default=[])
     sub.add_parser("selfcheck"); tc = sub.add_parser("trifecta-check"); tc.add_argument("--session", default=None)
     a = ap.parse_args()
     if a.cmd == "scope-check":
@@ -951,9 +1417,15 @@ def main():
     elif a.cmd == "gate-check":
         print(gate_check(a.gate, a.session, a.task_file))
     elif a.cmd == "tier-required":
-        print(tier_required(a.paths))
+        diff = open(a.diff_file, encoding="utf-8").read() if a.diff_file else ""
+        print(tier_required(a.paths, diff))
+    elif a.cmd == "change-class":
+        diff = open(a.diff_file, encoding="utf-8").read() if a.diff_file else ""
+        print(change_class(a.paths, diff))
     elif a.cmd == "task-risk":
         print(_max_task_risk(_task_context(a.task_file)))
+    elif a.cmd == "task-change-class":
+        print(_max_task_change(_task_context(a.task_file)))
     elif a.cmd == "get":
         act = _active_task()
         v = _dig(act[1], a.field) if act else None
@@ -981,9 +1453,9 @@ def main():
         v = _dig(_load_config(), a.field)
         print("null" if v is None else (",".join(v) if isinstance(v, list) else v))
     elif a.cmd == "verify-plan":
-        print(verify_plan(a.risk))
+        print(verify_plan(a.risk, a.change_class))
     elif a.cmd == "verify-run":
-        out = verify_run(a.session); print(out)
+        out = verify_run(a.session, a.no_cache); print(out)
         sys.exit(0 if out.startswith(("pass", "no-build-configured")) else 1)
     elif a.cmd == "judge-record":
         print(judge_record(a.task, a.verdict, a.evidence, a.confidence))
@@ -992,9 +1464,15 @@ def main():
     elif a.cmd == "context":
         print(context_brief(a.session))
     elif a.cmd == "judge-brief":
-        print(judge_brief(a.session, a.lens, a.task_file))
+        print(judge_brief(a.session, a.lens, a.task_file, a.range))
     elif a.cmd == "heartbeat":
         print(heartbeat_touch(a.session, a.task_file))
+    elif a.cmd == "task-create":
+        print(task_create(a.title, a.risk, a.change_class, a.scope, a.profile))
+    elif a.cmd == "task-note":
+        print(task_note(a.message, a.session, a.task_file))
+    elif a.cmd == "task-state":
+        print(task_state(a.state, a.session, a.task_file))
     elif a.cmd == "selfcheck":
         sys.exit(selfcheck())
     elif a.cmd == "trifecta-check":

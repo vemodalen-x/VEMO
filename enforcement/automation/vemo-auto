@@ -16,7 +16,7 @@ Usage:
   vemo-auto status
 """
 import sys, os, json, argparse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.environ.get("VEMO_ROOT") or os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip() or "."
 sys.path.insert(0, os.path.join(ROOT, "enforcement", "validators"))
@@ -37,6 +37,22 @@ LOG = os.path.join(ROOT, str(_cfg("auto_mode.record_to", ".vemo/auto_decisions.j
 RANK = {"R0": 1, "R1": 2, "R2": 3}
 
 
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def _stamp(value=None):
+    return (value or _now()).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _parse(value):
+    raw = str(value)
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(raw)
+    return (parsed.astimezone() if parsed.tzinfo is None else parsed).astimezone(timezone.utc)
+
+
 def _who():
     return (os.popen("git config user.name 2>/dev/null").read().strip()
             or os.environ.get("USER") or "operator")
@@ -44,7 +60,7 @@ def _who():
 
 def _record(event, extra):
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
-    row = {"ts": datetime.now().isoformat(timespec="minutes"), "event": event, **extra}
+    row = {"ts": _stamp(), "event": event, **extra}
     with open(LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -58,7 +74,7 @@ def _read_state():
     exp = st.get("expires_at")
     if st.get("enabled") and exp:
         try:
-            if datetime.now() > datetime.fromisoformat(exp):
+            if _now() > _parse(exp):
                 st["enabled"] = False
                 st["expired"] = True
         except ValueError:
@@ -89,14 +105,14 @@ def cmd_on(a):
     if answer != "yes":
         print("[vemo-auto] not confirmed — auto mode stays OFF.")
         return 2
-    now = datetime.now()
+    now = _now()
     st = {
         "enabled": True,
         "max_auto_tier": a.max_tier,
         "allow_r2": bool(a.allow_r2),
         "enabled_by": _who(),
-        "enabled_at": now.isoformat(timespec="minutes"),
-        "expires_at": (now + timedelta(hours=ttl)).isoformat(timespec="minutes") if ttl > 0 else "",
+        "enabled_at": _stamp(now),
+        "expires_at": _stamp(now + timedelta(hours=ttl)) if ttl > 0 else "",
         "preauthorized_commands": list(_cfg("auto_mode.preauthorized_commands", []) or []),
     }
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
@@ -106,7 +122,7 @@ def cmd_on(a):
           f"expires={st['expires_at'] or 'never'} by={st['enabled_by']}")
     print("  Reminder: mechanical safety guards (scope/destructive/secret) + the judge STILL apply.")
     # reset the run-budget counter so this unattended run is bounded from zero
-    json.dump({"started": now.isoformat(timespec="minutes"), "tool_calls": 0, "files": []},
+    json.dump({"started": _stamp(now), "tool_calls": 0, "files": []},
               open(os.path.join(ROOT, ".vemo", "run.json"), "w", encoding="utf-8"), indent=2)
     print("  Run-budget counter reset. Ensure run_budget.enabled:true — an unattended run needs a stop rule.")
     return 0
@@ -115,7 +131,7 @@ def cmd_on(a):
 def cmd_off(_a):
     st = _read_state()
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
-    json.dump({"enabled": False, "disabled_at": datetime.now().isoformat(timespec="minutes")},
+    json.dump({"enabled": False, "disabled_at": _stamp()},
               open(STATE, "w", encoding="utf-8"), indent=2)
     _record("auto_mode_disabled", {"was_enabled": st.get("enabled", False)})
     print("[vemo-auto] AUTO MODE OFF — back to human-in-the-loop gates.")
