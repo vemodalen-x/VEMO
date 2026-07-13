@@ -75,7 +75,7 @@ that fails the moment the model doesn't read it.
 cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ && cd your-repo
 
 # 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
-python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
+python3 bin/vemo start --preset python       # preview first; add --apply after review
 # Windows: use `python bin/vemo ...` if `python3` is not installed.
 export PATH="$PWD/bin:$PATH"                  # so you can just type `vemo`
 
@@ -125,7 +125,9 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 
 | Command | Does |
 |---|---|
-| `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + git gates + tasks/) |
+| `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
+| `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
+| `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
 | `vemo verify [--no-cache]` | execute the task's focused/full/release profile; reuse only a matching scope fingerprint |
@@ -186,6 +188,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
 | Design diagnostic coaching/tutoring agent flows | [docs/DIAGNOSTIC_PROMPTING.md](docs/DIAGNOSTIC_PROMPTING.md) |
 | Govern every Git project on one PC | [docs/FLEET.md](docs/FLEET.md) |
+| Understand the product path and commercial boundary | [docs/PRODUCT.md](docs/PRODUCT.md) |
 | Understand standards and commercial readiness mapping | [docs/STANDARDS.md](docs/STANDARDS.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |

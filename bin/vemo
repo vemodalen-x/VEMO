@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # bin/ -> re
 os.environ.setdefault("VEMO_ROOT", ROOT)
 PY = sys.executable or "python3"
 TS = [PY, os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
+PRODUCT = os.path.join(ROOT, "bin", "vemo_product.py")
 
 
 def _ts(*args):
@@ -39,6 +40,9 @@ EXPLAIN = {
     "verify": "`vemo verify` executes the task's focused/full/release profile and writes an evidence log + a machine "
               "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
               "typed into front-matter. Executed ground truth, produced by the gate's own side.",
+    "start": "`vemo start` previews a low-friction first setup; add `--apply` only after reviewing the plan.",
+    "report": "`vemo report` summarizes observed local events, verification receipts, setup readiness, and next actions. "
+              "It does not upload source code.",
 }
 
 
@@ -103,7 +107,9 @@ def cmd_init(args):
 
 
 HELP = """vemo <command>
-  init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   set up VEMO (--minimal = no-install monitor trial)
+  start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
+  report [--days N] [--json]         show observed local value and next best actions
+  init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
   context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
   verify [--no-cache]             execute focused/full/release profile -> evidence log + machine receipt
@@ -113,7 +119,7 @@ HELP = """vemo <command>
   judge-brief [--lens <l>] [--range <r>]  staged/range-only evidence dossier for a judge pass
   heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
   task create|note|state          create/update task records with tool-written UTC timestamps
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
@@ -139,6 +145,8 @@ def main():
     if c in ("context", "judge-brief", "heartbeat"):
         return subprocess.run(TS + a).returncode
     if c == "init": return cmd_init(a[1:])
+    if c in ("start", "report"):
+        return subprocess.run([PY, PRODUCT, c] + a[1:]).returncode
     if c == "explain":
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))
         return 0

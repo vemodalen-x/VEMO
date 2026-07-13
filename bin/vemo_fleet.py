@@ -27,6 +27,7 @@ SKIP_DIRS = {
 MANAGED_SINGLE_FILES = (
     "AGENTS.md",
     "bin/vemo",
+    "bin/vemo_product.py",
     "bin/vemo_fleet.py",
     "agents/governance-judge.md",
     "tasks/_TASK_TEMPLATE.md",

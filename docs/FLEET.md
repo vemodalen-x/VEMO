@@ -81,6 +81,9 @@ the reported gaps, and move to `team` or `regulated` by explicitly updating its 
 
 ## Auditability
 
+After onboarding a project, run `vemo report` inside that project. Fleet answers "which projects are ready?";
+the project report answers "what did the controls observe this week?" Both reports are local-only by default.
+
 Mutating Fleet actions append privacy-minimized events to `fleet-audit.jsonl`. Events contain project ids rather than
 project paths and form a SHA-256 hash chain:
 

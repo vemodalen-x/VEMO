@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -92,7 +93,7 @@ def child_env(**extra):
     env.update(extra)
     return env
 
-GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill", "fleet")
+GROUPS = ("validator", "ci", "hook", "git", "budget", "auto", "skill", "fleet", "product")
 
 CHECK_INDEX = (
     ("validator", "scope: in-scope allowed"),
@@ -189,6 +190,11 @@ CHECK_INDEX = (
     ("skill", "skill_check selftest passes"),
     ("skill", "skill-roster lists the on-disk skills"),
     ("fleet", "fleet unit suite passes"),
+    ("product", "start: default preview is read-only JSON"),
+    ("product", "start: detects stack and exposes explicit apply"),
+    ("product", "report: emits local-only observed value JSON"),
+    ("product", "report: distinguishes recommendations from measurements"),
+    ("product", "fleet onboarding carries the product layer"),
     ("hook", "hook e2e: dangerous cmd quoted in echo NOT blocked (data-region)"),
     ("hook", "hook e2e: backslash-escaped heredoc opener cannot hide a real destructive command"),
     ("hook", "hook e2e: cross-line-quote comment carrier cannot hide a real destructive command"),
@@ -1060,6 +1066,46 @@ def run_fleet_checks(r):
           lambda g: g[0] == 0 and "OK" in g[1])
 
 
+def run_product_checks(r):
+    if not r.has_group("product"):
+        return
+    product = os.path.join(ROOT, "bin", "vemo_product.py")
+
+    def run(*args):
+        return subprocess.run([sys.executable, product, *args], cwd=ROOT,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              env=child_env(VEMO_ROOT=ROOT))
+
+    preview = run("start", "--preset", "python", "--json")
+    try:
+        preview_payload = json.loads(preview.stdout)
+    except ValueError:
+        preview_payload = {}
+    r.chk("product", "start: default preview is read-only JSON", (preview.returncode, preview_payload),
+          lambda g: g[0] == 0 and g[1].get("mode") == "preview" and g[1].get("read_only_preview") is True)
+    r.chk("product", "start: detects stack and exposes explicit apply", preview_payload,
+          lambda g: g.get("preset") == "python"
+          and any(row.get("action") == "install_local_guards" for row in g.get("actions", []))
+          and any("--apply" in item for item in g.get("next", [])))
+
+    report = run("report", "--json")
+    try:
+        report_payload = json.loads(report.stdout)
+    except ValueError:
+        report_payload = {}
+    r.chk("product", "report: emits local-only observed value JSON", (report.returncode, report_payload),
+          lambda g: g[0] == 0 and g[1].get("schema_version") == 1
+          and g[1].get("data_local_only") is True and g[1].get("source_upload") is False
+          and isinstance(g[1].get("telemetry"), dict) and isinstance(g[1].get("verification"), dict))
+    r.chk("product", "report: distinguishes recommendations from measurements", report_payload,
+          lambda g: isinstance(g.get("measurement_note"), str)
+          and isinstance(g.get("recommendations"), list)
+          and "monetary savings" in g.get("measurement_note", ""))
+    fleet_source = Path(os.path.join(ROOT, "bin", "vemo_fleet.py")).read_text(encoding="utf-8")
+    r.chk("product", "fleet onboarding carries the product layer", fleet_source,
+          lambda g: '"bin/vemo_product.py"' in g)
+
+
 def main(argv):
     # Hermetic sandboxes: VEMO_DIFF_RANGE is a REAL-repo concept (the pushed range). Our git checks
     # run pre-commit against throwaway `git init` sandboxes, so an inherited range points at revisions
@@ -1092,6 +1138,7 @@ def main(argv):
         run_auto_checks(runner)
         run_skill_checks(runner)
         run_fleet_checks(runner)
+        run_product_checks(runner)
     except FailFast:
         pass
     return runner.report()
