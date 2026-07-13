@@ -39,7 +39,7 @@ EXPLAIN = {
              "register, assess, and preview-first onboard against progressive policy profiles.",
     "verify": "`vemo verify` executes the task's focused/full/release profile and writes an evidence log + a machine "
               "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
-              "typed into front-matter. Executed ground truth, produced by the gate's own side.",
+              "typed into front-matter. Use `--all-tasks` for a multi-task push.",
     "start": "`vemo start` previews a low-friction first setup; add `--apply` only after reviewing the plan.",
     "report": "`vemo report` summarizes observed local events, verification receipts, setup readiness, and next actions. "
               "It does not upload source code.",
@@ -112,7 +112,7 @@ HELP = """vemo <command>
   init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
   context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
-  verify [--no-cache]             execute focused/full/release profile -> evidence log + machine receipt
+  verify [--no-cache] [--all-tasks] execute verification; preserve one receipt per task for multi-task pushes
   doctor                          health check (config + hooks + tools + gates-heartbeat)
   selfcheck                       internal consistency (ENFORCED-BY claims + config keys must have consumers)
   eval                            executable conformance harness (validator + hook end-to-end)

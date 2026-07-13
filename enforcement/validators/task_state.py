@@ -35,6 +35,7 @@ SESSION_MAP = os.path.join(ROOT, ".vemo", "session_task.json")
 JUDGE_LOG = os.path.join(ROOT, ".vemo", "judge.jsonl")
 RUN_DIR = os.path.join(ROOT, ".vemo", "run")
 RECEIPT = os.path.join(RUN_DIR, "receipt.json")
+TASK_RECEIPTS = os.path.join(RUN_DIR, "receipts")
 CACHE = os.path.join(RUN_DIR, "cache.json")
 TIER_RANK = {"R0": 1, "R1": 2, "R2": 3}
 CHANGE_CLASS_RANK = {
@@ -650,11 +651,40 @@ def _judge_gate_result(fm, required):
     return "ok"
 
 
-def _read_receipt():
-    try:
-        return json.load(open(RECEIPT, encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+def _task_receipt_path(task_id):
+    safe = hashlib.sha256(str(task_id).encode("utf-8")).hexdigest()
+    return os.path.join(TASK_RECEIPTS, safe + ".json")
+
+
+def _read_receipt(task_id=None):
+    """Read a task-scoped receipt, falling back to the legacy current receipt.
+
+    `receipt.json` remains the current-task compatibility surface. Multi-task pushes use one immutable
+    receipt per task so a later verification cannot overwrite an earlier task's proof.
+    """
+    candidates = [_task_receipt_path(task_id)] if task_id else []
+    candidates.append(RECEIPT)
+    for path in candidates:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                value = json.load(handle)
+            if task_id and str(value.get("task")) not in (str(task_id), "adhoc"):
+                continue
+            return value
+        except (OSError, ValueError, AttributeError):
+            continue
+    return None
+
+
+def _write_receipt(receipt):
+    os.makedirs(RUN_DIR, exist_ok=True)
+    with open(RECEIPT, "w", encoding="utf-8") as handle:
+        json.dump(receipt, handle, indent=2)
+    task_id = receipt.get("task")
+    if task_id and str(task_id) != "adhoc":
+        os.makedirs(TASK_RECEIPTS, exist_ok=True)
+        with open(_task_receipt_path(task_id), "w", encoding="utf-8") as handle:
+            json.dump(receipt, handle, indent=2)
 
 
 def _verification_gate_result(fm):
@@ -692,7 +722,7 @@ def _acceptance_gate_result(fm, cfg):
             # the front-matter `evidence:` path is a human cache that may point at a gitignored/rotated log
             # absent on a clean CI checkout (which is exactly where the guarantee must hold).
             if _dig(cfg, "paths.build") or _dig(cfg, "paths.smoke") or isinstance(fm.get("verification"), dict):
-                rcpt = _read_receipt()
+                rcpt = _read_receipt(fm.get("id"))
                 if not rcpt:
                     return "block:no-verify-receipt (paths.build/smoke configured — run `vemo verify` so the gate gets executed ground truth)"
                 if str(rcpt.get("task")) not in (str(fm.get("id")), "adhoc"):
@@ -848,12 +878,16 @@ def _receipt_from_run(task_id, profile, commands, exits, log_rel, fingerprint, f
     }
 
 
-def verify_run(session=None, no_cache=False):
-    """Execute the configured build/smoke and write evidence + a machine receipt.
-    This is the ONLY writer of .vemo/run/receipt.json — the acceptance gate trusts the receipt,
-    not exit codes typed into front-matter (executed ground truth, produced by the gate's own side)."""
+def _task_from_path(task_path):
+    path = task_path if os.path.isabs(task_path) else os.path.join(ROOT, task_path)
+    path = os.path.abspath(path)
+    fm = _parse_front_matter(path)
+    return (path, fm) if fm.get("id") else None
+
+
+def _verify_run_for_task(act, no_cache=False):
+    """Run one task's verification contract and persist both current and task-scoped receipts."""
     cfg = _load_config()
-    act = _active_task(session)
     task_id = act[1].get("id") if act else "adhoc"
     fm = act[1] if act else {}
     try:
@@ -873,7 +907,7 @@ def verify_run(session=None, no_cache=False):
         if os.path.isfile(log_abs) and os.path.getsize(log_abs) > 0:
             receipt = _receipt_from_run(task_id, profile, commands, cache["exit_codes"], log_rel,
                                         fingerprint, files, True, cache.get("ts"))
-            json.dump(receipt, open(RECEIPT, "w", encoding="utf-8"), indent=2)
+            _write_receipt(receipt)
             return "pass cached=true profile=%s log=%s receipt=.vemo/run/receipt.json" % (profile, log_rel)
     ts = _utc_now().strftime("%Y%m%dT%H%M%SZ")
     log_rel = os.path.join(".vemo", "run", "%s-%s.log" % (task_id, ts))
@@ -887,13 +921,56 @@ def verify_run(session=None, no_cache=False):
             exits[name] = p.returncode
             log.write("[exit %d]\n" % p.returncode); log.flush()
     receipt = _receipt_from_run(task_id, profile, commands, exits, log_rel, fingerprint, files)
-    json.dump(receipt, open(RECEIPT, "w", encoding="utf-8"), indent=2)
+    _write_receipt(receipt)
     if _successful_exits(exits):
         json.dump({"ts": receipt["ts"], "profile": profile, "fingerprint": fingerprint,
                    "exit_codes": exits, "log": log_rel}, open(CACHE, "w", encoding="utf-8"), indent=2)
     return "%s cached=false profile=%s build_exit=%s smoke_exit=%s log=%s receipt=.vemo/run/receipt.json" % (
         "pass" if _successful_exits(exits) else "FAIL", profile, receipt.get("build_exit"),
         receipt.get("smoke_exit"), log_rel)
+
+
+def verify_run(session=None, no_cache=False, task_path=None):
+    """Execute one task's configured build/smoke and write machine receipts."""
+    act = _task_from_path(task_path) if task_path else _active_task(session)
+    return _verify_run_for_task(act, no_cache)
+
+
+def _verification_task_paths():
+    """Resolve task files from the CI range, staged index, or the active task."""
+    diff_range = os.environ.get("VEMO_DIFF_RANGE")
+    command = ["git", "-C", ROOT, "diff", "--no-renames", "--name-only"]
+    if diff_range:
+        command.append(diff_range)
+    else:
+        command.append("--cached")
+    paths = []
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            paths = [line.strip() for line in result.stdout.splitlines()
+                     if line.strip().startswith("tasks/") and line.strip().endswith(".md")
+                     and not line.strip().startswith("tasks/_")]
+    except OSError:
+        pass
+    if paths:
+        return sorted(set(paths))
+    active = _active_task()
+    return [os.path.relpath(active[0], ROOT).replace("\\", "/")] if active else []
+
+
+def verify_run_all(session=None, no_cache=False):
+    """Verify every task in the current push range, preserving one receipt per task."""
+    paths = _verification_task_paths()
+    if not paths:
+        return "FAIL no-task-for-verification"
+    results = []
+    for path in paths:
+        result = verify_run(session, no_cache, path)
+        results.append("%s=%s" % (path, result))
+        if not result.startswith(("pass", "no-build-configured")):
+            return "FAIL all-tasks %s" % " | ".join(results)
+    return "pass all-tasks=%d %s" % (len(results), " | ".join(results))
 
 
 def verify_plan(risk, change="standard"):
@@ -1388,7 +1465,7 @@ def main():
     vp = sub.add_parser("verify-plan"); vp.add_argument("--risk", required=True)
     vp.add_argument("--change-class", default="standard", choices=sorted(CHANGE_CLASS_RANK))
     vr = sub.add_parser("verify-run"); vr.add_argument("--session", default=None)
-    vr.add_argument("--no-cache", action="store_true")
+    vr.add_argument("--no-cache", action="store_true"); vr.add_argument("--all-tasks", action="store_true")
     jr = sub.add_parser("judge-record"); jr.add_argument("--task", required=True)
     jr.add_argument("--verdict", required=True, choices=["pass", "fail"])
     jr.add_argument("--evidence", default=""); jr.add_argument("--confidence", default="")
@@ -1455,7 +1532,7 @@ def main():
     elif a.cmd == "verify-plan":
         print(verify_plan(a.risk, a.change_class))
     elif a.cmd == "verify-run":
-        out = verify_run(a.session, a.no_cache); print(out)
+        out = verify_run_all(a.session, a.no_cache) if a.all_tasks else verify_run(a.session, a.no_cache); print(out)
         sys.exit(0 if out.startswith(("pass", "no-build-configured")) else 1)
     elif a.cmd == "judge-record":
         print(judge_record(a.task, a.verdict, a.evidence, a.confidence))

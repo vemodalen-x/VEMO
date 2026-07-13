@@ -33,6 +33,11 @@ Successful runs are cached by a SHA-256 fingerprint of the profile, commands, an
 task's `scope_in`. `tasks/**`, `.vemo/**`, ignored files, and unrelated concurrent-task files are excluded.
 An in-scope content or command change invalidates the receipt; `vemo verify --no-cache` forces execution.
 
+For a push range containing multiple accepted tasks, run `vemo verify --all-tasks`. The command writes the
+current compatibility receipt plus one task-scoped receipt under `.vemo/run/receipts/` for each task in the
+staged or CI range. The acceptance gate selects the receipt matching the task id, so one task cannot overwrite
+another task's executed evidence.
+
 **Evidence completeness (anti-blind-spot).** A PASS is valid only if its evidence covers the **full
 scope of the claim**. Checking one case / one error type / one file and declaring a global "PASS" is itself
 a FAIL. (This guards the documented Fable-5 failure: it reported "no error movement" after checking a single

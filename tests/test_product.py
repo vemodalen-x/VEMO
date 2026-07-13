@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("vemo_product", ROOT / "bin" / "vemo_product.py")
 product = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(product)
+TS_SPEC = importlib.util.spec_from_file_location("task_state_product_test", ROOT / "enforcement" / "validators" / "task_state.py")
+task_state = importlib.util.module_from_spec(TS_SPEC)
+TS_SPEC.loader.exec_module(task_state)
 
 
 class ProductTests(unittest.TestCase):
@@ -94,6 +97,23 @@ class ProductTests(unittest.TestCase):
         self.assertTrue(report["data_local_only"])
         self.assertFalse(report["source_upload"])
         self.assertNotIn("must not be echoed", encoded)
+
+    def test_task_scoped_receipts_do_not_overwrite_each_other(self):
+        run_dir = self.temp / ".vemo" / "run"
+        receipt = run_dir / "receipt.json"
+        task_receipts = run_dir / "receipts"
+        original = (task_state.RUN_DIR, task_state.RECEIPT, task_state.TASK_RECEIPTS)
+        task_state.RUN_DIR = str(run_dir)
+        task_state.RECEIPT = str(receipt)
+        task_state.TASK_RECEIPTS = str(task_receipts)
+        try:
+            task_state._write_receipt({"task": "T-one", "exit_codes": {"build": 0}})
+            task_state._write_receipt({"task": "T-two", "exit_codes": {"build": 0}})
+            self.assertEqual("T-one", task_state._read_receipt("T-one")["task"])
+            self.assertEqual("T-two", task_state._read_receipt("T-two")["task"])
+            self.assertEqual("T-two", task_state._read_receipt()["task"])
+        finally:
+            task_state.RUN_DIR, task_state.RECEIPT, task_state.TASK_RECEIPTS = original
 
 
 if __name__ == "__main__":

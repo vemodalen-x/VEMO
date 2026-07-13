@@ -130,7 +130,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
-| `vemo verify [--no-cache]` | execute the task's focused/full/release profile; reuse only a matching scope fingerprint |
+| `vemo verify [--no-cache] [--all-tasks]` | execute verification; `--all-tasks` preserves one receipt per task in a multi-task push |
 | `vemo doctor` | health check (config, hooks, tools, stale tasks, gates-heartbeat) |
 | `vemo selfcheck` | internal consistency: ENFORCED-BY claims and config keys must map to real consumers |
 | `vemo eval` | executable conformance harness, validator + hook end-to-end (writes `eval/out/report.json`) |

@@ -10,6 +10,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
   for local observed-value reporting (events, verification, tasks, readiness, and next actions).
 - **Adoption docs**: documented solo/team/regulated profiles, the open Core versus paid control-plane boundary,
   local-only data handling, and metrics to validate with design partners before broad promotion.
+- **Multi-task evidence**: `vemo verify --all-tasks` now writes task-scoped receipts and CI verifies every task in
+  a push range, preventing one task's receipt from masking another task's acceptance.
 - Cost-proportional verification profiles: `focused` runs task-local test/lint/smoke, `full` runs repository
   build/smoke, and `release` adds the configured package scan. Successful runs reuse a scope-and-command SHA-256
   cache; `--no-cache` forces execution and stale receipts are blocked.
