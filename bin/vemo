@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # bin/ -> re
 os.environ.setdefault("VEMO_ROOT", ROOT)
 PY = sys.executable or "python3"
 TS = [PY, os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
+PRODUCT = os.path.join(ROOT, "bin", "vemo_product.py")
 
 
 def _ts(*args):
@@ -29,16 +30,19 @@ EXPLAIN = {
     "budget": "Run budget = stop rules for long-horizon / Mythos-class models that 'run until cut off'. "
               "Hard-stops a runaway when UNATTENDED (auto on); advisory when a human is present.",
     "judge": "An independent subagent (separate context, told to refute 'done') flips required gates instead "
-             "of the worker self-reporting. Low/medium R1 need one pass; R2 depth scales by capability.tier.",
+             "of the worker self-reporting. Narrow CI R2 uses one pass; security/release/permissions use full depth.",
     "capability": "capability.tier (frontier|high|medium|low) scales ceremony to MODEL strength. Stronger "
                   "model -> less prescription, more self-verify. Raise it when you upgrade the model.",
     "presets": "`vemo init --preset python|node|cpp|docs` writes a stack overlay (vemo.config.preset.yaml) so "
                "VEMO is preconfigured for your repo type. Convention over configuration.",
     "fleet": "`vemo fleet` is the private local control plane for all Git projects on this PC: discover, "
              "register, assess, and preview-first onboard against progressive policy profiles.",
-    "verify": "`vemo verify` EXECUTES paths.build/paths.smoke and writes an evidence log + a machine "
+    "verify": "`vemo verify` executes the task's focused/full/release profile and writes an evidence log + a machine "
               "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
-              "typed into front-matter. Executed ground truth, produced by the gate's own side.",
+              "typed into front-matter. Use `--all-tasks` for a multi-task push.",
+    "start": "`vemo start` previews a low-friction first setup; add `--apply` only after reviewing the plan.",
+    "report": "`vemo report` summarizes observed local events, verification receipts, setup readiness, and next actions. "
+              "It does not upload source code.",
 }
 
 
@@ -103,16 +107,19 @@ def cmd_init(args):
 
 
 HELP = """vemo <command>
-  init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   set up VEMO (--minimal = no-install monitor trial)
+  start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
+  report [--days N] [--json]         show observed local value and next best actions
+  init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
   context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
-  verify                          EXECUTE paths.build/smoke -> evidence log + machine receipt (the push gate reads this)
+  verify [--no-cache] [--all-tasks] execute verification; preserve one receipt per task for multi-task pushes
   doctor                          health check (config + hooks + tools + gates-heartbeat)
   selfcheck                       internal consistency (ENFORCED-BY claims + config keys must have consumers)
   eval                            executable conformance harness (validator + hook end-to-end)
-  judge-brief [--lens <l>]        evidence dossier for a judge pass (claims / gates / receipt / changes + lens checklist)
+  judge-brief [--lens <l>] [--range <r>]  staged/range-only evidence dossier for a judge pass
   heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify
+  task create|note|state          create/update task records with tool-written UTC timestamps
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
@@ -131,13 +138,15 @@ def main():
     if c == "status": return cmd_status()
     if c == "doctor": return cmd_doctor()
     if c == "verify":  # stream output live — this actually runs the build/smoke
-        return subprocess.run(TS + ["verify-run"]).returncode
+        return subprocess.run(TS + ["verify-run"] + a[1:]).returncode
     if c == "selfcheck":  # propagate the real exit code — a red selfcheck must fail the caller
         return subprocess.run(TS + ["selfcheck"]).returncode
     if c == "eval": return subprocess.run([PY, os.path.join(ROOT, "eval", "run.py")] + a[1:]).returncode
     if c in ("context", "judge-brief", "heartbeat"):
         return subprocess.run(TS + a).returncode
     if c == "init": return cmd_init(a[1:])
+    if c in ("start", "report"):
+        return subprocess.run([PY, PRODUCT, c] + a[1:]).returncode
     if c == "explain":
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))
         return 0
@@ -145,6 +154,10 @@ def main():
         return subprocess.run([PY, os.path.join(ROOT, "enforcement", "automation", "vemo-auto")] + a[1:]).returncode
     if c == "budget":
         print(_ts("budget-" + (a[1] if len(a) > 1 else "status"))); return 0
+    if c == "task":
+        if len(a) < 2 or a[1] not in ("create", "note", "state"):
+            print("usage: vemo task create|note|state [options]"); return 2
+        return subprocess.run(TS + ["task-" + a[1]] + a[2:]).returncode
     if c == "tier":
         print(_ts("tier-required", "--paths", *(a[1:] or ["."]))); return 0
     if c == "check":

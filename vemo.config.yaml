@@ -58,10 +58,11 @@ verification:
                                 # and when paths.build/smoke are set the gate trusts ONLY the machine
                                 # receipt written by `vemo verify` — never exit codes typed into front-matter
   require_intent_narration: true # the agent must narrate intent; missing narration is a red flag (CoT monitoring)
+  cache_enabled: true           # reuse a successful run only when task-scope content + commands fingerprint identically
   independent_verifiers:        # judge attempts per R2 gate by capability tier; enforced by required-judge
                                 # via contiguous pass records in .vemo/judge.jsonl (combats same-class blind
     frontier: 3                 # spots). >1 = the judge agent is invoked that many times with fresh
-    high: 2                     # context; each records via judge-record. (True parallel panels: ROADMAP.)
+    high: 2                     # context; ci-narrow R2 uses one pass; security/release/permissions keep full depth
     medium: 1
     low: 1
 
@@ -137,6 +138,7 @@ paths:
   # require a machine receipt — the framework eats its executed-ground-truth rule.
   build:        "python3 eval/run.py"                              # `vemo verify` EXECUTES this and writes the receipt
   smoke:        "python3 enforcement/validators/task_state.py selfcheck"
+  package_scan: ""       # required only by verification.profile=release; set to a real dependency/package scanner
 
 concurrency:
   stale_threshold_hours: 4   # doctor flags live tasks with a heartbeat older than this (takeover candidates)

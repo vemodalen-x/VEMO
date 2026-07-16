@@ -2,6 +2,7 @@
 # ── Machine-readable state (hooks & CI parse THIS; keep it accurate) ──
 id: T-YYYYMMDD-xxx
 risk: R1                       # R0 | R1 | R2  (lowest that fits)
+change_class: standard         # standard | ci-init | ci-narrow | security | permissions | release
 state: PlanCreated             # PlanCreated|ReviewApproved|ImplementationDone|AcceptancePassed|ProcedureCompleted|Archived
 scope_in: []                   # globs the hook allows edits within, e.g. ["src/fusion/**","tests/fusion/**"]
 scope_out: []                  # explicitly excluded (documentation)
@@ -12,13 +13,19 @@ acceptance:
   build_exit: null             # cache of the `vemo verify` receipt — the gate trusts the receipt,
   smoke_exit: null             # not these numbers; evidence file must EXIST
   evidence: ""                 # path under .vemo/run/ (written by `vemo verify`)
+verification:
+  profile: focused             # focused (test+lint+smoke) | full (global build+smoke) | release (+package scan)
+  commands:                    # required only for focused; run exactly these task-local commands
+    test: ""
+    lint: ""
+    smoke: ""
 judge:
   required: false              # set by risk tier + capability.tier
   verdict: null                # pass|fail — must match the judge's own `judge-record` entry
                                # in .vemo/judge.jsonl; a pasted verdict without that record blocks
 approved_commands: []          # destructive cmds the USER approved this session, e.g. ["git reset --hard"]
 owning_chat: ""                # chat-YYYYMMDD-HHMM-xxx
-heartbeat: ""                  # ISO-8601, updated on every state write
+heartbeat: ""                  # tool-owned RFC3339 UTC (`Z`); use `vemo heartbeat` / `vemo task state`
 ---
 
 # <Task title>
@@ -39,7 +46,7 @@ One sentence: what done looks like.
 Approach in 2–5 bullets. (R0: this can be a single inline sentence.)
 
 ## Execution Log
-- <ts> <what happened, commands, exit codes, evidence path>
+- Use `vemo task note --message "..."`; UTC timestamps are tool-written, never model-entered.
 
 ## Acceptance Result
 Per-criterion PASS/FAIL + evidence. Any FAIL → disposition (RCA-inline|RCA-subtask|Criterion-revision|Known-limitation) + user approval where required.

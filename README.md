@@ -75,7 +75,7 @@ that fails the moment the model doesn't read it.
 cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ && cd your-repo
 
 # 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
-python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
+python3 bin/vemo start --preset python       # preview first; add --apply after review
 # Windows: use `python bin/vemo ...` if `python3` is not installed.
 export PATH="$PWD/bin:$PATH"                  # so you can just type `vemo`
 
@@ -125,15 +125,18 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 
 | Command | Does |
 |---|---|
-| `vemo init [--preset python\|node\|cpp\|docs]` | set up VEMO in this repo (preset + hooks + git gates + tasks/) |
+| `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
+| `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
+| `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
-| `vemo verify` | **execute** `paths.build/smoke` → evidence log + machine receipt (what the push gate trusts) |
+| `vemo verify [--no-cache] [--all-tasks]` | execute verification; `--all-tasks` preserves one receipt per task in a multi-task push |
 | `vemo doctor` | health check (config, hooks, tools, stale tasks, gates-heartbeat) |
 | `vemo selfcheck` | internal consistency: ENFORCED-BY claims and config keys must map to real consumers |
 | `vemo eval` | executable conformance harness, validator + hook end-to-end (writes `eval/out/report.json`) |
-| `vemo judge-brief [--lens <l>]` | evidence dossier for a judge pass (claims · gates · receipt · changes + lens checklist) |
+| `vemo judge-brief [--lens <l>] [--range <r>]` | staged/range-only dossier; excludes other tasks' untracked files |
 | `vemo heartbeat` | stamp the active task's heartbeat in place (no hand-editing the task file) |
+| `vemo task create\|note\|state` | create/update task records with tool-written RFC3339 UTC timestamps |
 | `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify` |
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
@@ -187,6 +190,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | Run a Devpost-style hackathon build under a deadline (Codex adapter incl.) | [docs/HACKATHON_PLAYBOOK.md](docs/HACKATHON_PLAYBOOK.md) |
 | Design diagnostic coaching/tutoring agent flows | [docs/DIAGNOSTIC_PROMPTING.md](docs/DIAGNOSTIC_PROMPTING.md) |
 | Govern every Git project on one PC | [docs/FLEET.md](docs/FLEET.md) |
+| Understand the product path and commercial boundary | [docs/PRODUCT.md](docs/PRODUCT.md) |
 | Understand standards and commercial readiness mapping | [docs/STANDARDS.md](docs/STANDARDS.md) |
 | Understand how VEMO thinks | [docs/MENTAL_MODEL.md](docs/MENTAL_MODEL.md) |
 | Find the right doc fast | [docs/INDEX.md](docs/INDEX.md) |

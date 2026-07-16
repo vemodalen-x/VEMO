@@ -23,6 +23,21 @@ trusts only the **machine receipt** (`.vemo/run/receipt.json`) written by `vemo 
 build/smoke itself and records the exit codes. Front-matter `acceptance:` fields are a human-readable cache
 of that receipt, not the source of truth; a `passed` whose evidence file does not exist is **blocked**.
 
+Verification profiles keep cost proportional:
+- `focused` (R1 default): run exactly the task's `test`, `lint`, and one real `smoke` command.
+- `full`: run repository-wide `paths.build` and `paths.smoke`.
+- `release`: run the full profile plus `paths.package_scan`; release-class tasks must use this profile.
+  The commit and acceptance gates enforce that contract; declaring `release` with `full` is blocked.
+
+Successful runs are cached by a SHA-256 fingerprint of the profile, commands, and files matching the
+task's `scope_in`. `tasks/**`, `.vemo/**`, ignored files, and unrelated concurrent-task files are excluded.
+An in-scope content or command change invalidates the receipt; `vemo verify --no-cache` forces execution.
+
+For a push range containing multiple accepted tasks, run `vemo verify --all-tasks`. The command writes the
+current compatibility receipt plus one task-scoped receipt under `.vemo/run/receipts/` for each task in the
+staged or CI range. The acceptance gate selects the receipt matching the task id, so one task cannot overwrite
+another task's executed evidence.
+
 **Evidence completeness (anti-blind-spot).** A PASS is valid only if its evidence covers the **full
 scope of the claim**. Checking one case / one error type / one file and declaring a global "PASS" is itself
 a FAIL. (This guards the documented Fable-5 failure: it reported "no error movement" after checking a single
@@ -46,11 +61,15 @@ confidence: high|med|low
   mirrors it into the task front-matter. The commit/push gates require the front-matter `pass` plus enough
   contiguous pass records for the required verifier depth. A `pass` typed into front-matter with no provenance
   record is treated as forged and blocks. A later `fail` resets the contiguous pass count until rework earns
-  the required pass suffix again.
+  the required pass suffix again. Each pass is bound to a task-scoped staged/range snapshot (excluding the
+  provenance log and only the active task's normalized `judge:` verdict cache); changing task criteria, a task
+  template/sibling task, or another in-scope file
+  invalidates old passes, while mirroring the verdict and sibling-task files do not.
 - A `fail` verdict blocks `AcceptancePassed`. The judge cannot be the same session that did the work.
 - Cost control: judge runs only on tiers that require it. At `tier=high`/`frontier`, most R1 work
   self-verifies; at `tier=medium`/`low`, R1 needs one judge pass. R2 requires
-  `verification.independent_verifiers[capability.tier]` pass records.
+  `verification.independent_verifiers[capability.tier]` pass records, except `ci-narrow` R2 uses one.
+  `security`, `permissions`, and `release` retain full depth.
 
 ## 4. Why this beats prose-only gates
 A prose-only "hard gate" can degrade into an assertion the implementer makes about itself. A judge with its own

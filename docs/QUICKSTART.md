@@ -11,14 +11,21 @@ cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin} your-
 cd your-repo
 ```
 
-## 2. Initialize for your stack (one command)
+## 2. Preview the product path
 ```bash
-python3 bin/vemo init --preset python     # or: node | cpp | docs
+python3 bin/vemo start --preset python    # or: node | cpp | docs
 ```
 On Windows, use `python bin/vemo ...` if `python3` is not installed.
 
-That installs the hooks + git pre-commit/pre-push, creates `tasks/`, and preconfigures build/test for
-your stack. (Prefer to look before you leap? `vemo init --preset python --dry-run`.)
+This command is read-only. It detects the stack, shows the files it would touch, and makes the first value
+step explicit. Apply it after reviewing the plan:
+
+```bash
+python3 bin/vemo start --preset python --profile solo --apply
+```
+
+That applies the preset, installs local hooks + Git pre-commit/pre-push, and creates task storage. Use
+`--profile team` when multiple people or Agents will edit the repository.
 
 **Make it authoritative** (local hooks are fast feedback; the *guarantee* is server-side):
 ```bash
@@ -43,6 +50,7 @@ auto mode, run budgets) builds on this one idea: *the important rules are mechan
 ## 4. See where you stand, any time
 ```bash
 python3 bin/vemo status      # tier / enforcement / budget / auto mode / active task
+python3 bin/vemo report      # observed events / verification / setup gaps / next best actions
 python3 bin/vemo explain gates
 ```
 On Windows, use `python bin/vemo status`.

@@ -40,7 +40,7 @@ jobs:
         run: bash enforcement/ci/pre-commit
 
       - name: Executed ground truth (paths.build / paths.smoke, when configured)
-        run: python3 enforcement/validators/task_state.py verify-run
+        run: python3 enforcement/validators/task_state.py verify-run --all-tasks
 
       - name: Push gate (acceptance-before-push + judge provenance + rule-of-two)
         run: bash enforcement/ci/pre-push < /dev/null

@@ -11,7 +11,8 @@ You did not write this code. Your job is to **try to prove the task is NOT done*
 evidence. Default to skepticism: if you cannot confirm a criterion from evidence, it is `fail`, not `pass`.
 
 ## What you receive
-- **Start with the dossier**: run `vemo judge-brief --lens <your lens>` (or
+- **Start with the dossier**: run `vemo judge-brief --lens <your lens>`; add `--range <base...head>`
+  in CI (the local default is the staged index). Or run
   `python3 enforcement/validators/task_state.py judge-brief --lens <lens>`). It gives you claims,
   gate results, receipt, per-file scope verdicts, and your lens checklist in ~1 screen — this replaces
   exploring the repo to reconstruct that state (the framework's own token-economy rule: context is for
@@ -20,6 +21,7 @@ evidence. Default to skepticism: if you cannot confirm a criterion from evidence
 - The diff of the change and any evidence artifacts (`.vemo/run/*.log`).
 - The dossier's GATES/CHANGES lines are machine-computed facts — do not re-derive them; DO verify their
   inputs (open the receipt log, re-run the acceptance commands, spot-check a scope verdict).
+- Do not widen the review with `git status -uall`; unrelated untracked/worktree files belong to other tasks.
 
 ## What you check (in order)
 1. **Scope**: every changed file is inside the task's `scope_in`. Any stray file → `fail` (cite it).
@@ -57,7 +59,8 @@ judge:
 ## Rules
 - You **cannot** be the session that implemented the change (different `owning_chat`; your `judge-record`
   entry captures your session for the audit trail).
-- **Multiple passes at high tiers:** at `capability.tier` high/frontier on R2 the judge is invoked
+- **Multiple passes at high tiers:** `ci-narrow` R2 needs one pass. Security, permission, release, and
+  other critical R2 changes at `capability.tier` high/frontier invoke the judge
   `verification.independent_verifiers` times with fresh context and a **different lens each pass**
   (correctness / safety / does-the-evidence-reproduce). Each pass records via `judge-record`; the
   `required-judge` gate counts the latest contiguous pass records, so any later `fail` resets the count

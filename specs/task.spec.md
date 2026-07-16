@@ -14,6 +14,17 @@
 The agent picks the tier in one line: `RiskTier: R1 (path=src/foo.ts, no critical match)`.
 Escalate mid-task if scope grows; never silently downgrade (downgrade requires the user).
 
+### Semantic CI exception
+`.github/workflows/**` remains path-default R2. The pre-commit/CI classifier may lower it to R1 only
+when the actual patch **only adds** Python setup/dependency initialization and changes no gate command,
+trigger, permission, secret/token, shell, working directory, command-chain, release, deploy, or attestation
+behavior. Deleted or renamed-out workflows retain their original path (`--no-renames`) and are classified as
+security changes. Path-only queries have no
+such evidence and stay R2. Set `change_class` to `ci-init`, `ci-narrow`, `security`, `permissions`,
+`release`, or `standard`; the hook blocks semantic-class downgrades.
+Critical classes are ordered `release > permissions > security > ci-narrow`; declaring a weaker class is
+blocked. `release` also requires `verification.profile: release`, including the configured package scan.
+
 ## 2. Machine-readable state (this is what hooks read)
 
 Every task file (`tasks/<id>.md`) opens with YAML front-matter. Hooks and CI parse it deterministically —
@@ -23,13 +34,14 @@ no prose-guessing. See `tasks/_TASK_TEMPLATE.md`.
 ---
 id: T-2026-0616-a3f
 risk: R1
+change_class: standard
 state: ImplementationDone      # PlanCreated|ReviewApproved|ImplementationDone|AcceptancePassed|ProcedureCompleted|Archived
 scope_in: ["src/fusion/**", "tests/fusion/**"]   # hooks BLOCK edits outside this
 acceptance: { status: passed, build_exit: 0, smoke_exit: 0, evidence: ".vemo/run/123.log" }
 judge: { required: false, verdict: null }
 approved_commands: []          # destructive cmds the USER approved this session (command-guard escape hatch)
 owning_chat: chat-20260616-1410-x7q
-heartbeat: 2026-06-16T14:55
+heartbeat: 2026-06-16T06:55:00Z
 ---
 ```
 
@@ -77,7 +89,8 @@ Failed directions must end `stop`/`rollback` with an explicit next-direction not
 
 **Execution Log discipline (token economy):** one line per event — `timestamp what-changed evidence-ref`.
 The log is a flight recorder, not a diary: narration/rationale lives in the Conclusion, evidence lives in
-`.vemo/run/`. Stamp `heartbeat:` with `vemo heartbeat` (in-place, machine-written) instead of hand-editing.
+`.vemo/run/`. All timestamps are tool-written RFC3339 UTC (`Z`): use `vemo task create`, `vemo task note`,
+`vemo task state`, and `vemo heartbeat`; never hand-enter a timestamp.
 
 ## 6. Anti-bloat rule (self-governance)
 This spec must stay < 120 lines. New rules are classified `baseline` (reusable → here) or `task-specific`
