@@ -170,6 +170,7 @@ Reusable, script-backed procedures the agent auto-invokes by their frontmatter `
 | `docs-sync` | keep README / GUIDE / docs in sync |
 | `governance-sync` · `-contribute` · `-release` | pull upstream updates · PR improvements back · cut a release |
 | `automation-mode` | enter full-auto (unattended) mode |
+| `hackathon-submission` | pre-submission readiness check against a contest's own rules |
 
 > Skills are intentionally thin: contracts stay readable, deterministic work lives in scripts, and release-time
 > documentation updates are routed through `docs-sync`.
@@ -183,6 +184,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | See the whole picture (usage + architecture diagrams) | 🖼️ [docs/GUIDE.html](docs/GUIDE.html) |
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
+| Run a Devpost-style hackathon build under a deadline (Codex adapter incl.) | [docs/HACKATHON_PLAYBOOK.md](docs/HACKATHON_PLAYBOOK.md) |
 | Design diagnostic coaching/tutoring agent flows | [docs/DIAGNOSTIC_PROMPTING.md](docs/DIAGNOSTIC_PROMPTING.md) |
 | Govern every Git project on one PC | [docs/FLEET.md](docs/FLEET.md) |
 | Understand standards and commercial readiness mapping | [docs/STANDARDS.md](docs/STANDARDS.md) |

@@ -42,6 +42,52 @@ CLI, …) expose similar pre-tool hook APIs; wire them to the table above. VEMO 
 cannot test in CI — an untested adapter would be exactly the claimed-but-not-mechanized surface VEMO exists
 to eliminate. Contributions welcome with an eval check per guard.
 
+## Codex CLI (a concrete, verified ring-1 wiring)
+
+Codex CLI ships its own hook system (`SessionStart`, `PreToolUse`, `PermissionRequest`, `PostToolUse`, `Stop`,
+and others) configured via `.codex/hooks.json` or a `[hooks]` table in `config.toml` — the same
+matcher-then-command shape as Claude Code's, so it can drive VEMO's existing dispatcher unmodified. Two
+Codex-specific wrinkles versus the Claude Code wiring above:
+
+- **Decision envelope, not a bare exit code.** Codex's default hook output is a JSON object
+  (`hookSpecificOutput.permissionDecision` for `PreToolUse`, `hookSpecificOutput.decision.behavior` for
+  `PermissionRequest`) — but Codex also accepts the plain **`exit 2` + stderr** contract VEMO's dispatcher
+  already speaks, so no translation shim is required: register the same
+  `python3 enforcement/hooks/run.py <guard>` command Codex is documented to run.
+- **`PreToolUse` covers `Bash` and `apply_patch`** (Codex's file-edit tool) via `tool_input.command`; there is
+  no separate `Edit`/`Write` tool name to match on the way Claude Code has one. Point Codex's `PreToolUse`
+  hook at `run.py edit` for the `apply_patch` matcher and `run.py command` for the `Bash` matcher — the
+  dispatcher's `target_of()` already falls back across `file_path`/`path`/`notebook_path`, so no dispatcher
+  change is needed either.
+
+Example `.codex/hooks.json` (mirrors `enforcement/hooks/hooks.json`; adjust the repo-root discovery to your
+shell):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "apply_patch",
+        "hooks": [{ "type": "command",
+                    "command": "python3 \"$(git rev-parse --show-toplevel)/enforcement/hooks/run.py\" edit" }] },
+      { "matcher": "Bash",
+        "hooks": [{ "type": "command",
+                    "command": "python3 \"$(git rev-parse --show-toplevel)/enforcement/hooks/run.py\" command" }] }
+    ],
+    "SessionStart": [
+      { "hooks": [{ "type": "command",
+                    "command": "python3 \"$(git rev-parse --show-toplevel)/enforcement/hooks/run.py\" session-start" }] } ]
+  }
+}
+```
+
+Codex prints a one-time trust prompt for project-local hooks (`/hooks` to review/trust) — expected, not a
+VEMO issue. Session provenance: Codex writes each session's transcript to
+`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, and the session id is embedded in that filename — that is the
+same id a Devpost-style submission asks for (see `docs/HACKATHON_PLAYBOOK.md` §4); record it in the task's
+Execution Log as you go rather than reconstructing it at deadline time. `judge-record` still takes a generic
+`VEMO_SESSION` env var for provenance when no Claude session id exists (see below).
+
 ## Model portability (separate question from harness portability)
 
 - `capability.tier` is the governance contract and it is **behavioral, vendor-neutral** — classify any
