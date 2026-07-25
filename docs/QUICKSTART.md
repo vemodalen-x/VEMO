@@ -7,7 +7,7 @@
 
 ## 1. Drop VEMO into your repo
 ```bash
-cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin} your-repo/
+cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,skill} your-repo/
 cd your-repo
 ```
 
@@ -51,11 +51,16 @@ auto mode, run budgets) builds on this one idea: *the important rules are mechan
 ```bash
 python3 bin/vemo status      # tier / enforcement / budget / auto mode / active task
 python3 bin/vemo report      # observed events / verification / setup gaps / next best actions
+python3 bin/vemo workflow    # Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect
 python3 bin/vemo explain gates
 ```
 On Windows, use `python bin/vemo status`.
 
 ## Next
+
+Use the delivery loop when the request is larger than a one-file fix: `vemo workflow`, then `/office-hours`,
+`/plan-ceo-review`, `/plan-eng-review`, `/review`, `/qa`, `/ship`, and `/retro`. Each role is a thin skill;
+the task file, receipt, judge log, and CI remain authoritative.
 - Going unattended (CI / overnight)? → [HOWTO: auto mode](MENTAL_MODEL.md#auto-mode) — but read the stop-rules note.
 - Want the *why*? → [MENTAL_MODEL.md](MENTAL_MODEL.md). Want the full map? → [INDEX.md](INDEX.md).
 

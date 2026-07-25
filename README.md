@@ -72,7 +72,7 @@ that fails the moment the model doesn't read it.
 
 ```bash
 # 1) drop VEMO into your repo
-cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ && cd your-repo
+cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,skill,presets} your-repo/ && cd your-repo
 
 # 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
 python3 bin/vemo start --preset python       # preview first; add --apply after review
@@ -127,6 +127,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 |---|---|
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
+| `vemo workflow [--json]` | show the Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect delivery loop |
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |

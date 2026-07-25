@@ -43,6 +43,8 @@ EXPLAIN = {
     "start": "`vemo start` previews a low-friction first setup; add `--apply` only after reviewing the plan.",
     "report": "`vemo report` summarizes observed local events, verification receipts, setup readiness, and next actions. "
               "It does not upload source code.",
+    "workflow": "`vemo workflow` maps Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect to the active task "
+                "and points to the next useful action. It is read-only.",
 }
 
 
@@ -109,6 +111,7 @@ def cmd_init(args):
 HELP = """vemo <command>
   start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
   report [--days N] [--json]         show observed local value and next best actions
+  workflow [--json]                  show the Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect loop
   init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
   context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
@@ -119,7 +122,7 @@ HELP = """vemo <command>
   judge-brief [--lens <l>] [--range <r>]  staged/range-only evidence dossier for a judge pass
   heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
   task create|note|state          create/update task records with tool-written UTC timestamps
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | workflow
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
@@ -145,7 +148,7 @@ def main():
     if c in ("context", "judge-brief", "heartbeat"):
         return subprocess.run(TS + a).returncode
     if c == "init": return cmd_init(a[1:])
-    if c in ("start", "report"):
+    if c in ("start", "report", "workflow"):
         return subprocess.run([PY, PRODUCT, c] + a[1:]).returncode
     if c == "explain":
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))

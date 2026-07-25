@@ -34,7 +34,7 @@ MANAGED_SINGLE_FILES = (
     ".github/workflows/vemo-ci.yml",
     "vemo.config.yaml",
 )
-MANAGED_DIRS = ("specs", "enforcement", "presets", "profiles")
+MANAGED_DIRS = ("specs", "enforcement", "presets", "profiles", "skill")
 
 
 class FleetError(Exception):

@@ -141,6 +141,7 @@ class FleetTests(unittest.TestCase):
         self.assertTrue((project / "bin" / "vemo_fleet.py").is_file())
         self.assertTrue(any(row["status"] == "create" for row in plan))
         self.assertIn("AGENTS.md", registered["framework"]["managed_files"])
+        self.assertIn("skill/_catalog.md", registered["framework"]["managed_files"])
 
     def test_onboard_can_bind_an_explicit_skill_home_byte_identically(self):
         project = self.git_project("skills-adopt")

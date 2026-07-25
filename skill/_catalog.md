@@ -15,6 +15,14 @@
 | **governance-release** | cut a versioned release PR | manual · "cut a release" | `gh` + docs-sync |
 | **automation-mode** | enter full-auto / unattended mode | manual · "enable auto mode" | `enforcement/automation/vemo-auto` |
 
+| **office-hours** | turn a vague request into a user problem and smallest valuable outcome | new product idea / unclear request | `.vemo/brief.md` |
+| **plan-ceo-review** | challenge scope and choose the right product ambition | before implementation | `tasks/<id>.md` |
+| **plan-eng-review** | lock architecture, failure modes, and acceptance evidence | after product plan | `tasks/<id>.md` |
+| **review** | challenge the diff before it reaches CI or production | implementation complete / PR | `vemo judge-brief` |
+| **qa** | run the configured verification profile and inspect receipts | before acceptance | `vemo verify` |
+| **ship** | make the reviewed range pass local and server-side gates | ready to publish | `vemo verify` + GitHub |
+| **retro** | turn observed friction into the next framework improvement | after delivery | `.vemo/telemetry.jsonl` |
+
 ## Skill design notes
 
 1. **Thin contracts, not manuals.** SKILL.md files stay small (frontmatter · when · steps · notes). A capable

@@ -6,6 +6,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- **gstack-inspired delivery loop**: added read-only `vemo workflow` plus thin role skills for Think, Plan, Build,
+  Review, Test, Ship, and Reflect. The loop improves repeat use while keeping VEMO task state, receipts, judge
+  provenance, and CI as the authoritative evidence.
 - **Product path**: added `vemo start` for read-only onboarding previews and explicit apply, plus `vemo report`
   for local observed-value reporting (events, verification, tasks, readiness, and next actions).
 - **Adoption docs**: documented solo/team/regulated profiles, the open Core versus paid control-plane boundary,

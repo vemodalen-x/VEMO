@@ -32,6 +32,27 @@ PROFILES = {
     },
 }
 
+WORKFLOW_STAGES = (
+    {"id": "think", "label": "Think", "role": "Product lead", "skill": "office-hours",
+     "artifact": ".vemo/brief.md", "action": "Clarify the user pain, audience, and smallest valuable outcome."},
+    {"id": "plan", "label": "Plan", "role": "CEO + engineering", "skill": "plan-ceo-review / plan-eng-review",
+     "artifact": "tasks/<id>.md", "action": "Lock scope, tradeoffs, architecture, acceptance criteria, and risks."},
+    {"id": "build", "label": "Build", "role": "Implementer", "skill": "vemo task state",
+     "artifact": "task scope_in", "action": "Implement only inside the task boundary and keep the plan traceable."},
+    {"id": "review", "label": "Review", "role": "Staff engineer / judge", "skill": "review",
+     "artifact": ".vemo/judge.jsonl", "action": "Challenge correctness, scope, safety, and evidence before shipping."},
+    {"id": "test", "label": "Test", "role": "QA lead", "skill": "qa",
+     "artifact": ".vemo/run/receipt.json", "action": "Run the configured verification profile and inspect executed evidence."},
+    {"id": "ship", "label": "Ship", "role": "Release engineer", "skill": "ship",
+     "artifact": "PR / release", "action": "Pass the local and CI gates, then publish only the reviewed range."},
+    {"id": "reflect", "label": "Reflect", "role": "Team lead", "skill": "retro",
+     "artifact": ".vemo/learnings.jsonl", "action": "Capture friction, false positives, and the next product improvement."},
+)
+WORKFLOW_STATE_NEXT = {
+    "PlanCreated": "plan", "ReviewApproved": "build", "ImplementationDone": "review",
+    "AcceptancePassed": "ship", "ProcedureCompleted": "reflect", "Archived": "reflect",
+}
+
 
 def utc_now():
     return datetime.now(timezone.utc).replace(microsecond=0)
@@ -278,6 +299,81 @@ def _verification(root, days):
     }
 
 
+def _task_frontmatter(path):
+    """Read the small task subset needed by the read-only workflow dashboard."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    match = re.search(r"(?ms)^---\s*\n(.*?)\n---", text)
+    if not match:
+        return {}
+    result = {}
+    for line in match.group(1).splitlines():
+        if ":" not in line or line.startswith((" ", "\t")):
+            continue
+        key, value = line.split(":", 1)
+        result[key.strip()] = value.strip().strip("\"'")
+    return result
+
+
+def _active_workflow_task(root):
+    tasks = Path(root) / "tasks"
+    candidates = []
+    if tasks.is_dir():
+        for path in tasks.glob("*.md"):
+            if path.name.startswith("_"):
+                continue
+            fm = _task_frontmatter(path)
+            if fm and fm.get("state") != "Archived":
+                candidates.append((fm.get("heartbeat", ""), path, fm))
+    if not candidates:
+        return None
+    _, path, fm = max(candidates, key=lambda row: row[0])
+    return {"id": fm.get("id", path.stem), "state": fm.get("state", "PlanCreated"),
+            "risk": fm.get("risk", "R1"), "path": path.relative_to(Path(root)).as_posix()}
+
+
+def build_workflow_report(root=None):
+    """Return a local-only, read-only map of the opinionated delivery loop."""
+    root = Path(root or ROOT).resolve()
+    task = _active_workflow_task(root)
+    next_stage = WORKFLOW_STATE_NEXT.get(task["state"]) if task else "think"
+    next_index = next((i for i, stage in enumerate(WORKFLOW_STAGES) if stage["id"] == next_stage), 0)
+    stages = []
+    for index, stage in enumerate(WORKFLOW_STAGES):
+        if not task:
+            status = "next" if index == 0 else "queued"
+        elif index < next_index:
+            status = "done"
+        elif index == next_index:
+            status = "next"
+        else:
+            status = "queued"
+        stages.append({**stage, "status": status})
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "command": "vemo workflow",
+        "data_local_only": True,
+        "task": task,
+        "current_stage": next_stage,
+        "stages": stages,
+        "next": next((stage["action"] for stage in stages if stage["status"] == "next"),
+                     "Run `retro` to capture the next improvement."),
+    }
+
+
+def print_workflow(report):
+    task = report["task"]
+    label = "%s (%s)" % (task["id"], task["state"]) if task else "none"
+    print("VEMO delivery loop | task=%s | next=%s" % (label, report["current_stage"]))
+    for stage in report["stages"]:
+        print("  [%s] %-7s %-24s /%s" % (stage["status"], stage["label"], stage["role"], stage["skill"]))
+        if stage["status"] == "next":
+            print("         %s" % stage["action"])
+    print("next: %s" % report["next"])
+
+
 def _recommendations(root, report):
     setup = report["setup"]
     recommendations = []
@@ -360,6 +456,8 @@ def build_parser():
     report = sub.add_parser("report", help="Show observed local governance value")
     report.add_argument("--days", type=int, default=30)
     report.add_argument("--json", action="store_true")
+    workflow = sub.add_parser("workflow", help="Show the Think-to-Reflect delivery loop")
+    workflow.add_argument("--json", action="store_true")
     return parser
 
 
@@ -386,6 +484,13 @@ def main(argv=None):
             if args.apply and payload.get("init_output"):
                 print(payload["init_output"])
         return int(payload.get("exit_code", 1 if payload.get("conflicts") else 0))
+    if args.command == "workflow":
+        payload = build_workflow_report(ROOT)
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            print_workflow(payload)
+        return 0
     days = max(1, min(args.days, 3650))
     payload = build_report(ROOT, days)
     if args.json:

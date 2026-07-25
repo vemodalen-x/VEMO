@@ -115,6 +115,25 @@ class ProductTests(unittest.TestCase):
         finally:
             task_state.RUN_DIR, task_state.RECEIPT, task_state.TASK_RECEIPTS = original
 
+    def test_workflow_report_maps_task_state_to_next_stage(self):
+        (self.temp / "tasks").mkdir()
+        (self.temp / "tasks" / "T-demo.md").write_text(
+            "---\nid: T-demo\nrisk: R1\nstate: ImplementationDone\n"
+            "heartbeat: 2026-07-25T00:00:00Z\n---\n", encoding="utf-8"
+        )
+        report = product.build_workflow_report(self.temp)
+        self.assertEqual("review", report["current_stage"])
+        self.assertEqual("T-demo", report["task"]["id"])
+        self.assertEqual("done", report["stages"][2]["status"])
+        self.assertEqual("next", report["stages"][3]["status"])
+        self.assertTrue(report["data_local_only"])
+
+    def test_workflow_report_without_task_starts_with_think(self):
+        report = product.build_workflow_report(self.temp)
+        self.assertIsNone(report["task"])
+        self.assertEqual("think", report["current_stage"])
+        self.assertEqual("next", report["stages"][0]["status"])
+
 
 if __name__ == "__main__":
     unittest.main()
