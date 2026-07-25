@@ -123,6 +123,7 @@ HELP = """vemo <command>
   heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
   task create|note|state          create/update task records with tool-written UTC timestamps
   explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | workflow
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | workflow
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths

@@ -32,6 +32,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
   intake -> map -> constraint -> plan -> loop -> boundary from Human 3.0 and Mr. Ranedeer-style references without
   copying external prompt text.
 - `docs/PLAYBOOK_ADOPTION.md`: migration guidance for converting repo-local agent playbooks into VEMO mechanisms.
+- `docs/HACKATHON_PLAYBOOK.md`: how-to for running a Devpost-style judged hackathon build (reference case:
+  OpenAI Build Week) under VEMO — rules digest, judging-criteria-to-mechanism mapping, task decomposition for
+  a frontend+backend+AI-core project, and a submission-readiness checklist.
+- `docs/ADAPTERS.md`: a verified Codex CLI ring-1 adapter section (hooks.json / config.toml wiring to the
+  existing dispatcher — no dispatcher changes needed) alongside the Claude Code wiring.
+- `skill/hackathon-submission`: pre-submission readiness check that verifies required contest artifacts
+  (public/testable repo, README AI-usage section, demo video, session-id evidence) and runs a judge pass
+  against the contest's own judging criteria.
 
 ### Fixed
 - `vemo verify` now executes configured leading `python3` commands with the current interpreter on Windows,

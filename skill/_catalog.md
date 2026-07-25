@@ -14,6 +14,7 @@
 | **governance-contribute** | PR an improvement back upstream | manual · "contribute upstream" | `gh` |
 | **governance-release** | cut a versioned release PR | manual · "cut a release" | `gh` + docs-sync |
 | **automation-mode** | enter full-auto / unattended mode | manual · "enable auto mode" | `enforcement/automation/vemo-auto` |
+| **hackathon-submission** | pre-submission readiness check against a contest's own rules | manual · "check hackathon submission readiness" | `docs/HACKATHON_PLAYBOOK.md` + `agents/governance-judge.md` |
 
 | **office-hours** | turn a vague request into a user problem and smallest valuable outcome | new product idea / unclear request | `.vemo/brief.md` |
 | **plan-ceo-review** | challenge scope and choose the right product ambition | before implementation | `tasks/<id>.md` |
