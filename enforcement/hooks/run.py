@@ -24,7 +24,7 @@ Config it honors (vemo.config.yaml → enforcement / observability):
 
 Exit contract (Claude Code): exit 2 = block the action, stderr is fed back to the agent; exit 0 = allow.
 """
-import sys, os, json, re
+import sys, os, json, re, shlex
 from datetime import datetime, timezone
 
 SELF = os.path.dirname(os.path.abspath(__file__))
@@ -109,6 +109,78 @@ def strip_data_regions(cmd):
 
 # absolute-path write targets that are always fine (ubiquitous, non-persistent)
 SAFE_ABS = ("/dev/null", "/dev/stdout", "/dev/stderr", "/tmp/", "/var/tmp/", "/proc/self/")
+
+# Read-only PROBE exemption (safety#4). A DESTRUCTIVE literal is a false positive when it appears only as a
+# TEXT ARGUMENT to a search/inspection tool — `grep -n 'rm -rf' file`, `rg "git push --force" logs/`. Such a
+# command has zero execution path for the literal: the tool treats it as data, never as a command. This is
+# the exact miss VEMO's own command guard had — an auditor/agent grepping the logs for a danger string got
+# its read-only probe blocked.
+#
+# THREE independent conditions must ALL hold, or the command falls through to the full DESTRUCTIVE scan
+# (fail-safe = block more). Two independent judge passes proved condition (3) is REQUIRED, not belt-and-braces:
+#   1. command word (after stripping leading `VAR=val ` and any path prefix) is in a SMALL allowlist of tools
+#      whose *bare/short-flag* form cannot exec or write (awk/sed/find/xargs/git/python/perl and write-target
+#      forms like `sort -o` are excluded up front);
+#   2. NO shell control/substitution/redirect operator: `&& || ; | $( backtick > < &` or a newline — so the
+#      probe is a single self-contained segment with nothing chained after/inside it;
+#   3. NO long option (`--flag`). This is the load-bearing one: the "read-only" tools above are only read-only
+#      in their bare form. Real installs expose ARBITRARY-PROGRAM-EXECUTION via long flags — ripgrep
+#      `--pre`/`--pre-glob`/`--search-zip`, ugrep (ships AS `grep` on many distros!) `--filter=COMMAND`, and
+#      relatives. `rg --pre rm '...' dir` runs `rm` per file. A per-flag denylist cannot enumerate every
+#      tool×version, so we reject the whole class: if a probe needs a `--long-option`, it is not a bare read
+#      and gets the full scan. Common benign switches (`-n -i -r -C3 -o -A2`) are SHORT and still exempt.
+# Net: the exempted literal can only ever be a plain read tool's data, never an executed action.
+READONLY_PROBE = frozenset({
+    "grep", "rg", "egrep", "fgrep", "findstr", "select-string",
+    "cat", "type", "head", "tail", "wc", "nl", "jq", "od",
+})
+# Shell metacharacters that either chain another command, substitute a command, or redirect I/O. Presence of
+# ANY of these means the command is not a single self-contained read — a real danger could ride after/inside.
+_PROBE_VETO = re.compile(r'&&|\|\||;|\||`|\$\(|>|<|&')
+_LEADING_ASSIGN = re.compile(r'^\s*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S*)\s+)+')
+
+
+def is_readonly_probe(cmd):
+    """True iff `cmd` is a single, side-effect-free read: its command word (after stripping any leading
+    `VAR=val ` assignments and path prefix) is in READONLY_PROBE, it contains no shell control/exec/redirect
+    operator, AND no OPTION TOKEN is a `--long-option` (long flags are how read tools expose exec/write —
+    rg --pre, ugrep-as-grep --filter). A DESTRUCTIVE literal inside such a command is pure data (a search
+    pattern / file content), never an executed action, so exempting it removes the false positive without
+    opening any execution path. Conservative by construction: returns False on anything it cannot prove is a
+    pure read.
+
+    The long-option check is done on TOKENIZED words, not a raw-string regex: a `--force` appearing INSIDE a
+    quoted search pattern (`rg "git push --force" .`) is data, not an option, and must stay exempt — only a
+    bare `--word` token in option position disqualifies. shlex parse failure → False (fail-safe).
+
+    A THIRD independent judge pass found that `shlex.split` (a POSIX-shell-only tokenizer) does not decode
+    Bash's `$'...'` ANSI-C quoting extension: `rg $'--pre' rm '-rf x' dir` tokenizes to `$--pre`, which does
+    NOT start with `--`, so the long-option veto missed it while a real Bash reopens the exact `rg --pre`
+    exec vector condition (3) exists to close. Rather than chase every Bash quoting form shlex cannot emulate
+    (an open-ended list), any occurrence of the two-character sequence `$'` anywhere in the command vetoes
+    the probe outright — a command using ANSI-C quoting is not a bare, trivial read and gets the full scan."""
+    if not cmd or "\n" in cmd:                      # a newline can start a second, unvetted command line
+        return False
+    if _PROBE_VETO.search(cmd):
+        return False
+    if "$'" in cmd:                                 # Bash ANSI-C quoting shlex cannot decode — see docstring
+        return False
+    head = _LEADING_ASSIGN.sub("", cmd, count=1).strip()
+    try:
+        toks = shlex.split(head)                    # quote-aware: a --flag inside quotes is one data token
+    except ValueError:
+        return False                                # unbalanced quotes etc. — cannot prove safe
+    if not toks:
+        return False
+    name = toks[0].rsplit("/", 1)[-1].lower()       # strip any path prefix (/usr/bin/grep -> grep)
+    if name not in READONLY_PROBE:
+        return False
+    # reject if ANY argument token is a long OPTION (`--pre`, `--filter=…`): exec/write vector — full scan.
+    # The bare `--` end-of-options marker is exempt from this veto: it takes no value and enables no
+    # exec/write capability — it is the common, safe idiom for a dash-leading search pattern
+    # (`grep -- '-rf danger' file`), and treating it as disqualifying would re-block exactly the read-only
+    # probes this exemption exists to fix.
+    return not any(t.startswith("--") and t != "--" for t in toks[1:])
 
 
 def cfg(field, default=None):
@@ -250,6 +322,11 @@ def guard_command(d):
     cmd = (d.get("tool_input", {}) or {}).get("command", "") or ""
     if not cmd:
         return 0
+    # Read-only probe exemption: a search/inspection tool with a DESTRUCTIVE literal only as its text
+    # argument (and no chaining/redirect operator) executes nothing dangerous — exempt it before the scan so
+    # `grep 'rm -rf' log` is not blocked. Guarded by is_readonly_probe()'s conservative allowlist + veto.
+    if enabled("destructive_command") and is_readonly_probe(cmd):
+        return allow("command_readonly_probe", cmd=cmd[:120])
     scan = strip_data_regions(cmd)   # match against the command with non-executed data regions blanked
     if enabled("destructive_command"):
         for pat, why in DESTRUCTIVE:
@@ -432,7 +509,49 @@ def _selftest():
     assert not hits("git" + " push origin main"), "plain push"
     assert not hits("rm" + " notes.txt"), "non-recursive rm"
     assert not hits("rm" + " -r somedir"), "recursive without force"
-    print("run.py selftest OK: strip_data_regions + DESTRUCTIVE hardening (short/split/long flags, ./targets)")
+
+    # is_readonly_probe: a DESTRUCTIVE literal as a search/inspection tool's TEXT ARGUMENT is exempt
+    # (no execution path), while anything that could chain/redirect a real danger is NOT a pure probe.
+    assert is_readonly_probe("grep -n '" + rr + "' records/log/x.jsonl"), "grep for rm-rf literal is a probe"
+    assert is_readonly_probe('rg "' + pp + '" .'), "rg for push-force literal is a probe"
+    assert is_readonly_probe("cat incident.txt"), "plain cat is a probe"
+    assert is_readonly_probe("head -50 log") and is_readonly_probe("wc -l a b"), "head/wc are probes"
+    assert is_readonly_probe("LC_ALL=C grep -n '" + rr + "' f"), "leading VAR=val assignment stripped"
+    assert is_readonly_probe("/usr/bin/grep x f"), "path-prefixed grep resolves to grep"
+    # NOT probes: chaining, substitution, redirect, a real danger command, or an unlisted (writable) tool
+    assert not is_readonly_probe("grep x f && " + rr + " /"), "chained && danger is not a probe"
+    assert not is_readonly_probe("grep x f | " + rr + " /"), "piped into danger is not a probe"
+    assert not is_readonly_probe("grep x f ; " + rr + " /"), "semicolon-chained danger is not a probe"
+    assert not is_readonly_probe("cat $(" + rr + " /)"), "command substitution is not a probe"
+    assert not is_readonly_probe("cat f > out.txt"), "redirect (write) is not a probe"
+    assert not is_readonly_probe(rr + " /"), "a real rm -rf is not a probe"
+    assert not is_readonly_probe("sed -i 's/a/b/' f"), "sed (can write in place) is not on the allowlist"
+    assert not is_readonly_probe("grep x f\n" + rr + " /"), "newline second line is not a probe"
+    # exec-via-long-flag (found by two independent judge passes): rg --pre / ugrep-as-grep --filter run an
+    # arbitrary program per file. ANY --long-option disqualifies the probe -> full scan (block more).
+    assert not is_readonly_probe("rg --pre " + "rm" + " '-rf x' dir"), "rg --pre exec vector is NOT a probe"
+    assert not is_readonly_probe("rg --pre sh pat ."), "rg --pre <prog> is NOT a probe"
+    assert not is_readonly_probe("grep --filter='*:" + "rm" + " %' x f"), "ugrep --filter exec is NOT a probe"
+    assert not is_readonly_probe("rg --search-zip x ."), "any --long-option disqualifies (fail-safe)"
+    assert not is_readonly_probe("grep --include=*.py x f"), "even a benign --long-option -> full scan (safe)"
+    # short flags stay exempt (the common, harmless case must not regress)
+    assert is_readonly_probe("grep -rn '" + rr + "' src"), "short flags -rn still a probe"
+    assert is_readonly_probe("rg -i -C3 '" + pp + "' ."), "short flags -i -C3 still a probe"
+    # self-review finding: the bare `--` end-of-options marker (common idiom for a dash-leading search
+    # pattern) is NOT a long option and must stay exempt — an early version of the long-option veto
+    # over-blocked this, re-catching exactly the read-only probes this exemption exists to fix.
+    assert is_readonly_probe("grep -- '" + rr + "' f"), "bare -- end-of-options marker stays a probe"
+    assert is_readonly_probe("grep -n -- '" + rr + " /x' f"), "-- combined with a short flag stays a probe"
+    # third independent judge pass: shlex.split does not decode Bash's $'...' ANSI-C quoting, so
+    # rg $'--pre' rm '-rf x' dir tokenized to '$--pre' (not '--pre') and slipped past the long-option veto
+    # while a real Bash reopens the exact rg --pre exec vector. Any '$\'' anywhere now vetoes the probe.
+    ansi_c = "$" + "'"
+    assert not is_readonly_probe("rg " + ansi_c + "--pre' " + "rm" + " '-rf x' dir"), \
+        "ANSI-C-quoted --pre must NOT be a probe (judge round 3 bypass)"
+    assert not is_readonly_probe("grep " + ansi_c + "--filter=*:" + "rm" + " %' x f"), \
+        "ANSI-C-quoted --filter must NOT be a probe"
+    print("run.py selftest OK: strip_data_regions + DESTRUCTIVE hardening + is_readonly_probe exemption "
+          "(long-option exec-vector veto, bare -- excepted, ANSI-C-quote veto)")
 
 
 if __name__ == "__main__":

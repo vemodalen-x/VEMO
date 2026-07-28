@@ -6,6 +6,37 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- **Command-guard read-only probe exemption** (`enforcement/hooks/run.py` `is_readonly_probe`): a DESTRUCTIVE
+  literal that appears only as the text argument of a read-only inspection tool (`grep -n 'rm -rf' log`,
+  `rg "git push --force" .`, `cat`/`head`/`tail`/`wc`/`jq`/`od`/…) is no longer blocked — such a command has
+  no execution path for the literal. Exemption requires ALL THREE: (1) a small allowlist of tools whose
+  bare/short-flag form cannot write/exec (write-capable tools like `sed`/`awk`/`find`/`xargs`/`git`/`sort -o`
+  excluded); (2) no control/substitution/redirect operator (`&& || ; | \` $( > < &` or newline); (3) no
+  `--long-option` argument token — checked on shlex-tokenized words, so a `--force` inside a quoted search
+  pattern stays exempt. Condition (3) closes an arbitrary-code-execution bypass **found by two independent
+  governance-judge passes** before this shipped: `rg --pre <prog>` (and ugrep-as-`grep` `--filter=COMMAND`)
+  run an external program per file — `rg --pre rm '-rf x' dir` was exempted while the same command was
+  blocked before the exemption. Anything not provably a pure read falls through to the full scan (fail-safe =
+  block more). A bare `--` end-of-options marker (e.g. `grep -- '-rf danger' file`) is explicitly excepted
+  from the long-option veto — treating it as disqualifying was a self-review finding that safely over-blocked
+  (never a security regression) exactly the probes this exemption exists to fix. A **third independent judge
+  pass** then found that `shlex.split` does not decode Bash's `$'...'` ANSI-C quoting, so `rg $'--pre' rm
+  '-rf x' dir` tokenized to `$--pre` (not `--pre`) and slipped past condition (3), reopening the same exec
+  vector; fixed by vetoing any command containing the literal sequence `$'` before tokenization is even
+  attempted (reject the whole quoting class rather than chase individual escapes — the same principle
+  condition (3) already applies to long options). Anything not provably a pure read falls through to the
+  full scan (fail-safe = block more). Regression-covered by `eval/scenarios/SC06_readonly_probe.md` (15 hook
+  checks incl. the `rg --pre`/`--filter`/ANSI-C-quoted negatives and the bare-`--` positive) + `run.py
+  --selftest`. Closes a live false positive (an auditor grepping logs for a danger string was blocked)
+  without opening an exec path.
+- **Governance-judge guardrails** (`agents/governance-judge.md`): (1) the judge must NOT execute
+  irreversible/outward-write actions (`git push`/`commit`/`merge`/`tag`/`reset --hard`/`branch -D`,
+  `gh pr merge`/`release`, `rm`-class) while judging — verification is read-only re-runs / `--dry-run` /
+  throwaway copies only (the checker must not be the executor); (2) a defect already recorded as a declared
+  limitation (a `safety.spec.md` "Honest coverage note", a ROADMAP item) is not counted as a NEW fail,
+  while the judge still catches a real issue hidden behind such a label; (3) an R2 sanity check that the
+  self-declared `trifecta:` field matches the diff (an under-declared 3/3 that dodges the Rule-of-Two human
+  gate is a safety finding).
 - **Product path**: added `vemo start` for read-only onboarding previews and explicit apply, plus `vemo report`
   for local observed-value reporting (events, verification, tasks, readiness, and next actions).
 - **Adoption docs**: documented solo/team/regulated profiles, the open Core versus paid control-plane boundary,

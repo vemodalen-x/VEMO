@@ -206,6 +206,23 @@ CHECK_INDEX = (
     ("hook", "hook e2e: rm split/long recursive-force flags blocked"),
     ("hook", "hook e2e: rm -rf relative ./ target blocked"),
     ("hook", "hook e2e: git push --force-with-lease allowed (no over-block)"),
+    # SC06 — read-only-probe exemption: a DESTRUCTIVE literal as a search/inspection tool's text argument
+    # is data, not an executed action. Exempt the pure probe; still block anything that could chain/redirect.
+    ("hook", "SC06: grep for an rm-rf literal (read-only probe) allowed"),
+    ("hook", "SC06: rg for a push-force literal (read-only probe) allowed"),
+    ("hook", "SC06: cat/head/wc read-only probes allowed"),
+    ("hook", "SC06: leading VAR=val before a probe still allowed"),
+    ("hook", "SC06: a real rm -rf (not a probe) still blocked"),
+    ("hook", "SC06: probe chained via && into a real danger still blocked"),
+    ("hook", "SC06: probe piped into a real danger still blocked"),
+    ("hook", "SC06: probe with a command substitution still blocked"),
+    ("hook", "SC06: read tool with an output redirect (write) still blocked"),
+    ("hook", "SC06: unlisted writable tool (sed -i) with a danger literal still blocked"),
+    ("hook", "SC06: rg --pre exec-via-long-flag still blocked (judge-found bypass)"),
+    ("hook", "SC06: ugrep-as-grep --filter exec still blocked"),
+    ("hook", "SC06: short flags on a probe stay exempt (no regression)"),
+    ("hook", "SC06: bare -- end-of-options marker on a probe stays exempt (self-review fix)"),
+    ("hook", "SC06: ANSI-C-quoted --pre still blocked (judge round 3 bypass)"),
 )
 
 SECRET_FIXTURE = 'api_' + 'key = "' + 'sk-' + '0123456789abcdef0123' + '"'
@@ -844,6 +861,49 @@ def run_hook_checks(r):
     r.chk("hook", "hook e2e: rm -rf relative ./ target blocked", (rc, err), lambda g: g[0] == 2)
     rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "git push --force-with-lease origin main"}})
     r.chk("hook", "hook e2e: git push --force-with-lease allowed (no over-block)", (rc, err), lambda g: g[0] == 0)
+    remove_tree(d)
+
+    # SC06 — read-only-probe exemption. Dangerous substrings are built by concatenation so this eval file's
+    # own source never contains a contiguous pattern the live guard protecting THIS repo would flag.
+    d = sandbox(task=task('["src/**"]'))
+    rmrf = "rm" + " -rf"
+    pushf = "git" + " push --force"
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep -n '" + rmrf + "' records/log/x.jsonl"}})
+    r.chk("hook", "SC06: grep for an rm-rf literal (read-only probe) allowed", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": 'rg "' + pushf + '" .'}})
+    r.chk("hook", "SC06: rg for a push-force literal (read-only probe) allowed", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "head -50 CHANGELOG.md"}})
+    r.chk("hook", "SC06: cat/head/wc read-only probes allowed", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "LC_ALL=C grep -n '" + rmrf + "' f"}})
+    r.chk("hook", "SC06: leading VAR=val before a probe still allowed", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": rmrf + " /tmp/realdir"}})
+    r.chk("hook", "SC06: a real rm -rf (not a probe) still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep x f && " + rmrf + " /tmp/z"}})
+    r.chk("hook", "SC06: probe chained via && into a real danger still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep x f | " + rmrf + " /tmp/z"}})
+    r.chk("hook", "SC06: probe piped into a real danger still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "cat $(" + rmrf + " /tmp/z)"}})
+    r.chk("hook", "SC06: probe with a command substitution still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "cat f > .git/hooks/pre-push"}})
+    r.chk("hook", "SC06: read tool with an output redirect (write) still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "sed -i 's/a/b/' f && " + rmrf + " /tmp/z"}})
+    r.chk("hook", "SC06: unlisted writable tool (sed -i) with a danger literal still blocked", (rc, err), lambda g: g[0] == 2)
+    # exec-via-long-flag (found by two independent judge passes): rg --pre / ugrep-as-grep --filter run an
+    # arbitrary program per file; ANY --long-option on a probe disqualifies it -> full scan. Using a real
+    # `rm -rf` payload so "not-a-probe -> full scan -> DESTRUCTIVE match -> block" is exercised end to end.
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "rg --pre " + rmrf + " ' x' recordsdir"}})
+    r.chk("hook", "SC06: rg --pre exec-via-long-flag still blocked (judge-found bypass)", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep --filter='" + rmrf + " %' x f"}})
+    r.chk("hook", "SC06: ugrep-as-grep --filter exec still blocked", (rc, err), lambda g: g[0] == 2)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep -rn '" + rmrf + "' src"}})
+    r.chk("hook", "SC06: short flags on a probe stay exempt (no regression)", (rc, err), lambda g: g[0] == 0)
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "grep -n -- '" + rmrf + " /x' logfile"}})
+    r.chk("hook", "SC06: bare -- end-of-options marker on a probe stays exempt (self-review fix)", (rc, err), lambda g: g[0] == 0)
+    # third independent judge pass: Bash $'...' ANSI-C quoting bypassed shlex-based tokenization
+    # (shlex does not decode it), reopening the rg --pre exec vector. Any '$\'' now vetoes the probe.
+    ansi_c = "$" + "'"
+    rc, err = hook(d, "command", {"tool_name": "Bash", "tool_input": {"command": "rg " + ansi_c + "--pre' " + rmrf + " ' x' dir"}})
+    r.chk("hook", "SC06: ANSI-C-quoted --pre still blocked (judge round 3 bypass)", (rc, err), lambda g: g[0] == 2)
     remove_tree(d)
 
 
