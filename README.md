@@ -105,6 +105,15 @@ Five layers — the lower you go, the more it's *enforced mechanism* rather than
 └ agents/ · eval/ · bin/  governance-judge · validator+hook e2e eval · the `vemo` CLI    (verify · tooling)
 ```
 
+That is the deployment view. The complementary AI-platform view separates six stable responsibilities —
+`ingress · control · policy · execution · enforcement · evidence` — so an adapter cannot silently become a
+policy engine and an evidence viewer cannot grant itself authority. Inspect the executable, content-minimizing
+contract with `vemo platform --json`. Its Definition/Provider/Consumer seams expose real composition, while
+owner-local relationship invariants detect broken adapter bindings and dangling verification evidence;
+`vemo platform --check` turns those local failures into a non-zero preflight. It remains distinct from runtime
+execution proof and remote authority. Ownership, lifecycle, and boundaries are explained in
+[docs/PLATFORM.md](docs/PLATFORM.md).
+
 Enforcement is **defense-in-depth** — a gate never depends on the agent's goodwill, and every
 "passed" claim needs an artifact the claimant did not type (evidence file · `vemo verify` receipt ·
 required judge provenance record(s)):
@@ -127,6 +136,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 |---|---|
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
+| `vemo platform [--json] [--check]` | show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight |
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
@@ -137,7 +147,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo judge-brief [--lens <l>] [--range <r>]` | staged/range-only dossier; excludes other tasks' untracked files |
 | `vemo heartbeat` | stamp the active task's heartbeat in place (no hand-editing the task file) |
 | `vemo task create\|note\|state` | create/update task records with tool-written RFC3339 UTC timestamps |
-| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify` |
+| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify · platform` |
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
 | `vemo tier <paths…>` / `vemo check <path>` | required risk tier / is a path in scope? |
@@ -185,6 +195,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 | I want to… | Go to |
 |---|---|
 | See the whole picture (usage + architecture diagrams) | 🖼️ [docs/GUIDE.html](docs/GUIDE.html) |
+| Understand platform planes, seams, invariants, ownership, and lifecycle | [docs/PLATFORM.md](docs/PLATFORM.md) · `vemo platform --check --json` |
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
 | Run a Devpost-style hackathon build under a deadline (Codex adapter incl.) | [docs/HACKATHON_PLAYBOOK.md](docs/HACKATHON_PLAYBOOK.md) |
@@ -206,6 +217,12 @@ long-horizon model safety. It openly credits the best practices it stands on:
 - **[12-Factor Agents](https://github.com/humanlayer/12-factor-agents)** — own-your-context, stateless reducer.
 - **[AGENTS.md](https://agents.md/)** + Anthropic's *context engineering* — thin, just-in-time entry.
 - **[Diátaxis](https://diataxis.fr/)** — docs organized by user need.
+- **[AIIGovernance / Wildmeerkat](https://github.com/BST-AII/Wildmeerkat)** — explicit separation of ingress,
+  orchestration, normative policy, hard gates, and records; VEMO adapts the clarity without adopting a
+  channel-specific bridge or mandatory single-writer leader.
+- **[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)** — explicit capability seams,
+  inspectable composition, and owner-local relationship invariants; VEMO adopts those contracts without
+  introducing a second agent runtime.
 - Fable 5 / Mythos analysis (2026) — the run-budget stop rules and the evidence-completeness judge check.
 
 > See [docs/SCALING.md](docs/SCALING.md) for why VEMO holds up — and gets *more* useful — as models get stronger.

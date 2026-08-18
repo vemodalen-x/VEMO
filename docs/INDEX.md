@@ -6,6 +6,7 @@
 | I want to… | Type | Go to |
 |---|---|---|
 | **See the whole picture (usage + architecture diagrams)** | Visual guide | 🖼️ [GUIDE.html](GUIDE.html) |
+| **Understand the AI platform planes, ownership, and request lifecycle** | Explanation + executable reference | [`docs/PLATFORM.md`](PLATFORM.md) · `vemo platform --json` |
 | **Get it working in 5 min** | Tutorial | [QUICKSTART.md](QUICKSTART.md) |
 | **Migrate an existing agent playbook into VEMO** | How-to | [PLAYBOOK_ADOPTION.md](PLAYBOOK_ADOPTION.md) |
 | **Run a Devpost-style hackathon build under a deadline** | How-to | [HACKATHON_PLAYBOOK.md](HACKATHON_PLAYBOOK.md) |

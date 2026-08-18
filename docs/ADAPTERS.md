@@ -12,6 +12,10 @@ VEMO enforces in **three rings**. Two of them don't care what agent, model, or h
 time instead of edit time — later, but never weaker. So "does VEMO support model/agent X?" decomposes into:
 governance — yes, unconditionally, via rings 2–3; ergonomics — yes if you wire ring 1.
 
+This adapter is the `ingress` plane of the broader responsibility model; it does not own policy or evidence.
+See [docs/PLATFORM.md](PLATFORM.md), and run `vemo platform --json` to inspect the topology and locally
+observable delivery rings without reading source, prompts, or telemetry payloads.
+
 ## Ring-1 adapter contract (one dispatcher, any harness)
 
 Pipe a JSON payload to stdin of `python3 enforcement/hooks/run.py <guard>`:
