@@ -11,6 +11,7 @@ The executable view is the source for topology IDs and locally observable instal
 vemo platform
 vemo platform --json
 vemo platform --check
+vemo extensions --check
 ```
 
 All forms are read-only. The JSON form emits relative component paths, structural relationship outcomes, and
@@ -45,12 +46,35 @@ Missing receipts or telemetry mean “not produced yet,” not “the platform c
 split prevents a generated file from silently becoming configuration and prevents source presence from being
 reported as runtime evidence.
 
+## Extension composition
+
+Platform seams are no longer embedded as a Python tuple. VEMO discovers the explicit active set from
+`extensions/index.json`, validates each bounded JSON manifest, resolves stable `provides`/`requires`
+capabilities, and then passes only active `platform_seams` contributions to the platform probe. Inspect the
+same composition independently with `vemo extensions --json`; the full report is also embedded under the
+platform JSON's `extensions` field.
+
+The implementation follows four explicit boundaries under `bin/vemo_composition/`: typed contracts,
+capability Context/effect scopes, bounded Loader reconciliation, and the thin `vemo_extensions.py` façade.
+Platform seams are one registered `ContributionSpec`; the resolver and loader do not contain seam-specific
+branching. This lets later declarative consumers extend composition without turning the CLI into a plugin
+runtime.
+
+The activation index prevents contract disappearance: a referenced missing manifest is a composition
+failure. The list does not impose boot order; capability dependencies do, with extension ID as a deterministic
+tie-breaker. Duplicate IDs, providers, or seam IDs, missing capabilities, dependency cycles, malformed JSON,
+and unsafe paths all fail `vemo extensions --check` and therefore `vemo platform --check`.
+
+This is a declarative extension boundary, not a plugin-code loader. Manifests cannot execute code or grant
+authority, and an active contribution still proves topology rather than behavior. The schema, safe extension
+workflow, resolution states, and failure codes are documented in [EXTENSIONS.md](EXTENSIONS.md).
+
 ## Capability seams
 
 DeepSeek Harness models replaceable behavior around explicit services and publishes the owner,
 implementations, and direct consumers of each service. VEMO adopts the smaller governance equivalent: every
-declared seam has a `definition`, `provider`, and `consumer`, while continuing to let the external harness own
-its agent loop.
+active manifest contributes a seam with a `definition`, `provider`, and `consumer`, while continuing to let
+the external harness own its agent loop.
 
 | Seam | Definition | Provider | Consumer | Provider policy |
 |---|---|---|---|---|
@@ -76,8 +100,8 @@ it can inspect locally without taking authority from the existing gates:
 
 An absent optional adapter or receipt is `not_observed`. A present but malformed, incomplete, unsafe, or
 dangling relationship is `fail`. `vemo platform --check` exits non-zero when a required component or seam is
-incomplete, or when one of these observed relationships fails. It does not fail merely because local Git hooks
-are absent or remote branch protection cannot be observed.
+incomplete, when extension composition fails, or when one of these observed relationships fails. It does not
+fail merely because local Git hooks are absent or remote branch protection cannot be observed.
 
 These checks deliberately remain narrower than behavioral proof. `doctor`, the conformance eval, `vemo
 verify`, Git gates, and CI still own execution health and acceptance; the platform command owns only the
@@ -115,9 +139,24 @@ not claim that a remote host requires the check: branch protection is always rep
 check on protected branches.
 
 The platform command is therefore a preflight and integration contract, not a compliance certificate. It is
-safe for local dashboards and adapter diagnostics. Schema version `2` adds materialization, capability seams,
-relationship invariants, and check status; the version must change again when field meaning or stable IDs
-change incompatibly.
+safe for local dashboards and adapter diagnostics. Schema version `3` adds the resolved extension composition
+and makes composition failure part of check status. The version must change again when field meaning or stable
+IDs change incompatibly.
+
+## What was learned from Cordis
+
+Cordis frames dynamic composition in two dimensions: spatial composability declares and reacts to component
+dependencies; temporal composability completely reverts a component's effects on removal. VEMO used the
+official [Cordis repository](https://github.com/cordiverse/cordis), active-revision
+[paper](https://github.com/cordiverse/paper), and DeepSeek Harness's
+[Cordis primer](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/cordis-primer.md) as primary
+references.
+
+VEMO transfers stable service keys into capability keys, reactive injection into dependency-driven activation,
+reversible effects into idempotent registry disposers, and loader inspection into an explicit activation index
+plus deterministic `load_order`. It does not import the Cordis library, add a runtime event bus, execute plugin
+code, or implement hot reload. VEMO is a short-lived, model-neutral governance CLI beside an external harness;
+those runtime features would enlarge the trusted surface and create a second owner for agent execution.
 
 ## What was learned from DeepSeek Harness
 
@@ -131,11 +170,10 @@ Four patterns transfer cleanly to VEMO:
 - assign each invariant to the relationship its owner can authoritatively observe;
 - keep source definitions, durable records, and generated runtime artifacts distinct.
 
-VEMO does not import Cordis or turn every governance module into a plugin. DeepSeek Harness is an execution
-harness whose reversible effects and typed events support hot composition; VEMO is a lightweight,
-model-neutral governance layer that must work beside several external harnesses. Its existing adapters, task
-state, Git gates, and CI backstop are the right extension points. The optimization is therefore stronger
-contracts and executable relationship checks, not a second agent runtime.
+VEMO does not turn every governance module into an executable plugin. DeepSeek Harness is an execution harness
+whose Cordis effects and typed events support hot composition; VEMO keeps its existing adapters, task state,
+Git gates, and CI backstop as the authority. The manifest layer makes their topology extensible without
+creating a second agent runtime.
 
 ## What was learned from Wildmeerkat
 

@@ -1,6 +1,7 @@
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,7 +16,8 @@ product = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(product)
 TS_SPEC = importlib.util.spec_from_file_location("task_state_product_test", ROOT / "enforcement" / "validators" / "task_state.py")
 task_state = importlib.util.module_from_spec(TS_SPEC)
-TS_SPEC.loader.exec_module(task_state)
+with mock.patch.dict(os.environ, {"VEMO_ROOT": str(ROOT)}):
+    TS_SPEC.loader.exec_module(task_state)
 
 
 class ProductTests(unittest.TestCase):
@@ -36,18 +38,23 @@ class ProductTests(unittest.TestCase):
         return path
 
     def _install_platform_contract(self):
+        for source in sorted((ROOT / "extensions").rglob("*.json")):
+            self._write_fixture(source.relative_to(ROOT).as_posix(), source.read_text(encoding="utf-8"))
         required_paths = {
             component["path"]
             for plane in product.PLATFORM_PLANES
             for component in plane["components"]
             if component["required"]
         }
-        for seam in product.PLATFORM_CAPABILITY_SEAMS:
+        composition = product.build_extension_report(self.temp)
+        self.assertEqual("pass", composition["summary"]["status"])
+        for seam in composition["contributions"]["platform_seams"]:
             for role in seam["roles"]:
                 if role["required"]:
                     required_paths.update(role["paths"])
         for relative in required_paths:
-            self._write_fixture(relative)
+            if not (self.temp / relative).exists():
+                self._write_fixture(relative)
 
     @staticmethod
     def _hook_document(*bindings):
@@ -182,9 +189,14 @@ class ProductTests(unittest.TestCase):
             ["ingress", "control", "policy", "execution", "enforcement", "evidence"],
             plane_ids,
         )
+        control = next(plane for plane in payload["planes"] if plane["id"] == "control")
+        self.assertTrue({
+            "extension_registry", "composition_contracts", "composition_context", "composition_loader",
+        } <= {component["id"] for component in control["components"]})
         self.assertEqual(list(range(1, 9)), [stage["step"] for stage in payload["lifecycle"]])
         self.assertTrue(all(stage["plane"] in plane_ids for stage in payload["lifecycle"]))
         self.assertEqual("ready", payload["summary"]["core_status"])
+        self.assertEqual("pass", payload["summary"]["extension_status"])
         self.assertEqual("ready", payload["summary"]["capability_seam_status"])
         self.assertEqual("pass", payload["summary"]["check_status"])
         self.assertEqual("9.9.9", payload["version"])
@@ -197,6 +209,10 @@ class ProductTests(unittest.TestCase):
             {role["id"] for role in seam["roles"]} == {"definition", "provider", "consumer"}
             for seam in payload["capability_seams"]
         ))
+        self.assertEqual(
+            ["vemo.ring1-guard", "vemo.verification-evidence"],
+            payload["extensions"]["load_order"],
+        )
         ring1 = next(seam for seam in payload["capability_seams"] if seam["id"] == "ring1_guard")
         self.assertEqual("available", ring1["status"])
         self.assertFalse((self.temp / "docs" / "ADAPTERS.md").exists())
@@ -326,12 +342,28 @@ class ProductTests(unittest.TestCase):
         self.assertEqual("ci_backstop_present", ci_backed["summary"]["delivery_posture"])
         self.assertEqual("not_locally_verified", ci_backed["authority"]["remote_branch_protection"])
 
+    def test_platform_check_fails_when_extension_composition_cannot_resolve(self):
+        self._install_platform_contract()
+        manifest = self.temp / "extensions" / "ring1-guard" / "extension.json"
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+        document["requires"] = ["vemo.missing-service"]
+        manifest.write_text(json.dumps(document), encoding="utf-8")
+
+        payload = product.build_platform(self.temp)
+
+        self.assertEqual("fail", payload["summary"]["extension_status"])
+        self.assertEqual("fail", payload["summary"]["check_status"])
+        self.assertIn("missing_required_capability", payload["summary"]["extension_issue_codes"])
+        self.assertNotIn("ring1_guard", {seam["id"] for seam in payload["capability_seams"]})
+        with mock.patch.object(product, "ROOT", self.temp), mock.patch("sys.stdout", new=io.StringIO()):
+            self.assertEqual(2, product.main(["platform", "--check", "--json"]))
+
     def test_platform_cli_emits_json_and_docs_link_the_contract(self):
         command = [sys.executable, str(ROOT / "bin" / "vemo"), "platform", "--check", "--json"]
         completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(0, completed.returncode, completed.stderr)
         payload = json.loads(completed.stdout)
-        self.assertEqual(2, payload["schema_version"])
+        self.assertEqual(3, payload["schema_version"])
         self.assertTrue(payload["read_only"])
         self.assertEqual("vemo platform", payload["command"])
         self.assertEqual("pass", payload["summary"]["check_status"])
@@ -339,11 +371,14 @@ class ProductTests(unittest.TestCase):
         platform_doc = (ROOT / "docs" / "PLATFORM.md").read_text(encoding="utf-8")
         for phrase in (
             "Responsibility planes", "Capability seams", "Relationship invariants",
-            "Authority boundaries", "Request lifecycle", "Wildmeerkat", "DeepSeek Harness",
+            "Extension composition", "Authority boundaries", "Request lifecycle", "Wildmeerkat",
+            "DeepSeek Harness",
         ):
             self.assertIn(phrase, platform_doc)
         for relative in ("README.md", "docs/ADAPTERS.md", "docs/INDEX.md"):
             self.assertIn("docs/PLATFORM.md", (ROOT / relative).read_text(encoding="utf-8"))
+        self.assertIn("docs/EXTENSIONS.md", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("EXTENSIONS.md", (ROOT / "docs" / "INDEX.md").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

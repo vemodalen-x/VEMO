@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "extensions": [
+    "ring1-guard/extension.json",
+    "verification-evidence/extension.json"
+  ]
+}

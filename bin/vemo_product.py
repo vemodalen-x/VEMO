@@ -15,9 +15,15 @@ import subprocess
 import sys
 
 
+BIN_DIR = Path(__file__).resolve().parent
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+from vemo_extensions import build_extension_report
+
+
 ROOT = Path(os.environ.get("VEMO_ROOT") or Path(__file__).resolve().parents[1]).resolve()
 SCHEMA_VERSION = 1
-PLATFORM_SCHEMA_VERSION = 2
+PLATFORM_SCHEMA_VERSION = 3
 PROFILES = {
     "solo": {
         "name": "Solo Core",
@@ -52,6 +58,10 @@ PLATFORM_PLANES = (
         "responsibility": "Orient sessions, classify risk and capability, and drive the task lifecycle.",
         "components": (
             {"id": "cli", "path": "bin/vemo", "kind": "runtime", "required": True},
+            {"id": "extension_registry", "path": "bin/vemo_extensions.py", "kind": "runtime", "required": True},
+            {"id": "composition_contracts", "path": "bin/vemo_composition/contracts.py", "kind": "runtime", "required": True},
+            {"id": "composition_context", "path": "bin/vemo_composition/context.py", "kind": "runtime", "required": True},
+            {"id": "composition_loader", "path": "bin/vemo_composition/loader.py", "kind": "runtime", "required": True},
             {"id": "project_control", "path": "bin/vemo_product.py", "kind": "runtime", "required": True},
             {"id": "fleet_control", "path": "bin/vemo_fleet.py", "kind": "runtime", "required": True},
             {"id": "task_state", "path": "enforcement/validators/task_state.py", "kind": "runtime", "required": True},
@@ -122,51 +132,6 @@ PLATFORM_LIFECYCLE = (
     {"step": 6, "id": "execute", "plane": "execution", "outcome": "bounded work product"},
     {"step": 7, "id": "prove", "plane": "evidence", "outcome": "task state, receipt, telemetry, and judge provenance"},
     {"step": 8, "id": "deliver", "plane": "enforcement", "outcome": "Git and CI delivery decision"},
-)
-
-
-# A seam is useful only when its contract owner, provider, and consumer are visible.  Provider roles may be
-# optional when the capability is installable (ring 1); required definition/consumer roles still fail closed.
-# These are composition facts, not claims that a hook or verification command executed.
-PLATFORM_CAPABILITY_SEAMS = (
-    {
-        "id": "ring1_guard",
-        "name": "Ring-1 guard adapter",
-        "owner": "ingress",
-        "roles": (
-            {
-                "id": "definition", "required": True, "minimum": 1,
-                "paths": ("enforcement/hooks/hooks.json",),
-            },
-            {
-                "id": "provider", "required": False, "minimum": 1,
-                "paths": (".claude/settings.json", ".codex/hooks.json"),
-            },
-            {
-                "id": "consumer", "required": True, "minimum": 1,
-                "paths": ("enforcement/hooks/run.py",),
-            },
-        ),
-    },
-    {
-        "id": "verification_evidence",
-        "name": "Executed verification evidence",
-        "owner": "evidence",
-        "roles": (
-            {
-                "id": "definition", "required": True, "minimum": 1,
-                "paths": ("specs/verify.spec.md",),
-            },
-            {
-                "id": "provider", "required": True, "minimum": 1,
-                "paths": ("enforcement/validators/task_state.py",),
-            },
-            {
-                "id": "consumer", "required": True, "minimum": 1,
-                "paths": ("enforcement/ci/pre-push", ".github/workflows/vemo-ci.yml"),
-            },
-        ),
-    },
 )
 
 
@@ -255,10 +220,11 @@ def _platform_planes(root):
     return planes
 
 
-def _platform_seams(root):
+def _platform_seams(root, definitions):
+    """Probe manifest-resolved seam roles without treating file presence as execution proof. @codex-comment"""
     root = Path(root)
     seams = []
-    for seam in PLATFORM_CAPABILITY_SEAMS:
+    for seam in definitions:
         roles = []
         for role in seam["roles"]:
             components = [
@@ -510,11 +476,12 @@ def build_platform(root=None):
     The probe is deliberately content-minimizing: relationship checks read only allowlisted hook structure
     and receipt references, then emit booleans/counts rather than command or evidence content.  It never
     creates runtime directories, follows paths outside the checkout, reads telemetry payloads, or infers
-    remote branch-protection state.
+    remote branch-protection state. @codex-comment
     """
     root = Path(root or ROOT).resolve()
+    extensions = build_extension_report(root)
     planes = _platform_planes(root)
-    seams = _platform_seams(root)
+    seams = _platform_seams(root, extensions["contributions"]["platform_seams"])
     invariants = _platform_invariants(root)
     authority = _delivery_authority(root)
     missing = [
@@ -525,7 +492,8 @@ def build_platform(root=None):
     ]
     failed_seams = [seam["id"] for seam in seams if seam["status"] == "incomplete"]
     failed_invariants = [invariant["id"] for invariant in invariants if invariant["status"] == "fail"]
-    check_status = "pass" if not (missing or failed_seams or failed_invariants) else "fail"
+    extension_failed = extensions["summary"]["status"] != "pass"
+    check_status = "pass" if not (missing or extension_failed or failed_seams or failed_invariants) else "fail"
     return {
         "schema_version": PLATFORM_SCHEMA_VERSION,
         "command": "vemo platform",
@@ -540,7 +508,9 @@ def build_platform(root=None):
         "summary": {
             "core_status": "ready" if not missing else "incomplete",
             "missing_required_components": missing,
-            "capability_seam_status": "ready" if not failed_seams else "incomplete",
+            "extension_status": extensions["summary"]["status"],
+            "extension_issue_codes": sorted({issue["code"] for issue in extensions["issues"]}),
+            "capability_seam_status": "ready" if not extension_failed and not failed_seams else "incomplete",
             "failed_capability_seams": failed_seams,
             "invariant_status": "pass" if not failed_invariants else "fail",
             "failed_invariants": failed_invariants,
@@ -554,6 +524,7 @@ def build_platform(root=None):
             {"id": "durable_record", "meaning": "reviewable task or provenance record"},
             {"id": "runtime_artifact", "meaning": "generated local observation, never source authority"},
         ],
+        "extensions": extensions,
         "capability_seams": seams,
         "lifecycle": [dict(stage) for stage in PLATFORM_LIFECYCLE],
         "invariants": invariants,
@@ -561,6 +532,7 @@ def build_platform(root=None):
         "boundaries": [
             "Topology and seam presence do not prove that a hook or verification command executed.",
             "Relationship invariants validate local bindings and referential integrity, not behavioral success.",
+            "Extension manifests declare topology only and never authorize or execute extension code.",
             "No source code, prompt, telemetry payload, credential, or absolute repository path is emitted.",
             "VEMO is a cooperative-host control surface, not an OS or container sandbox.",
         ],
@@ -568,6 +540,7 @@ def build_platform(root=None):
 
 
 def print_platform(platform):
+    """Render platform, composition, seam, invariant, and delivery status compactly. @codex-comment"""
     summary = platform["summary"]
     runtime = platform["runtime"]
     authority = platform["authority"]
@@ -575,6 +548,8 @@ def print_platform(platform):
         summary["core_status"], summary["delivery_posture"]))
     print("  runtime          : version=%s capability=%s mode=%s" % (
         platform["version"], runtime["capability_tier"], runtime["enforcement_mode"]))
+    print("  extensions       : %s (%d active)" % (
+        summary["extension_status"], platform["extensions"]["summary"]["active"]))
     print("  responsibility planes:")
     for plane in platform["planes"]:
         print("    %-11s %-10s %d/%d required components" % (
@@ -591,6 +566,8 @@ def print_platform(platform):
     print("  lifecycle        : %s" % " -> ".join(stage["id"] for stage in platform["lifecycle"]))
     if summary["missing_required_components"]:
         print("  missing required : %s" % ", ".join(summary["missing_required_components"]))
+    if summary["extension_issue_codes"]:
+        print("  extension issues : %s" % ", ".join(summary["extension_issue_codes"]))
     if summary["failed_capability_seams"]:
         print("  incomplete seams : %s" % ", ".join(summary["failed_capability_seams"]))
     if summary["failed_invariants"]:

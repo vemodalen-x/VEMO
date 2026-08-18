@@ -114,6 +114,15 @@ owner-local relationship invariants detect broken adapter bindings and dangling 
 execution proof and remote authority. Ownership, lifecycle, and boundaries are explained in
 [docs/PLATFORM.md](docs/PLATFORM.md).
 
+The seams are supplied by a safe declarative extension layer: `vemo extensions --json` resolves stable
+capabilities and dependencies from an explicit activation index, shows the deterministic load order, and
+uses child-aware `CompositionContext`, grouped `EffectScope`, typed `ContributionSpec`, and reconciling
+`ExtensionLoader` boundaries for programmatic use. Long-lived loaders retain unchanged registrations,
+reverse only changed/removed effects, and visibly defer malformed index revisions while preserving the last
+valid mount. Manifests never execute code; trusted internal effect installers cannot be selected from JSON.
+Add and validate an extension with
+[docs/EXTENSIONS.md](docs/EXTENSIONS.md).
+
 Enforcement is **defense-in-depth** — a gate never depends on the agent's goodwill, and every
 "passed" claim needs an artifact the claimant did not type (evidence file · `vemo verify` receipt ·
 required judge provenance record(s)):
@@ -137,6 +146,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
 | `vemo platform [--json] [--check]` | show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight |
+| `vemo extensions [--json] [--check]` | inspect declarative capabilities, dependencies, activation order, contributions, and stable composition failures |
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |
@@ -147,7 +157,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo judge-brief [--lens <l>] [--range <r>]` | staged/range-only dossier; excludes other tasks' untracked files |
 | `vemo heartbeat` | stamp the active task's heartbeat in place (no hand-editing the task file) |
 | `vemo task create\|note\|state` | create/update task records with tool-written RFC3339 UTC timestamps |
-| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify · platform` |
+| `vemo explain <topic>` | `tiers · gates · auto · budget · judge · capability · presets · verify · platform · extensions` |
 | `vemo auto on\|off\|status` | unattended mode — `on` requires a human at a TTY; records every decision |
 | `vemo budget status\|reset` | run-budget / stop rules |
 | `vemo tier <paths…>` / `vemo check <path>` | required risk tier / is a path in scope? |
@@ -196,6 +206,7 @@ Organized by need ([Diátaxis](https://diataxis.fr/)): **learn → do → look-u
 |---|---|
 | See the whole picture (usage + architecture diagrams) | 🖼️ [docs/GUIDE.html](docs/GUIDE.html) |
 | Understand platform planes, seams, invariants, ownership, and lifecycle | [docs/PLATFORM.md](docs/PLATFORM.md) · `vemo platform --check --json` |
+| Add or diagnose a declarative capability extension | [docs/EXTENSIONS.md](docs/EXTENSIONS.md) · `vemo extensions --check --json` |
 | Get working in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
 | Migrate an existing agent playbook into VEMO | [docs/PLAYBOOK_ADOPTION.md](docs/PLAYBOOK_ADOPTION.md) |
 | Run a Devpost-style hackathon build under a deadline (Codex adapter incl.) | [docs/HACKATHON_PLAYBOOK.md](docs/HACKATHON_PLAYBOOK.md) |

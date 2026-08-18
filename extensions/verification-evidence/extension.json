@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "id": "vemo.verification-evidence",
+  "name": "Executed verification evidence",
+  "version": "1.0.0",
+  "provides": [
+    "vemo.platform.seam.verification-evidence"
+  ],
+  "requires": [
+    "vemo.platform"
+  ],
+  "contributes": {
+    "platform_seams": [
+      {
+        "id": "verification_evidence",
+        "name": "Executed verification evidence",
+        "owner": "evidence",
+        "roles": [
+          {
+            "id": "definition",
+            "required": true,
+            "minimum": 1,
+            "paths": [
+              "specs/verify.spec.md"
+            ]
+          },
+          {
+            "id": "provider",
+            "required": true,
+            "minimum": 1,
+            "paths": [
+              "enforcement/validators/task_state.py"
+            ]
+          },
+          {
+            "id": "consumer",
+            "required": true,
+            "minimum": 1,
+            "paths": [
+              "enforcement/ci/pre-push",
+              ".github/workflows/vemo-ci.yml"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

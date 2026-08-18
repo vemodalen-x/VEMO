@@ -13,6 +13,7 @@ os.environ.setdefault("VEMO_ROOT", ROOT)
 PY = sys.executable or "python3"
 TS = [PY, os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
 PRODUCT = os.path.join(ROOT, "bin", "vemo_product.py")
+EXTENSIONS = os.path.join(ROOT, "bin", "vemo_extensions.py")
 
 
 def _ts(*args):
@@ -45,10 +46,13 @@ EXPLAIN = {
               "It does not upload source code.",
     "platform": "`vemo platform [--json] [--check]` exposes responsibility planes, Definition/Provider/Consumer "
                 "seams, and content-minimized relationship invariants; `--check` makes failures non-zero.",
+    "extensions": "`vemo extensions [--json] [--check]` resolves declarative manifests by stable capability "
+                  "dependencies. It inspects data only and never executes extension code.",
 }
 
 
 def cmd_status():
+    """Render the compact local operating posture and discovery hints. @codex-comment"""
     g = lambda f: _ts("config-get", "--field", f)
     print("VEMO status")
     print(f"  version         : {g('vemo.version')}")
@@ -57,7 +61,7 @@ def cmd_status():
     print(f"  run budget      : {_ts('budget-status')}")
     print(f"  auto mode       : {_ts('auto-status')}")
     print(f"  active task     : {_ts('active')}")
-    print("  tip: `vemo explain <tiers|gates|auto|budget|judge|capability|presets|verify|platform>`")
+    print("  tip: `vemo explain <tiers|gates|auto|budget|judge|capability|presets|verify|platform|extensions>`")
     return 0
 
 
@@ -112,6 +116,7 @@ HELP = """vemo <command>
   start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
   report [--days N] [--json]         show observed local value and next best actions
   platform [--json] [--check]        show topology/seams/invariants; --check fails on broken relationships
+  extensions [--json] [--check]      show manifest capabilities/dependencies/load order; --check fails on conflicts
   init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
   status                          plain-language dashboard (mode / tier / budget / task)
   context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
@@ -122,7 +127,7 @@ HELP = """vemo <command>
   judge-brief [--lens <l>] [--range <r>]  staged/range-only evidence dossier for a judge pass
   heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
   task create|note|state          create/update task records with tool-written UTC timestamps
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | platform
+  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | platform | extensions
   auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
   budget status|reset             run budget / stop rules
   tier <paths...>                 required risk tier for the given paths
@@ -134,6 +139,7 @@ HELP = """vemo <command>
 
 
 def main():
+    """Route one stable CLI verb to its owning stdlib implementation. @codex-comment"""
     a = sys.argv[1:]
     if not a or a[0] in ("help", "-h", "--help"):
         print(HELP); return 0
@@ -150,6 +156,8 @@ def main():
     if c == "init": return cmd_init(a[1:])
     if c in ("start", "report", "platform"):
         return subprocess.run([PY, PRODUCT, c] + a[1:]).returncode
+    if c == "extensions":
+        return subprocess.run([PY, EXTENSIONS] + a[1:]).returncode
     if c == "explain":
         print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))
         return 0
