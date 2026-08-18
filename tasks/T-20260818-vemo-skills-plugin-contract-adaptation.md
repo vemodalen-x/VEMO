@@ -16,13 +16,13 @@ acceptance:
   status: passed
   build_exit: 0
   smoke_exit: 0
-  evidence: ".vemo/run/T-20260818-vemo-skills-plugin-contract-adaptation-20260818T092935Z.log"
+  evidence: ".vemo/run/T-20260818-vemo-skills-plugin-contract-adaptation-20260818T102305Z.log"
 judge:
   required: false
   verdict: null
 approved_commands: []
 owning_chat: ""
-heartbeat: 2026-08-18T09:29:45Z
+heartbeat: 2026-08-18T10:23:17Z
 ---
 
 # VEMO_SKILLS plugin contract adaptation
@@ -52,8 +52,8 @@ cross-harness boundaries, then commit and push through each repository's permitt
   character short description, and a default prompt explicitly naming `$<skill-name>`.
 - [x] WHEN repository checks run, THEN selfcheck SHALL score at least 9.5/10, eval and author-selftest SHALL
   pass, a temporary bind SHALL contain 30 skills, and no generated validation markers SHALL be tracked.
-- [x] WHEN changes are published, THEN VEMO_SKILLS SHALL be committed on a feature branch and pushed without
-  touching `main`; the parent VEMO follow-up task SHALL reach AcceptancePassed before its authorized push.
+- [x] WHEN changes are published, THEN VEMO_SKILLS SHALL be committed on a feature branch, pass PR checks, and
+  merge without a direct push to `main`; the parent VEMO follow-up task SHALL reach AcceptancePassed before push.
 
 ## Plan
 1. Establish the baseline with the repository checker and current official skill validator; record contract
@@ -79,9 +79,14 @@ cross-harness boundaries, then commit and push through each repository's permitt
   `origin/feat/plugin-contract-adaptation`; its protected default branch was not touched.
 - 2026-08-18T09:29:36Z Parent focused verification passed uncached with test/lint/smoke exit 0; receipt
   `.vemo/run/receipt.json`, log `.vemo/run/T-20260818-vemo-skills-plugin-contract-adaptation-20260818T092935Z.log`.
+- 2026-08-18T10:22:21Z VEMO_SKILLS PR #4 passed its `verify` check and was squash-merged to `main` as
+  `5a73aad`; the merged tree exactly matches the previously verified feature tree. Local `main` was fast-forwarded
+  to the same remote commit. PR: `https://github.com/vemodalen-x/VEMO_SKILLS/pull/4`.
+- 2026-08-18T10:23:05Z Parent focused verification was rerun against merged VEMO_SKILLS `main`; uncached
+  test/lint/smoke all exited 0.
 
 ## Acceptance Result
-Passed. The declarative source catalog is adapted without introducing a monolithic executable plugin runtime.
+Passed and merged. The declarative source catalog is adapted without introducing a monolithic executable plugin runtime.
 
 ## Conclusion
 VEMO_SKILLS now exposes explicit bounded activation, standard model/UI metadata separation, index-only binding,
