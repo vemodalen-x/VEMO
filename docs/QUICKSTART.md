@@ -1,37 +1,35 @@
-# Quickstart (5 minutes)
+# Quickstart：通过 UI 接入项目
 
 > Diátaxis: this is a **tutorial** — on rails, one destination, one "aha". For *why* it works see
 > [MENTAL_MODEL.md](MENTAL_MODEL.md); for every option see [REFERENCE](../vemo.config.yaml) / `vemo explain`.
 
 **The aha you're going for:** an out-of-scope edit gets *blocked automatically* — governance you don't have to remember.
 
-## 1. Drop VEMO into your repo
-```bash
-cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin} your-repo/
-cd your-repo
-```
+## 1. 打开安装向导
 
-## 2. Preview the product path
-```bash
-python3 bin/vemo start --preset python    # or: node | cpp | docs
-```
-On Windows, use `python bin/vemo ...` if `python3` is not installed.
-
-This command is read-only. It detects the stack, shows the files it would touch, and makes the first value
-step explicit. Apply it after reviewing the plan:
+准备 Python 3.10+、Git、Bash 4+ 和现有 Git 仓库。在完整 VEMO checkout 中运行：
 
 ```bash
-python3 bin/vemo start --preset python --profile solo --apply
+python3 bin/vemo ui
 ```
 
-That applies the preset, installs local hooks + Git pre-commit/pre-push, and creates task storage. Use
-`--profile team` when multiple people or Agents will edit the repository.
+Windows 可使用 `py -3 bin/vemo ui` 或双击 `ui/start.cmd`。
+若浏览器未自动打开，复制终端输出的完整地址。
 
-**Make it authoritative** (local hooks are fast feedback; the *guarantee* is server-side):
+## 2. 选择项目并安装
+
+粘贴 Git 项目根目录的绝对路径，选择技术栈，点击“检查并预览”。
+检查无冲突后点击“确认安装并验证”，查看真实运行结果。之后在目标项目重新打开助手，
+确认宿主加载了项目 hooks。完整条件、平台限制和恢复办法见 [INSTALL.md](INSTALL.md)。
+
+没有浏览器时使用同一服务：
+
 ```bash
-mkdir -p .github/workflows && cp enforcement/ci/vemo-ci.yml .github/workflows/
-# then require the "vemo" check in your branch protection rules
+python3 bin/vemo setup install /absolute/your-project --preset python
+python3 bin/vemo setup install /absolute/your-project --preset python --apply
 ```
+
+CI 文件会随安装接入；远端需另外配置保护分支的必需 `vemo` 检查。
 
 ## 3. Start a task, then code
 ```bash
@@ -56,6 +54,7 @@ python3 bin/vemo explain gates
 On Windows, use `python bin/vemo status`.
 
 ## Next
+- 中文首次任务与验收流程 → [USAGE.md](USAGE.md)。
 - Going unattended (CI / overnight)? → [HOWTO: auto mode](MENTAL_MODEL.md#auto-mode) — but read the stop-rules note.
 - Want the *why*? → [MENTAL_MODEL.md](MENTAL_MODEL.md). Want the full map? → [INDEX.md](INDEX.md).
 

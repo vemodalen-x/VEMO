@@ -5,6 +5,9 @@
 
 | I want to… | Type | Go to |
 |---|---|---|
+| **通过 UI 安装、升级、诊断和卸载** | How-to | [INSTALL.md](INSTALL.md) · `python3 bin/vemo ui` |
+| **开始第一次任务并验证结果** | Tutorial | [USAGE.md](USAGE.md) |
+| **理解 Wildmeerkat lite 设计借鉴与治理取舍** | Explanation | [DESIGN_LITE.md](DESIGN_LITE.md) |
 | **See the whole picture (usage + architecture diagrams)** | Visual guide | 🖼️ [GUIDE.html](GUIDE.html) |
 | **Understand the AI platform planes, ownership, and request lifecycle** | Explanation + executable reference | [`docs/PLATFORM.md`](PLATFORM.md) · `vemo platform --json` |
 | **Add or diagnose declarative capabilities and dependencies** | Reference + how-to | [EXTENSIONS.md](EXTENSIONS.md) · `vemo extensions --check --json` |

@@ -51,8 +51,15 @@ img{max-width:100%}
 <a class="item" href="index.html">Home</a>
 <div class="grp">Get started</div>
 <a class="item" href="README.html">VEMO</a>
-<a class="item" href="QUICKSTART.html">Quickstart (5 minutes)</a>
+<a class="item" href="INSTALL.html">VEMO 安装与维护</a>
+<a class="item" href="USAGE.html">VEMO 使用指南</a>
+<a class="item" href="QUICKSTART.html">Quickstart：通过 UI 接入项目</a>
 <a class="item" href="MENTAL_MODEL.html">VEMO in 5 ideas (the mental model)</a>
+<div class="grp">Design</div>
+<a class="item" href="DESIGN_LITE.html">从 Wildmeerkat lite 借鉴的 VEMO 设计</a>
+<a class="item" href="PLATFORM.html">VEMO platform architecture</a>
+<a class="item" href="EXTENSIONS.html">VEMO extension composition</a>
+<a class="item" href="ADAPTERS.html">ADAPTERS — running VEMO under any harness, with any model</a>
 <div class="grp">Understand</div>
 <a class="item" href="SCALING.html">Why VEMO works *better*, not worse, as models get stronger</a>
 <a class="item" href="COMPLIANCE.html">VEMO controls ↔ 2026 governance standards</a>
@@ -92,14 +99,54 @@ img{max-width:100%}
 </thead>
 <tbody>
 <tr>
+<td><strong>通过 UI 安装、升级、诊断和卸载</strong></td>
+<td>How-to</td>
+<td><a href="INSTALL.html">INSTALL.md</a> · <code>python3 bin/vemo ui</code></td>
+</tr>
+<tr>
+<td><strong>开始第一次任务并验证结果</strong></td>
+<td>Tutorial</td>
+<td><a href="USAGE.html">USAGE.md</a></td>
+</tr>
+<tr>
+<td><strong>理解 Wildmeerkat lite 设计借鉴与治理取舍</strong></td>
+<td>Explanation</td>
+<td><a href="DESIGN_LITE.html">DESIGN_LITE.md</a></td>
+</tr>
+<tr>
 <td><strong>See the whole picture (usage + architecture diagrams)</strong></td>
 <td>Visual guide</td>
 <td>🖼️ <a href="../GUIDE.html">GUIDE.html</a></td>
 </tr>
 <tr>
+<td><strong>Understand the AI platform planes, ownership, and request lifecycle</strong></td>
+<td>Explanation + executable reference</td>
+<td><a href="PLATFORM.html"><code>docs/PLATFORM.md</code></a> · <code>vemo platform --json</code></td>
+</tr>
+<tr>
+<td><strong>Add or diagnose declarative capabilities and dependencies</strong></td>
+<td>Reference + how-to</td>
+<td><a href="EXTENSIONS.html">EXTENSIONS.md</a> · <code>vemo extensions --check --json</code></td>
+</tr>
+<tr>
 <td><strong>Get it working in 5 min</strong></td>
 <td>Tutorial</td>
 <td><a href="QUICKSTART.html">QUICKSTART.md</a></td>
+</tr>
+<tr>
+<td><strong>Migrate an existing agent playbook into VEMO</strong></td>
+<td>How-to</td>
+<td><a href="PLAYBOOK_ADOPTION.html">PLAYBOOK_ADOPTION.md</a></td>
+</tr>
+<tr>
+<td><strong>Run a Devpost-style hackathon build under a deadline</strong></td>
+<td>How-to</td>
+<td><a href="HACKATHON_PLAYBOOK.html">HACKATHON_PLAYBOOK.md</a></td>
+</tr>
+<tr>
+<td><strong>Design diagnostic coaching/tutoring agent flows</strong></td>
+<td>How-to</td>
+<td><a href="DIAGNOSTIC_PROMPTING.html">DIAGNOSTIC_PROMPTING.md</a></td>
 </tr>
 <tr>
 <td><strong>Understand how VEMO thinks</strong></td>

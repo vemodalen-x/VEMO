@@ -51,8 +51,15 @@ img{max-width:100%}
 <a class="item" href="index.html">Home</a>
 <div class="grp">Get started</div>
 <a class="item active" href="README.html">VEMO</a>
-<a class="item" href="QUICKSTART.html">Quickstart (5 minutes)</a>
+<a class="item" href="INSTALL.html">VEMO 安装与维护</a>
+<a class="item" href="USAGE.html">VEMO 使用指南</a>
+<a class="item" href="QUICKSTART.html">Quickstart：通过 UI 接入项目</a>
 <a class="item" href="MENTAL_MODEL.html">VEMO in 5 ideas (the mental model)</a>
+<div class="grp">Design</div>
+<a class="item" href="DESIGN_LITE.html">从 Wildmeerkat lite 借鉴的 VEMO 设计</a>
+<a class="item" href="PLATFORM.html">VEMO platform architecture</a>
+<a class="item" href="EXTENSIONS.html">VEMO extension composition</a>
+<a class="item" href="ADAPTERS.html">ADAPTERS — running VEMO under any harness, with any model</a>
 <div class="grp">Understand</div>
 <a class="item" href="SCALING.html">Why VEMO works *better*, not worse, as models get stronger</a>
 <a class="item" href="COMPLIANCE.html">VEMO controls ↔ 2026 governance standards</a>
@@ -197,20 +204,23 @@ that fails the moment the model doesn't read it.</p>
 </tbody>
 </table>
 <h2 id="quickstart">⚡ Quickstart</h2>
-<pre><code class="language-bash"># 1) drop VEMO into your repo
-cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ &amp;&amp; cd your-repo
-
-# 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
-python3 bin/vemo init --preset python        # or: node | cpp | docs   (--dry-run to preview)
-export PATH=&quot;$PWD/bin:$PATH&quot;                  # so you can just type `vemo`
-
-# 3) make it AUTHORITATIVE: server-side CI + branch protection (local hooks are fast feedback only)
-mkdir -p .github/workflows &amp;&amp; cp enforcement/ci/vemo-ci.yml .github/workflows/
-
-# 4) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
-cp tasks/_TASK_TEMPLATE.md tasks/T-myfeature.md   # set  scope_in: [&quot;src/feature/**&quot;]  risk: R1
-vemo status                                       # where am I?    vemo explain gates
+<p><strong>图形安装 / 安装与维护向导</strong>：在包含本次重构的完整 VEMO checkout 中运行：</p>
+<pre><code class="language-bash">python3 bin/vemo ui
+# Windows: py -3 bin/vemo ui，或双击 ui/start.cmd
 </code></pre>
+<p>浏览器中选择项目 → 检查环境与文件变更 → 确认安装并验证。支持诊断、升级预览、失败恢复与卸载。
+需要 Python 3.10+、Git 和 Bash 4+；UI 无需 Node.js 或云服务。当前为源码自带的本地安装器，
+尚未发行自带解释器的桌面安装包。Linux 已实测，Windows/macOS 待平台验收。</p>
+<p><strong><a href="INSTALL.html">中文安装与维护</a></strong> · <strong><a href="USAGE.html">使用指南</a></strong> · <strong><a href="DESIGN_LITE.html">参考设计与治理取舍</a></strong></p>
+<p>Headless installation uses the same service:</p>
+<pre><code class="language-bash">python3 bin/vemo setup install /absolute/your-project --preset python --json   # preview
+python3 bin/vemo setup install /absolute/your-project --preset python --apply
+# In the target project:
+python3 bin/vemo context
+</code></pre>
+<p>The installer preserves existing project entries and settings, refuses conflicting files, records payload
+hashes, and runs local checks before success. Configure your remote required CI check separately.
+Legacy <code>vemo start</code> / <code>vemo init</code> remain available for existing workflows.</p>
 <p><strong>The "aha":</strong> ask your agent to edit a file outside <code>scope_in</code> — the hook blocks it. You didn't have to police it.</p>
 <p>▶ Full walkthrough: <strong><a href="QUICKSTART.html">docs/QUICKSTART.md</a></strong> · the model in 5 ideas: <strong><a href="MENTAL_MODEL.html">docs/MENTAL_MODEL.md</a></strong> · 🖼️ visual guide + diagrams: <strong><a href="../GUIDE.html">docs/GUIDE.html</a></strong></p>
 <h2 id="architecture">🧭 Architecture</h2>
@@ -223,6 +233,22 @@ vemo status                                       # where am I?    vemo explain 
 ├ enforcement/ ────────── ⛨ hook dispatcher + git pre-commit/pre-push + CI workflow  ◀── MECHANISM
 └ agents/ · eval/ · bin/  governance-judge · validator+hook e2e eval · the `vemo` CLI    (verify · tooling)
 </code></pre>
+<p>That is the deployment view. The complementary AI-platform view separates six stable responsibilities —
+<code>ingress · control · policy · execution · enforcement · evidence</code> — so an adapter cannot silently become a
+policy engine and an evidence viewer cannot grant itself authority. Inspect the executable, content-minimizing
+contract with <code>vemo platform --json</code>. Its Definition/Provider/Consumer seams expose real composition, while
+owner-local relationship invariants detect broken adapter bindings and dangling verification evidence;
+<code>vemo platform --check</code> turns those local failures into a non-zero preflight. It remains distinct from runtime
+execution proof and remote authority. Ownership, lifecycle, and boundaries are explained in
+<a href="PLATFORM.html">docs/PLATFORM.md</a>.</p>
+<p>The seams are supplied by a safe declarative extension layer: <code>vemo extensions --json</code> resolves stable
+capabilities and dependencies from an explicit activation index, shows the deterministic load order, and
+uses child-aware <code>CompositionContext</code>, grouped <code>EffectScope</code>, typed <code>ContributionSpec</code>, and reconciling
+<code>ExtensionLoader</code> boundaries for programmatic use. Long-lived loaders retain unchanged registrations,
+reverse only changed/removed effects, and visibly defer malformed index revisions while preserving the last
+valid mount. Manifests never execute code; trusted internal effect installers cannot be selected from JSON.
+Add and validate an extension with
+<a href="EXTENSIONS.html">docs/EXTENSIONS.md</a>.</p>
 <p>Enforcement is <strong>defense-in-depth</strong> — a gate never depends on the agent's goodwill, and every
 "passed" claim needs an artifact the claimant did not type (evidence file · <code>vemo verify</code> receipt ·
 required judge provenance record(s)):</p>
@@ -244,8 +270,32 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 </thead>
 <tbody>
 <tr>
+<td><code>vemo ui [--port N] [--no-browser]</code></td>
+<td>local Chinese browser wizard for install, upgrade, check, recovery and uninstall</td>
+</tr>
+<tr>
+<td><code>vemo setup install\|check\|uninstall\|recover &lt;absolute-project-path&gt; [--apply]</code></td>
+<td>the same installation service for terminal use; mutations are preview-first</td>
+</tr>
+<tr>
+<td><code>vemo start [--preset ...] [--profile ...] [--apply]</code></td>
+<td>preview or apply the product onboarding path</td>
+</tr>
+<tr>
+<td><code>vemo report [--days N] [--json]</code></td>
+<td>show observed local value, verification, readiness, and next actions</td>
+</tr>
+<tr>
+<td><code>vemo platform [--json] [--check]</code></td>
+<td>show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight</td>
+</tr>
+<tr>
+<td><code>vemo extensions [--json] [--check]</code></td>
+<td>inspect declarative capabilities, dependencies, activation order, contributions, and stable composition failures</td>
+</tr>
+<tr>
 <td><code>vemo init [--preset python\|node\|cpp\|docs]</code></td>
-<td>set up VEMO in this repo (preset + hooks + git gates + tasks/)</td>
+<td>low-level setup (used by <code>vemo start --apply</code>)</td>
 </tr>
 <tr>
 <td><code>vemo status</code></td>
@@ -256,8 +306,8 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <td>machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config</td>
 </tr>
 <tr>
-<td><code>vemo verify</code></td>
-<td><strong>execute</strong> <code>paths.build/smoke</code> → evidence log + machine receipt (what the push gate trusts)</td>
+<td><code>vemo verify [--no-cache] [--all-tasks]</code></td>
+<td>execute verification; <code>--all-tasks</code> preserves one receipt per task in a multi-task push</td>
 </tr>
 <tr>
 <td><code>vemo doctor</code></td>
@@ -272,16 +322,20 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <td>executable conformance harness, validator + hook end-to-end (writes <code>eval/out/report.json</code>)</td>
 </tr>
 <tr>
-<td><code>vemo judge-brief [--lens &lt;l&gt;]</code></td>
-<td>evidence dossier for a judge pass (claims · gates · receipt · changes + lens checklist)</td>
+<td><code>vemo judge-brief [--lens &lt;l&gt;] [--range &lt;r&gt;]</code></td>
+<td>staged/range-only dossier; excludes other tasks' untracked files</td>
 </tr>
 <tr>
 <td><code>vemo heartbeat</code></td>
 <td>stamp the active task's heartbeat in place (no hand-editing the task file)</td>
 </tr>
 <tr>
+<td><code>vemo task create\|note\|state</code></td>
+<td>create/update task records with tool-written RFC3339 UTC timestamps</td>
+</tr>
+<tr>
 <td><code>vemo explain &lt;topic&gt;</code></td>
-<td><code>tiers · gates · auto · budget · judge · capability · presets · verify</code></td>
+<td><code>tiers · gates · auto · budget · judge · capability · presets · verify · platform · extensions</code></td>
 </tr>
 <tr>
 <td><code>vemo auto on\|off\|status</code></td>
@@ -296,11 +350,28 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <td>required risk tier / is a path in scope?</td>
 </tr>
 <tr>
+<td><code>vemo fleet &lt;command&gt;</code></td>
+<td>PC-wide inventory, profiles, readiness reports, preview-first onboarding, audit verification</td>
+</tr>
+<tr>
 <td><code>vemo skill-score</code> / <code>vemo skill-audit</code></td>
 <td>quality bar for VEMO's own skills (frontmatter / naming / catalog parity) / catalog-vs-disk consistency audit</td>
 </tr>
 </tbody>
 </table>
+<h3 id="one-pc-many-projects">One PC, many projects</h3>
+<p>Install a user-local launcher once, discover Git projects without changing them, then opt projects into a policy
+profile explicitly:</p>
+<pre><code class="language-powershell">python bin\vemo fleet install
+python bin\vemo fleet install --apply
+vemo fleet discover C:\Users\User\Documents --max-depth 6
+vemo fleet register C:\work\product-a --profile solo
+vemo fleet status --json
+vemo fleet onboard C:\work\product-a --profile solo  # dry-run; add --skills-root and --apply only by consent
+</code></pre>
+<p>Fleet is local-first: its registry and hash-chained audit log stay under <code>VEMO_HOME</code>; discovery and status are
+read-only; onboarding refuses dirty worktrees and project-owned conflicts. See <a href="FLEET.html">docs/FLEET.md</a> for the
+operating model and <a href="STANDARDS.html">docs/STANDARDS.md</a> for the NIST SSDF/CSF, SLSA, OWASP, and OpenSSF mapping.</p>
 <h2 id="skills">🧩 Skills</h2>
 <p>Reusable, script-backed procedures the agent auto-invokes by their frontmatter <code>description</code> (catalog: <a href="_catalog.html">skill/_catalog.md</a>):</p>
 <table>
@@ -331,6 +402,10 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <td><code>automation-mode</code></td>
 <td>enter full-auto (unattended) mode</td>
 </tr>
+<tr>
+<td><code>hackathon-submission</code></td>
+<td>pre-submission readiness check against a contest's own rules</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -352,8 +427,40 @@ documentation updates are routed through <code>docs-sync</code>.</p>
 <td>🖼️ <a href="../GUIDE.html">docs/GUIDE.html</a></td>
 </tr>
 <tr>
+<td>Understand platform planes, seams, invariants, ownership, and lifecycle</td>
+<td><a href="PLATFORM.html">docs/PLATFORM.md</a> · <code>vemo platform --check --json</code></td>
+</tr>
+<tr>
+<td>Add or diagnose a declarative capability extension</td>
+<td><a href="EXTENSIONS.html">docs/EXTENSIONS.md</a> · <code>vemo extensions --check --json</code></td>
+</tr>
+<tr>
 <td>Get working in 5 minutes</td>
 <td><a href="QUICKSTART.html">docs/QUICKSTART.md</a></td>
+</tr>
+<tr>
+<td>Migrate an existing agent playbook into VEMO</td>
+<td><a href="PLAYBOOK_ADOPTION.html">docs/PLAYBOOK_ADOPTION.md</a></td>
+</tr>
+<tr>
+<td>Run a Devpost-style hackathon build under a deadline (Codex adapter incl.)</td>
+<td><a href="HACKATHON_PLAYBOOK.html">docs/HACKATHON_PLAYBOOK.md</a></td>
+</tr>
+<tr>
+<td>Design diagnostic coaching/tutoring agent flows</td>
+<td><a href="DIAGNOSTIC_PROMPTING.html">docs/DIAGNOSTIC_PROMPTING.md</a></td>
+</tr>
+<tr>
+<td>Govern every Git project on one PC</td>
+<td><a href="FLEET.html">docs/FLEET.md</a></td>
+</tr>
+<tr>
+<td>Understand the product path and commercial boundary</td>
+<td><a href="PRODUCT.html">docs/PRODUCT.md</a></td>
+</tr>
+<tr>
+<td>Understand standards and commercial readiness mapping</td>
+<td><a href="STANDARDS.html">docs/STANDARDS.md</a></td>
 </tr>
 <tr>
 <td>Understand how VEMO thinks</td>
@@ -381,6 +488,12 @@ long-horizon model safety. It openly credits the best practices it stands on:</p
 <li><strong><a href="https://github.com/humanlayer/12-factor-agents">12-Factor Agents</a></strong> — own-your-context, stateless reducer.</li>
 <li><strong><a href="https://agents.md/">AGENTS.md</a></strong> + Anthropic's <em>context engineering</em> — thin, just-in-time entry.</li>
 <li><strong><a href="https://diataxis.fr/">Diátaxis</a></strong> — docs organized by user need.</li>
+<li><strong><a href="https://github.com/BST-AII/Wildmeerkat">AIIGovernance / Wildmeerkat</a></strong> — explicit separation of ingress,
+  orchestration, normative policy, hard gates, and records; VEMO adapts the clarity without adopting a
+  channel-specific bridge or mandatory single-writer leader.</li>
+<li><strong><a href="https://github.com/deepseek-ai/deepseek-harness">DeepSeek Harness</a></strong> — explicit capability seams,
+  inspectable composition, and owner-local relationship invariants; VEMO adopts those contracts without
+  introducing a second agent runtime.</li>
 <li>Fable 5 / Mythos analysis (2026) — the run-budget stop rules and the evidence-completeness judge check.</li>
 </ul>
 <blockquote>

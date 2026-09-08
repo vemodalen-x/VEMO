@@ -12,6 +12,8 @@ from contextlib import redirect_stdout
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if ROOT.name == "eval":
+    ROOT = ROOT.parent
 SPEC = importlib.util.spec_from_file_location("vemo_fleet", ROOT / "bin" / "vemo_fleet.py")
 fleet = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fleet)
@@ -32,7 +34,7 @@ class FleetTests(unittest.TestCase):
         subprocess.run(["git", "config", "user.name", "VEMO Test"], cwd=project, check=True)
         subprocess.run(["git", "config", "user.email", "vemo@example.invalid"], cwd=project, check=True)
         if commit:
-            (project / "README.md").write_text("test\n", encoding="utf-8")
+            (project / "README.md").write_bytes((ROOT / "README.md").read_bytes())
             subprocess.run(["git", "add", "README.md"], cwd=project, check=True)
             subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=project, check=True)
         return project

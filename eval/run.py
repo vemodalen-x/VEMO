@@ -1117,8 +1117,9 @@ def run_skill_checks(r):
 def run_fleet_checks(r):
     if not r.has_group("fleet"):
         return
+    test_dir = "eval/tests" if (Path(ROOT) / "eval/tests").is_dir() else "tests"
     p = subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"],
+        [sys.executable, "-m", "unittest", "discover", "-s", test_dir, "-v"],
         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace",
         env=child_env(),
     )
@@ -1131,18 +1132,26 @@ def run_product_checks(r):
         return
     product = os.path.join(ROOT, "bin", "vemo_product.py")
 
-    def run(*args):
-        return subprocess.run([sys.executable, product, *args], cwd=ROOT,
+    def run(*args, root=ROOT):
+        return subprocess.run([sys.executable, product, *args], cwd=root,
                               capture_output=True, text=True, encoding="utf-8", errors="replace",
-                              env=child_env(VEMO_ROOT=ROOT))
+                              env=child_env(VEMO_ROOT=str(root)))
 
-    preview = run("start", "--preset", "python", "--json")
+    # A consuming project may deliberately use a different/custom preset. Exercise the default
+    # onboarding contract in isolated fixture data instead of treating that configuration as a failure.
+    with tempfile.TemporaryDirectory(prefix="vemo_product_preview_") as fixture:
+        presets = Path(fixture) / "presets"
+        presets.mkdir()
+        shutil.copyfile(Path(ROOT) / "presets/python.yaml", presets / "python.yaml")
+        before = sorted(str(p.relative_to(fixture)) for p in Path(fixture).rglob("*"))
+        preview = run("start", "--preset", "python", "--json", root=fixture)
+        unchanged = before == sorted(str(p.relative_to(fixture)) for p in Path(fixture).rglob("*"))
     try:
         preview_payload = json.loads(preview.stdout)
     except ValueError:
         preview_payload = {}
     r.chk("product", "start: default preview is read-only JSON", (preview.returncode, preview_payload),
-          lambda g: g[0] == 0 and g[1].get("mode") == "preview" and g[1].get("read_only_preview") is True)
+          lambda g: unchanged and g[0] == 0 and g[1].get("mode") == "preview" and g[1].get("read_only_preview") is True)
     r.chk("product", "start: detects stack and exposes explicit apply", preview_payload,
           lambda g: g.get("preset") == "python"
           and any(row.get("action") == "install_local_guards" for row in g.get("actions", []))
@@ -1161,9 +1170,15 @@ def run_product_checks(r):
           lambda g: isinstance(g.get("measurement_note"), str)
           and isinstance(g.get("recommendations"), list)
           and "monetary savings" in g.get("measurement_note", ""))
-    fleet_source = Path(os.path.join(ROOT, "bin", "vemo_fleet.py")).read_text(encoding="utf-8")
-    r.chk("product", "fleet onboarding carries the product layer", fleet_source,
-          lambda g: '"bin/vemo_product.py"' in g)
+    # Inspect the resolved distribution contract: filename literals may live in a shared catalog.
+    # This also detects the previous omission of the product layer's composition dependencies.
+    fleet_spec = importlib.util.spec_from_file_location("vemo_fleet_eval", os.path.join(ROOT, "bin", "vemo_fleet.py"))
+    fleet_module = importlib.util.module_from_spec(fleet_spec)
+    fleet_spec.loader.exec_module(fleet_module)
+    fleet_files = fleet_module._managed_sources(ROOT)
+    r.chk("product", "fleet onboarding carries the product layer", sorted(fleet_files),
+          lambda g: {"bin/vemo_product.py", "bin/vemo_extensions.py", "bin/vemo_composition/loader.py",
+                     "bin/vemo_setup/service.py", "extensions/index.json"}.issubset(g))
 
 
 def main(argv):

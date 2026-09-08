@@ -70,22 +70,31 @@ that fails the moment the model doesn't read it.
 
 ## ⚡ Quickstart
 
+**图形安装 / 安装与维护向导**：在包含本次重构的完整 VEMO checkout 中运行：
+
 ```bash
-# 1) drop VEMO into your repo
-cp -r VEMO/{AGENTS.md,vemo.config.yaml,specs,enforcement,agents,tasks,bin,presets} your-repo/ && cd your-repo
-
-# 2) one command — installs hooks + git pre-commit/pre-push, preconfigures build/test for your stack
-python3 bin/vemo start --preset python       # preview first; add --apply after review
-# Windows: use `python bin/vemo ...` if `python3` is not installed.
-export PATH="$PWD/bin:$PATH"                  # so you can just type `vemo`
-
-# 3) make it AUTHORITATIVE: server-side CI + branch protection (local hooks are fast feedback only)
-mkdir -p .github/workflows && cp enforcement/ci/vemo-ci.yml .github/workflows/
-
-# 4) start a task, set its scope, then code — out-of-scope edits are now blocked automatically
-cp tasks/_TASK_TEMPLATE.md tasks/T-myfeature.md   # set  scope_in: ["src/feature/**"]  risk: R1
-vemo status                                       # where am I?    vemo explain gates
+python3 bin/vemo ui
+# Windows: py -3 bin/vemo ui，或双击 ui/start.cmd
 ```
+
+浏览器中选择项目 → 检查环境与文件变更 → 确认安装并验证。支持诊断、升级预览、失败恢复与卸载。
+需要 Python 3.10+、Git 和 Bash 4+；UI 无需 Node.js 或云服务。当前为源码自带的本地安装器，
+尚未发行自带解释器的桌面安装包。Linux 已实测，Windows/macOS 待平台验收。
+
+**[中文安装与维护](docs/INSTALL.md)** · **[使用指南](docs/USAGE.md)** · **[参考设计与治理取舍](docs/DESIGN_LITE.md)**
+
+Headless installation uses the same service:
+
+```bash
+python3 bin/vemo setup install /absolute/your-project --preset python --json   # preview
+python3 bin/vemo setup install /absolute/your-project --preset python --apply
+# In the target project:
+python3 bin/vemo context
+```
+
+The installer preserves existing project entries and settings, refuses conflicting files, records payload
+hashes, and runs local checks before success. Configure your remote required CI check separately.
+Legacy `vemo start` / `vemo init` remain available for existing workflows.
 
 **The "aha":** ask your agent to edit a file outside `scope_in` — the hook blocks it. You didn't have to police it.
 
@@ -143,6 +152,8 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 
 | Command | Does |
 |---|---|
+| `vemo ui [--port N] [--no-browser]` | local Chinese browser wizard for install, upgrade, check, recovery and uninstall |
+| `vemo setup install\|check\|uninstall\|recover <absolute-project-path> [--apply]` | the same installation service for terminal use; mutations are preview-first |
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
 | `vemo platform [--json] [--check]` | show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight |

@@ -51,8 +51,15 @@ img{max-width:100%}
 <a class="item" href="index.html">Home</a>
 <div class="grp">Get started</div>
 <a class="item" href="README.html">VEMO</a>
-<a class="item" href="QUICKSTART.html">Quickstart (5 minutes)</a>
+<a class="item" href="INSTALL.html">VEMO 安装与维护</a>
+<a class="item" href="USAGE.html">VEMO 使用指南</a>
+<a class="item" href="QUICKSTART.html">Quickstart：通过 UI 接入项目</a>
 <a class="item" href="MENTAL_MODEL.html">VEMO in 5 ideas (the mental model)</a>
+<div class="grp">Design</div>
+<a class="item" href="DESIGN_LITE.html">从 Wildmeerkat lite 借鉴的 VEMO 设计</a>
+<a class="item" href="PLATFORM.html">VEMO platform architecture</a>
+<a class="item" href="EXTENSIONS.html">VEMO extension composition</a>
+<a class="item" href="ADAPTERS.html">ADAPTERS — running VEMO under any harness, with any model</a>
 <div class="grp">Understand</div>
 <a class="item" href="SCALING.html">Why VEMO works *better*, not worse, as models get stronger</a>
 <a class="item" href="COMPLIANCE.html">VEMO controls ↔ 2026 governance standards</a>
@@ -80,6 +87,88 @@ img{max-width:100%}
 <main><div class="content"><h1 id="changelog">Changelog</h1>
 <p>All notable changes to VEMO are documented here.
 Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: <a href="https://semver.org/">SemVer</a>.</p>
+<h2 id="unreleased">[Unreleased]</h2>
+<h3 id="added">Added</h3>
+<ul>
+<li><strong>Command-guard read-only probe exemption</strong> (<code>enforcement/hooks/run.py</code> <code>is_readonly_probe</code>): a DESTRUCTIVE
+  literal that appears only as the text argument of a read-only inspection tool (<code>grep -n 'rm -rf' log</code>,
+  <code>rg "git push --force" .</code>, <code>cat</code>/<code>head</code>/<code>tail</code>/<code>wc</code>/<code>jq</code>/<code>od</code>/…) is no longer blocked — such a command has
+  no execution path for the literal. Exemption requires ALL THREE: (1) a small allowlist of tools whose
+  bare/short-flag form cannot write/exec (write-capable tools like <code>sed</code>/<code>awk</code>/<code>find</code>/<code>xargs</code>/<code>git</code>/<code>sort -o</code>
+  excluded); (2) no control/substitution/redirect operator (<code>&amp;&amp; || ; | \</code> $( &gt; &lt; &amp;<code>or newline); (3) no</code>--long-option<code>argument token — checked on shlex-tokenized words, so a</code>--force<code>inside a quoted search
+  pattern stays exempt. Condition (3) closes an arbitrary-code-execution bypass **found by two independent
+  governance-judge passes** before this shipped:</code>rg --pre <prog><code>(and ugrep-as-</code>grep<code></code>--filter=COMMAND<code>)
+  run an external program per file —</code>rg --pre rm '-rf x' dir<code>was exempted while the same command was
+  blocked before the exemption. Anything not provably a pure read falls through to the full scan (fail-safe =
+  block more). A bare</code>--<code>end-of-options marker (e.g.</code>grep -- '-rf danger' file<code>) is explicitly excepted
+  from the long-option veto — treating it as disqualifying was a self-review finding that safely over-blocked
+  (never a security regression) exactly the probes this exemption exists to fix. A **third independent judge
+  pass** then found that</code>shlex.split<code>does not decode Bash's</code>$'...'<code>ANSI-C quoting, so</code>rg $'--pre' rm
+  '-rf x' dir<code>tokenized to</code>$--pre<code>(not</code>--pre<code>) and slipped past condition (3), reopening the same exec
+  vector; fixed by vetoing any command containing the literal sequence</code>$'<code>before tokenization is even
+  attempted (reject the whole quoting class rather than chase individual escapes — the same principle
+  condition (3) already applies to long options). Anything not provably a pure read falls through to the
+  full scan (fail-safe = block more). Regression-covered by</code>eval/scenarios/SC06_readonly_probe.md<code>(15 hook
+  checks incl. the</code>rg --pre<code>/</code>--filter<code>/ANSI-C-quoted negatives and the bare-</code>--<code>positive) +</code>run.py
+  --selftest`. Closes a live false positive (an auditor grepping logs for a danger string was blocked)
+  without opening an exec path.</li>
+<li><strong>Governance-judge guardrails</strong> (<code>agents/governance-judge.md</code>): (1) the judge must NOT execute
+  irreversible/outward-write actions (<code>git push</code>/<code>commit</code>/<code>merge</code>/<code>tag</code>/<code>reset --hard</code>/<code>branch -D</code>,
+  <code>gh pr merge</code>/<code>release</code>, <code>rm</code>-class) while judging — verification is read-only re-runs / <code>--dry-run</code> /
+  throwaway copies only (the checker must not be the executor); (2) a defect already recorded as a declared
+  limitation (a <code>safety.spec.md</code> "Honest coverage note", a ROADMAP item) is not counted as a NEW fail,
+  while the judge still catches a real issue hidden behind such a label; (3) an R2 sanity check that the
+  self-declared <code>trifecta:</code> field matches the diff (an under-declared 3/3 that dodges the Rule-of-Two human
+  gate is a safety finding).</li>
+<li><strong>Product path</strong>: added <code>vemo start</code> for read-only onboarding previews and explicit apply, plus <code>vemo report</code>
+  for local observed-value reporting (events, verification, tasks, readiness, and next actions).</li>
+<li><strong>Adoption docs</strong>: documented solo/team/regulated profiles, the open Core versus paid control-plane boundary,
+  local-only data handling, and metrics to validate with design partners before broad promotion.</li>
+<li><strong>Multi-task evidence</strong>: <code>vemo verify --all-tasks</code> now writes task-scoped receipts and CI verifies every task in
+  a push range, preventing one task's receipt from masking another task's acceptance.</li>
+<li>Cost-proportional verification profiles: <code>focused</code> runs task-local test/lint/smoke, <code>full</code> runs repository
+  build/smoke, and <code>release</code> adds the configured package scan. Successful runs reuse a scope-and-command SHA-256
+  cache; <code>--no-cache</code> forces execution and stale receipts are blocked.</li>
+<li>Tool-owned task mutation commands (<code>vemo task create|note|state</code>) and RFC3339 UTC timestamps across heartbeat,
+  receipts, judge provenance, budgets, and stale-task checks.</li>
+<li><code>vemo fleet</code>: a stdlib-only, user-local control plane for registering, discovering, assessing, and preview-first
+  onboarding Git projects across one PC. Includes canonical project ids, JSON reports, strict mode, managed-file
+  hashes, dirty/conflict refusal, optional byte-identical VEMO_SKILLS binding, and a privacy-minimized hash-chained
+  mutation log. Cross-process registry/audit locks prevent lost updates during concurrent Windows sessions.</li>
+<li>Progressive <code>solo</code>, <code>team</code>, and <code>regulated</code> governance profiles plus standards/readiness documentation. Profiles are
+  adoption targets and explicitly do not claim certification.</li>
+<li>Fleet unit tests are part of the conformance harness, including nested repositories, Git worktrees, dry-run safety,
+  conflict handling, registry deduplication, launcher isolation, JSON contracts, and audit tamper detection.</li>
+<li><code>docs/DIAGNOSTIC_PROMPTING.md</code>: a framework-level pattern for diagnostic coaching/tutoring prompts, abstracting
+  intake -&gt; map -&gt; constraint -&gt; plan -&gt; loop -&gt; boundary from Human 3.0 and Mr. Ranedeer-style references without
+  copying external prompt text.</li>
+<li><code>docs/PLAYBOOK_ADOPTION.md</code>: migration guidance for converting repo-local agent playbooks into VEMO mechanisms.</li>
+<li><code>docs/HACKATHON_PLAYBOOK.md</code>: how-to for running a Devpost-style judged hackathon build (reference case:
+  OpenAI Build Week) under VEMO — rules digest, judging-criteria-to-mechanism mapping, task decomposition for
+  a frontend+backend+AI-core project, and a submission-readiness checklist.</li>
+<li><code>docs/ADAPTERS.md</code>: a verified Codex CLI ring-1 adapter section (hooks.json / config.toml wiring to the
+  existing dispatcher — no dispatcher changes needed) alongside the Claude Code wiring.</li>
+<li><code>skill/hackathon-submission</code>: pre-submission readiness check that verifies required contest artifacts
+  (public/testable repo, README AI-usage section, demo video, session-id evidence) and runs a judge pass
+  against the contest's own judging criteria.</li>
+</ul>
+<h3 id="fixed">Fixed</h3>
+<ul>
+<li><code>vemo verify</code> now executes configured leading <code>python3</code> commands with the current interpreter on Windows,
+  avoiding the non-runnable WindowsApps launcher placeholder (<code>9009</code>) while preserving Unix behavior.</li>
+<li>Workflow risk classification now uses patch semantics: pure additive Python/dependency initialization may be R1,
+  while gate, trigger, permission, security, release, deploy, and attestation changes remain R2. Path-only queries
+  stay fail-safe R2. Shell/working-directory changes, command chaining, release uploads, and deleted-workflow
+  semantics are explicitly fail-safe. Critical class strength is ordered, and release-class tasks mechanically
+  require the release verification profile/package scan. Workflow renames are evaluated as delete+add, so moving a
+  workflow out of <code>.github/workflows</code> remains a security R2 change.</li>
+<li>Judge dossiers default to the staged index (or an explicit range), excluding unrelated untracked worktree files.
+  Narrow CI R2 changes require one judge pass; security, permissions, and release changes retain full depth.
+  Judge provenance is bound to a task-scoped staged/range snapshot, so rework invalidates stale passes without
+  coupling independent tasks in the same push range; the mirrored task <code>judge:</code> cache is normalized out.</li>
+<li>CLI and installer Python dispatch now use the current interpreter or fall back from <code>python3</code> to <code>python</code>, improving
+  Windows compatibility.</li>
+</ul>
 <h2 id="190-2026-07-09">[1.9.0] — 2026-07-09</h2>
 <p>Version-line realignment onto the public <code>v1.8.0</code> tag baseline + destructive-command gate hardening.</p>
 <h3 id="changed">Changed</h3>
@@ -89,7 +178,7 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
   <code>v1.8.0</code>; <code>v1.9.0</code> is the first unified tag/VERSION/CHANGELOG release. Prior internal <code>[1.4.0]</code>/<code>[1.3.0]</code>/
   <code>[1.2.0]</code> entries below are retained as development history; the published <code>v1.8.0</code> tag commit is unchanged.</li>
 </ul>
-<h3 id="fixed">Fixed</h3>
+<h3 id="fixed_1">Fixed</h3>
 <ul>
 <li><strong>DESTRUCTIVE-command gate: closed pre-existing coverage gaps</strong> (<code>enforcement/hooks/run.py</code>),
   surfaced by adversarial review, all in the SAFE (tightening) direction:</li>
@@ -109,7 +198,7 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
 </ul>
 <h2 id="140-2026-07-08">[1.4.0] — 2026-07-08</h2>
 <p>Ports two improvements reviewed from the sibling Wildmeerkat framework (v2.16.0/v2.17.0).</p>
-<h3 id="fixed_1">Fixed</h3>
+<h3 id="fixed_2">Fixed</h3>
 <ul>
 <li><strong>Danger-command gate false-positives</strong> (<code>enforcement/hooks/run.py</code>): <code>guard_command</code> matched the
   DESTRUCTIVE patterns against the raw command, so a dangerous command that was merely ECHOED
@@ -129,7 +218,7 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
   redirect operators/targets — is preserved byte-for-byte -&gt; zero new missed blocks, proven by a two-way
   <code>run.py --selftest</code> (incl. all five review carriers) + hook e2e checks.</li>
 </ul>
-<h3 id="added">Added</h3>
+<h3 id="added_1">Added</h3>
 <ul>
 <li><strong><code>vemo skill-roster</code></strong> + a one-line skills listing in the <code>vemo context</code> session brief
   (<code>skill_check.py roster</code>, reusing <code>collect()</code>), so the agent sees which skills exist at session start
@@ -146,7 +235,7 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
 <p>Ports the sibling skill-home's transparent skill scorer into VEMO and adds a catalog&lt;-&gt;disk consistency
 audit, closing the gap where <code>selfcheck</code> only asserted a SKILL.md <em>exists</em>. Additive and self-contained:
 the verdict engine (<code>task_state.py</code>) is untouched; the conformance eval grows 68-&gt;71 and stays green.</p>
-<h3 id="added_1">Added</h3>
+<h3 id="added_2">Added</h3>
 <ul>
 <li><strong><code>enforcement/validators/skill_check.py</code></strong> — a transparent, gating skill quality bar (frontmatter
   present, name==dir, description well-formed, <code>_catalog.md</code>&lt;-&gt;disk parity, cited backing scripts resolve,
@@ -184,7 +273,7 @@ and keep raw config out of the loop.</p>
 <li><strong><code>.gitignore</code> / <code>.gitattributes</code> are now R2</strong> (audit-visibility files: one ignore line can hide judge
   provenance or receipts from git + CI).</li>
 </ul>
-<h3 id="fixed_2">Fixed</h3>
+<h3 id="fixed_3">Fixed</h3>
 <ul>
 <li><strong>Multi-task push gate</strong>: <code>acceptance-before-push</code> and <code>required-judge</code> now evaluate <strong>every</strong> task file
   in the pushed range (the pre-push hook reads git's stdin refs; CI shares one <code>VEMO_DIFF_RANGE</code>), closing

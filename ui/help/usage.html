@@ -1,0 +1,112 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VEMO 使用帮助</title><link rel="stylesheet" href="/style.css"></head><body><article class="help-content"><a href="/">← 返回安装向导</a><h1 id="vemo">VEMO 使用指南</h1>
+<p>安装完成后，在<strong>目标项目</strong>中使用 VEMO。它把任务边界、风险分类、验证证据和交付约束放进项目，帮助人和 AI 助手围绕同一份可核查记录协作。</p>
+<h2 id="_1">第一次使用</h2>
+<p>先按<a href="/help/install.html">安装说明</a>接入项目，再在项目根目录运行：</p>
+<pre><code class="language-bash">python3 bin/vemo context
+python3 bin/vemo status
+</code></pre>
+<p><code>context</code> 提供简短的当前任务、范围、门禁和预算摘要。Windows 可把 <code>python3</code> 替换成可用的 <code>python</code> 或 <code>py -3</code>。无需修改 PATH。</p>
+<p>重新打开项目中的 AI 助手。项目 <code>AGENTS.md</code> 包含 VEMO 的入口协议，<code>CLAUDE.md</code> 指向该入口；Claude 的 hooks 配置合并进 <code>.claude/settings.json</code>。其他宿主需要匹配的 hook 适配器才能获得工具调用前拦截，详见 <a href="https://github.com/vemodalen-x/VEMO/blob/main/docs/ADAPTERS.md">ADAPTERS.md</a>。</p>
+<h2 id="_2">开始一个有明确验收标准的任务</h2>
+<p>可以直接告诉助手：</p>
+<blockquote>
+<p>为订单导出功能修复中文文件名。范围是 <code>src/export/</code> 和 <code>tests/export/</code>。完成标准是已有测试通过，并新增中文文件名的回归用例。请按项目 AGENTS.md 执行并给出真实验证结果。</p>
+</blockquote>
+<p>助手应先做任务分类、风险分级、创建计划与范围，然后执行。手工创建任务也可使用：</p>
+<pre><code class="language-bash">python3 bin/vemo tier src/export/ tests/export/
+python3 bin/vemo task create --title &quot;修复导出中文文件名&quot; --risk R1 \
+  --scope 'src/export/**' 'tests/export/**' --profile full
+</code></pre>
+<p>这是 Bash 示例。PowerShell 请写成一行，并使用相同的路径字符串。将创建结果中的任务 ID 用于会话绑定：</p>
+<pre><code class="language-bash">python3 enforcement/validators/task_state.py bind --session YOUR_SESSION_ID --task TASK_ID
+</code></pre>
+<p>打开新建任务文件，补充 Goal、Scope、可测量的 Pass/Fail Criteria 和 Plan。<code>R1</code> 只是本例，实际必须采用 <code>vemo tier</code> 判定；不要把高风险任务改成 R1 来绕过审查。</p>
+<h2 id="_3">三档风险意味着什么</h2>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>适用情况</th>
+<th>工作流程</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R0</td>
+<td>小型文档等低影响改动</td>
+<td>简短计划、执行、完成</td>
+</tr>
+<tr>
+<td>R1</td>
+<td>常规功能与缺陷修复</td>
+<td>计划、实现、真实验证</td>
+</tr>
+<tr>
+<td>R2</td>
+<td>核心、权限、治理规则等关键改动</td>
+<td>计划审查、实现、独立评审、验证与交付程序</td>
+</tr>
+</tbody>
+</table>
+<p>风险与模型能力共同决定流程深度。更强的模型可减少操作说明，但不能放宽范围、验收或审计约束。完整规则以项目 <code>specs/</code> 和机器检查结果为准。</p>
+<h2 id="_4">验证并提交交付结果</h2>
+<p>先检查 <code>vemo.config.preset.yaml</code> 中的 build/smoke 是否适合自己的项目，再执行：</p>
+<pre><code class="language-bash">python3 bin/vemo verify
+python3 bin/vemo report
+</code></pre>
+<p><code>verify</code> 实际运行任务对应的验证命令，并生成日志与机器回执。<code>report</code> 汇总观察到的门禁事件、验证记录与接入缺口。仅仅修改任务文件中的 <code>passed</code> 不能代替执行。</p>
+<p>提交、推送仍由项目自己的 Git 和审批流程处理。需要独立评审的任务必须提供合规的 judge 记录。UI 安装不会自动提交、推送、开启全自动模式或修改 Git 身份。</p>
+<h2 id="_5">被门禁拦截时</h2>
+<p>先读错误给出的规则和文件名，再修正原因：</p>
+<ul>
+<li>范围外修改：确认是否属于目标；需要扩展时更新经过确认的任务范围。</li>
+<li>缺少计划：补充任务计划和可验证标准。</li>
+<li>验收未通过：运行规定验证，处理失败，保留证据。</li>
+<li>缺少独立评审：按照项目风险/能力矩阵运行独立 judge。</li>
+</ul>
+<p>不要禁用 hooks 或用忽略验证的参数把错误藏起来。<code>vemo explain gates</code>、<code>vemo explain verify</code> 可以查看简短解释。</p>
+<h2 id="_6">常用入口</h2>
+<table>
+<thead>
+<tr>
+<th>想做什么</th>
+<th>命令 / 页面</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>安装到另一项目或维护安装</td>
+<td><code>python3 bin/vemo ui</code></td>
+</tr>
+<tr>
+<td>当前任务与约束</td>
+<td><code>python3 bin/vemo context</code></td>
+</tr>
+<tr>
+<td>确认路径所需风险</td>
+<td><code>python3 bin/vemo tier &lt;paths...&gt;</code></td>
+</tr>
+<tr>
+<td>执行验收</td>
+<td><code>python3 bin/vemo verify</code></td>
+</tr>
+<tr>
+<td>查看观察结果</td>
+<td><code>python3 bin/vemo report</code></td>
+</tr>
+<tr>
+<td>查看职责与能力边界</td>
+<td><code>python3 bin/vemo platform --check</code></td>
+</tr>
+<tr>
+<td>检查扩展装配</td>
+<td><code>python3 bin/vemo extensions --check</code></td>
+</tr>
+<tr>
+<td>安装、升级、卸载故障</td>
+<td><a href="/help/install.html">INSTALL.md</a></td>
+</tr>
+</tbody>
+</table>
+<p><code>vemo start</code> / <code>vemo init</code> 保留为历史接入命令，旧安装方式不会自动获得新的安装清单或回退能力。新项目统一使用 UI 或 <code>vemo setup</code>。<code>vemo eval</code> 检查框架本身；安装器将所需框架测试放在 <code>eval/tests/</code>，不会把业务项目的 <code>tests/</code> 当作框架 conformance 测试集。业务测试继续由 <code>vemo verify</code> 按项目自己的命令执行。</p>
+<p>下一步：<a href="/help/design.html">理解设计</a> · <a href="https://github.com/vemodalen-x/VEMO/blob/main/docs/INDEX.md">完整文档索引</a></p></article></body></html>

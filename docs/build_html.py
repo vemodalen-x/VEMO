@@ -14,7 +14,8 @@ OUT = os.path.join(ROOT, "docs", "html")
 
 # (group, [repo-relative markdown sources]) — order defines the sidebar.
 GROUPS = [
-    ("Get started", ["README.md", "docs/QUICKSTART.md", "docs/MENTAL_MODEL.md"]),
+    ("Get started", ["README.md", "docs/INSTALL.md", "docs/USAGE.md", "docs/QUICKSTART.md", "docs/MENTAL_MODEL.md"]),
+    ("Design", ["docs/DESIGN_LITE.md", "docs/PLATFORM.md", "docs/EXTENSIONS.md", "docs/ADAPTERS.md"]),
     ("Understand", ["docs/SCALING.md", "docs/COMPLIANCE.md", "docs/OWASP_AGENTIC_TOP10.md", "AGENTS.md"]),
     ("Reference", ["docs/INDEX.md", "CHANGELOG.md", "ROADMAP.md", "SECURITY.md", "CONTRIBUTING.md", "CONTRIBUTORS.md"]),
     ("Announcement", ["docs/ANNOUNCEMENT.md"]),
@@ -172,6 +173,29 @@ def main():
              '<a href="../GUIDE.html">GUIDE.html</a>.</p>')
     open(os.path.join(OUT, "index.html"), "w", encoding="utf-8").write(page("index.html", "Docs", intro + "".join(cards)))
     print(f"  rendered {n} pages + index -> docs/html/")
+
+    # Ship the three essential guides with the runtime UI, with no Markdown dependency at runtime.
+    help_dir = os.path.join(ROOT, "ui", "help")
+    os.makedirs(help_dir, exist_ok=True)
+    help_names = {"INSTALL.md": "install.html", "USAGE.md": "usage.html", "DESIGN_LITE.md": "design.html"}
+    def help_link(match):
+        attr, url = match.group(1), match.group(2)
+        if url.startswith(("http:", "https:", "#")):
+            return match.group(0)
+        name = os.path.basename(url)
+        target = "/help/" + help_names[name] if name in help_names else "https://github.com/vemodalen-x/VEMO/blob/main/docs/" + name
+        return f'{attr}="{target}"'
+    for name, output in help_names.items():
+        md.reset()
+        with open(os.path.join(ROOT, "docs", name), encoding="utf-8") as stream:
+            body = re.sub(r'(href|src)="([^"]+)"', help_link, md.convert(stream.read()))
+        document = ('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+                    '<meta name="viewport" content="width=device-width,initial-scale=1">'
+                    '<title>VEMO 使用帮助</title><link rel="stylesheet" href="/style.css"></head>'
+                    '<body><article class="help-content"><a href="/">← 返回安装向导</a>' + body + '</article></body></html>')
+        with open(os.path.join(help_dir, output), "w", encoding="utf-8") as stream:
+            stream.write(document)
+    print("  rendered 3 offline UI help pages -> ui/help/")
 
 
 if __name__ == "__main__":

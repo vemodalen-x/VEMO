@@ -16,6 +16,11 @@ import time
 from datetime import datetime, timezone
 from uuid import uuid4
 
+BIN_DIR = str(Path(__file__).resolve().parent)
+if BIN_DIR not in sys.path:
+    sys.path.insert(0, BIN_DIR)
+from vemo_setup.payload import managed_sources
+
 
 SCHEMA_VERSION = 1
 DEFAULT_PROFILE = "solo"
@@ -24,17 +29,6 @@ SKIP_DIRS = {
     ".git", ".hg", ".svn", ".tox", ".venv", "venv", "node_modules",
     "dist", "build", "target", "__pycache__", "AppData", "$Recycle.Bin",
 }
-MANAGED_SINGLE_FILES = (
-    "AGENTS.md",
-    "bin/vemo",
-    "bin/vemo_product.py",
-    "bin/vemo_fleet.py",
-    "agents/governance-judge.md",
-    "tasks/_TASK_TEMPLATE.md",
-    ".github/workflows/vemo-ci.yml",
-    "vemo.config.yaml",
-)
-MANAGED_DIRS = ("specs", "enforcement", "presets", "profiles")
 
 
 class FleetError(Exception):
@@ -412,20 +406,9 @@ def assess_project(path, profile):
 
 
 def _managed_sources(source_root, skills_root=None):
+    """Share the portable payload catalog with setup; add explicitly selected skills. @codex-comment"""
     root = Path(source_root).resolve()
-    files = {}
-    for relative in MANAGED_SINGLE_FILES:
-        path = root / relative
-        if path.is_file():
-            files[relative.replace("\\", "/")] = path
-    for directory in MANAGED_DIRS:
-        base = root / directory
-        if not base.is_dir():
-            continue
-        for path in sorted(base.rglob("*")):
-            if path.is_file() and "__pycache__" not in path.parts and path.suffix not in {".pyc", ".pyo"}:
-                relative = str(path.relative_to(root)).replace("\\", "/")
-                files[relative] = path
+    files = managed_sources(root)
     if skills_root:
         skills_home = Path(skills_root).expanduser().resolve()
         skills_dir = skills_home / "skills"

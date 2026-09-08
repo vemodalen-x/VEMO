@@ -11,6 +11,8 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if ROOT.name == "eval":
+    ROOT = ROOT.parent
 SPEC = importlib.util.spec_from_file_location("vemo_extensions", ROOT / "bin" / "vemo_extensions.py")
 extensions = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(extensions)

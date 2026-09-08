@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VEMO · 项目安装向导</title><link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <a class="brand" href="/" aria-label="VEMO 首页"><span class="mark">V</span> VEMO <span class="edition">LOCAL</span></a>
+    <p class="aside-caption">把治理带进项目</p>
+    <nav aria-label="主导航">
+      <button type="button" class="nav active" data-view="install">◈ <span>安装与升级</span></button>
+      <button type="button" class="nav" data-view="maintain">◎ <span>检查与维护</span></button>
+      <a class="nav" href="/help/usage.html" target="_blank" rel="noopener">↗ <span>使用指南</span></a>
+      <a class="nav" href="/help/design.html" target="_blank" rel="noopener">↗ <span>设计与治理</span></a>
+    </nav>
+    <div class="aside-note"><span class="dot"></span> 本地运行<br><small>文件保存在你的项目中。<br>无需账号，无需云服务。</small></div>
+    <div class="version">VEMO <span id="version">—</span> / Setup</div>
+  </aside>
+  <main>
+    <header><span>工作空间 / 项目接入</span><a href="/help/install.html" target="_blank" rel="noopener">安装帮助 ↗</a></header>
+    <section class="intro"><p class="eyebrow">START WITH CONFIDENCE</p><h1 id="page-title">从一个项目开始。</h1><p id="page-description">几步接入可追溯的 AI 开发流程，让规则、执行和验收各就其位。</p></section>
+    <ol class="steps" aria-label="安装进度">
+      <li id="step-1" class="current"><span>01</span> 选择项目</li><li id="step-2"><span>02</span> 检查与预览</li><li id="step-3"><span>03</span> 安装与验证</li>
+    </ol>
+    <div class="workspace">
+      <div class="primary">
+        <form id="setup-form" class="card">
+          <div class="card-heading"><span class="number">01</span><div><h2>连接你的项目</h2><p>使用现有 Git 仓库，支持中文与空格路径。</p></div></div>
+          <label for="target">项目根目录</label>
+          <input id="target" name="target" required spellcheck="false" autocomplete="off" placeholder="例如 /home/you/projects/my-app 或 C:\Projects\my-app" aria-describedby="path-help">
+          <p class="hint" id="path-help">粘贴绝对路径。目录中应有独立的 .git 文件夹。</p>
+          <div id="install-options" class="fields">
+            <div><label for="preset">项目技术栈</label><select id="preset" name="preset"><option value="python">Python</option><option value="node">Node.js / TypeScript</option><option value="cpp">C / C++ · CMake</option><option value="docs">文档项目</option></select></div>
+            <div><label for="profile">使用场景</label><select id="profile" name="profile"><option value="solo">个人开发</option><option value="team">团队协作</option><option value="regulated">审计取证</option></select></div>
+          </div>
+          <p class="hint" id="profile-help">场景记录在安装清单中；不会自动改变风险等级、审批规则或远端权限。</p>
+          <div class="form-footer" id="install-controls"><span>预览不会修改项目文件</span><button id="preview" class="button" type="submit">检查并预览 <span>→</span></button></div>
+          <div id="maintenance-controls" class="maintenance" hidden><button class="button" id="diagnose" type="button">运行安装检查</button><button class="secondary" id="uninstall-preview" type="button">预览卸载</button><button class="text-button" id="recover" type="button">恢复中断操作</button></div>
+        </form>
+        <div id="notice" role="status" aria-live="polite" hidden></div>
+        <section id="preview-panel" class="card" hidden>
+          <div class="card-heading"><span class="number">02</span><div><h2 id="preview-title">检查结果与变更预览</h2><p id="summary"></p></div></div>
+          <div id="environment" class="checks"></div><ul id="conflicts" class="conflicts"></ul>
+          <details><summary>查看完整文件清单 <span id="file-count"></span></summary><div class="table-scroll"><table><thead><tr><th>文件</th><th>操作</th></tr></thead><tbody id="file-list"></tbody></table></div></details>
+          <p id="preview-note" class="hint">合并项目入口与 Claude hooks，安装 Git 门禁与 CI 文件。已有文件冲突会阻止安装。</p>
+          <div class="form-footer"><span id="confirm-hint">检查无误后继续</span><button id="apply" type="button" class="button">确认安装并验证 →</button></div>
+        </section>
+        <section id="result-panel" class="card" hidden><div class="card-heading"><span class="number">03</span><div><h2 id="result-title">安装结果</h2><p id="result-description"></p></div></div><div id="results" class="checks"></div><div id="next-actions"></div><details id="evidence"><summary>查看验证输出</summary><pre id="evidence-output"></pre></details></section>
+      </div>
+      <div class="secondary-column">
+        <section class="principle"><div class="orb">✓</div><h2>完成，以验证为准。</h2><p>文件写入后，向导会实际运行 CLI、规则一致性和能力装配检查，并核对 Git 门禁接线。</p><div class="divider"></div><div class="feature"><span>01</span><div><b>项目独立</b><p>每个项目保留自己的配置与安装记录。</p></div></div><div class="feature"><span>02</span><div><b>先看，再安装</b><p>所有文件变更先预览，冲突明确展示。</p></div></div><div class="feature"><span>03</span><div><b>失败可以恢复</b><p>保留安装前内容，验证失败自动回退。</p></div></div></section>
+        <p class="small-note">已接入项目？使用相同选项重新预览，可以检查更新。版本和内容摘要会保存在项目的安装清单中。</p>
+      </div>
+    </div>
+    <footer>Velocity-first · Enforced · Model-aware Orchestration<span>规则有边界，执行有证据。</span></footer>
+  </main>
+</div>
+</body></html>

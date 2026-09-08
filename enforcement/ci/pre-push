@@ -16,7 +16,8 @@ ROOT="$(cd "$SELF/../.." && pwd)"
 # installed copy lives in .git/hooks/ — fall back to the repo root git reports
 [ -f "$ROOT/enforcement/validators/task_state.py" ] || ROOT="$(git rev-parse --show-toplevel)"
 export VEMO_ROOT="$ROOT"
-V="python3 $ROOT/enforcement/validators/task_state.py"
+# Preserve project paths with whitespace/Unicode as one argument in every gate invocation.
+V=(python3 "$ROOT/enforcement/validators/task_state.py")
 
 # Collect EVERY task file changed in the pushed range (not just the active task) so a multi-task
 # push cannot smuggle an unaccepted task past the gate on the strength of one accepted sibling.
@@ -45,7 +46,7 @@ done || true
 fail=0
 say(){ echo "  ✗ $1" >&2; fail=1; }
 
-acc="$($V gate-check --gate acceptance-before-push ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
+acc="$("${V[@]}" gate-check --gate acceptance-before-push ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
 case "$acc" in
   ok) : ;;
   block:no-active-task) : ;;   # nothing claims this push; plan-before-commit already gated code commits
@@ -53,8 +54,8 @@ case "$acc" in
   *) say "acceptance-before-push: validator error '$acc' (fail-closed)" ;;
 esac
 
-if [ "$($V config-get --field enforcement.require_judge_on_R2 2>/dev/null)" != "false" ]; then
-  j="$($V gate-check --gate required-judge ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
+if [ "$("${V[@]}" config-get --field enforcement.require_judge_on_R2 2>/dev/null)" != "false" ]; then
+  j="$("${V[@]}" gate-check --gate required-judge ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
   case "$j" in
     ok|block:no-active-task) : ;;
     block:*) say "required judge: ${j#block:} (verify.spec#3)" ;;
@@ -62,7 +63,7 @@ if [ "$($V config-get --field enforcement.require_judge_on_R2 2>/dev/null)" != "
   esac
 fi
 
-tri="$($V trifecta-check 2>/dev/null || echo ok)"
+tri="$("${V[@]}" trifecta-check 2>/dev/null || echo ok)"
 case "$tri" in
   block:*) say "rule-of-two: ${tri#block:} (safety.spec, OWASP ASI01)" ;;
 esac

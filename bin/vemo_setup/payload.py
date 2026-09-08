@@ -1,0 +1,50 @@
+"""One distribution inventory: never ship live tasks or machine state."""
+
+from pathlib import Path
+
+SINGLE_FILES = (
+    "AGENTS.md", "vemo.config.yaml", "VERSION", "LICENSE", "SECURITY.md", "README.md",
+    "tasks/_TASK_TEMPLATE.md", "bin/vemo", "bin/vemo_product.py",
+    "bin/vemo_fleet.py", "bin/vemo_extensions.py",
+)
+DIRECTORIES = (
+    "bin/vemo_setup", "bin/vemo_composition", "specs", "enforcement", "presets",
+    "profiles", "extensions", "agents", "skill", "ui", "eval", "tests", "docs", "assets",
+)
+# Minimum executable contract, independent of whatever files remain in a damaged installation.
+REQUIRED_FILES = frozenset(SINGLE_FILES) | {
+    "bin/vemo_setup/__init__.py", "bin/vemo_setup/service.py", "bin/vemo_setup/payload.py",
+    "bin/vemo_setup/cli.py", "bin/vemo_setup/server.py",
+    "bin/vemo_composition/__init__.py", "bin/vemo_composition/context.py",
+    "bin/vemo_composition/contracts.py", "bin/vemo_composition/loader.py",
+    "enforcement/hooks/run.py", "enforcement/hooks/hooks.json",
+    "enforcement/validators/task_state.py", "enforcement/validators/skill_check.py",
+    "enforcement/ci/pre-commit", "enforcement/ci/pre-push", "enforcement/ci/vemo-ci.yml",
+    "extensions/index.json",
+    "eval/run.py",
+}
+
+
+def managed_sources(source_root):
+    """Enumerate portable framework files, rejecting linked source content. @codex-comment"""
+    root = Path(source_root).resolve()
+    files = {}
+    candidates = [root / p for p in SINGLE_FILES]
+    for directory in DIRECTORIES:
+        candidates.extend(sorted((root / directory).rglob("*")))
+    for path in candidates:
+        relative = path.relative_to(root).as_posix()
+        if ("__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
+                or relative == "eval/out" or relative.startswith("eval/out/")):
+            continue
+        if path.is_symlink() or not path.resolve().is_relative_to(root):
+            raise ValueError(f"linked payload is not supported: {path}")
+        if path.is_file():
+            # Keep framework verification separate from the consuming application's test discovery.
+            destination = "eval/" + relative if relative.startswith("tests/") else relative
+            files[destination] = path
+    # The consumer gets the CI source, never this repository's task history or workflow customizations.
+    ci = root / "enforcement/ci/vemo-ci.yml"
+    if ci.is_file():
+        files[".github/workflows/vemo-ci.yml"] = ci
+    return files

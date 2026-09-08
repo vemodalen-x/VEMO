@@ -1,0 +1,224 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VEMO 安装与维护 · VEMO</title><style>
+:root{--teal:#0d9488;--teal-d:#0f766e;--accent:#14b8a6;--bg:#f8fafc;--panel:#fff;--ink:#1e293b;
+--muted:#64748b;--line:#e2e8f0;--code:#f1f5f9;--codeink:#0f172a}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+color:var(--ink);background:var(--bg)}
+a{color:var(--teal-d);text-decoration:none}a:hover{text-decoration:underline}
+.layout{display:flex;min-height:100vh;max-width:1200px;margin:0 auto}
+nav.side{width:262px;flex:0 0 262px;background:var(--panel);border-right:1px solid var(--line);
+padding:22px 16px;position:sticky;top:0;height:100vh;overflow:auto}
+nav.side .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;color:var(--teal-d);
+margin:0 6px 4px;letter-spacing:.3px}
+nav.side .brand img{width:30px;height:30px}
+nav.side .tag{color:var(--muted);font-size:11.5px;margin:0 6px 16px;line-height:1.45}
+nav.side .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+margin:18px 6px 6px;font-weight:700}
+nav.side a.item{display:block;padding:5px 10px;border-radius:7px;color:var(--ink);font-size:14px}
+nav.side a.item:hover{background:var(--code);text-decoration:none}
+nav.side a.item.active{background:var(--teal);color:#fff;font-weight:600}
+nav.side a.guide{display:block;margin:4px 6px 8px;padding:8px 10px;border-radius:8px;background:linear-gradient(135deg,var(--teal),var(--accent));color:#fff;font-weight:600;font-size:13.5px}
+main{flex:1;min-width:0;padding:42px 52px 80px}
+.content{max-width:820px}
+h1,h2,h3,h4{line-height:1.25;font-weight:700;margin:1.6em 0 .5em}
+h1{font-size:2em;margin-top:.2em;padding-bottom:.3em;border-bottom:2px solid var(--line)}
+h2{font-size:1.45em;padding-bottom:.25em;border-bottom:1px solid var(--line)}
+h3{font-size:1.18em}
+p,li{color:#27313f}
+code{background:var(--code);color:var(--codeink);padding:.15em .4em;border-radius:5px;font-size:.88em;
+font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:10px;overflow:auto;font-size:13.5px;line-height:1.55}
+pre code{background:none;color:inherit;padding:0}
+blockquote{margin:1em 0;padding:.4em 1.1em;border-left:4px solid var(--accent);background:#f0fdfa;
+color:#334155;border-radius:0 8px 8px 0}
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:14.5px;display:block;overflow:auto}
+th,td{border:1px solid var(--line);padding:8px 12px;text-align:left;vertical-align:top}
+th{background:var(--code);font-weight:700}
+tr:nth-child(even) td{background:#fcfdfe}
+hr{border:none;border-top:1px solid var(--line);margin:2em 0}
+img{max-width:100%}
+.topbar{display:none}
+.footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
+@media(max-width:860px){.layout{display:block}nav.side{width:auto;height:auto;position:static;border-right:none;border-bottom:1px solid var(--line)}main{padding:24px 20px 60px}}
+</style></head><body>
+<div class="layout">
+<nav class="side">
+<div class="brand"><img src="../../assets/logo.svg" alt="">VEMO</div>
+<div class="tag">Velocity-first · Enforced · Model-aware Orchestration</div>
+<a class="guide" href="../GUIDE.html">🖼️ Visual guide &amp; diagrams</a>
+<a class="item" href="index.html">Home</a>
+<div class="grp">Get started</div>
+<a class="item" href="README.html">VEMO</a>
+<a class="item active" href="INSTALL.html">VEMO 安装与维护</a>
+<a class="item" href="USAGE.html">VEMO 使用指南</a>
+<a class="item" href="QUICKSTART.html">Quickstart：通过 UI 接入项目</a>
+<a class="item" href="MENTAL_MODEL.html">VEMO in 5 ideas (the mental model)</a>
+<div class="grp">Design</div>
+<a class="item" href="DESIGN_LITE.html">从 Wildmeerkat lite 借鉴的 VEMO 设计</a>
+<a class="item" href="PLATFORM.html">VEMO platform architecture</a>
+<a class="item" href="EXTENSIONS.html">VEMO extension composition</a>
+<a class="item" href="ADAPTERS.html">ADAPTERS — running VEMO under any harness, with any model</a>
+<div class="grp">Understand</div>
+<a class="item" href="SCALING.html">Why VEMO works *better*, not worse, as models get stronger</a>
+<a class="item" href="COMPLIANCE.html">VEMO controls ↔ 2026 governance standards</a>
+<a class="item" href="OWASP_AGENTIC_TOP10.html">VEMO ↔ OWASP Top 10 for Agentic Security (ASI01–ASI10)</a>
+<a class="item" href="AGENTS.html">AGENTS.md — VEMO entry (thin router)</a>
+<div class="grp">Reference</div>
+<a class="item" href="guide-index.html">VEMO docs — index (organized by what you're trying to do)</a>
+<a class="item" href="CHANGELOG.html">Changelog</a>
+<a class="item" href="ROADMAP.html">VEMO roadmap</a>
+<a class="item" href="SECURITY.html">Security & threat model</a>
+<a class="item" href="CONTRIBUTING.html">Contributing to VEMO</a>
+<a class="item" href="CONTRIBUTORS.html">Contributors</a>
+<div class="grp">Announcement</div>
+<a class="item" href="ANNOUNCEMENT.html">VEMO — governance your AI agent can't talk its way out of</a>
+<div class="grp">Specs</div>
+<a class="item" href="safety.spec.html">safety.spec — Non-negotiables (MECHANICALLY ENFORCED)</a>
+<a class="item" href="task.spec.html">task.spec — Risk-tiered lifecycle (velocity engine)</a>
+<a class="item" href="verify.spec.html">verify.spec — Acceptance + independent verification</a>
+<a class="item" href="capability.spec.html">capability.spec — Capability-monotonic governance</a>
+<a class="item" href="concurrency.spec.html">concurrency.spec — Multi-session safety</a>
+<a class="item" href="coding.spec.html">coding.spec — Baseline code rules (advisory) + artifact provenance</a>
+<a class="item" href="comment.spec.html">comment.spec — Function-comment governance (advisory)</a>
+<a class="item" href="automation.spec.html">automation.spec — Full-Auto (unattended) mode</a>
+</nav>
+<main><div class="content"><h1 id="vemo">VEMO 安装与维护</h1>
+<p>VEMO 是放进项目的 AI 开发治理框架。安装向导把框架文件、项目入口、Claude hooks、Git 门禁和 CI 工作流接入一个已有仓库，再运行本地验证。</p>
+<p>本次提供的是<strong>源码自带的本地浏览器安装器</strong>，无需 Node.js、前端构建、账号或云服务。运行时使用本机 Python，尚未提供自带 Python 的 EXE、DMG 或签名安装包。</p>
+<h2 id="1">1. 安装前准备</h2>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td>3.10 或更新版本；命令行能运行 <code>python3</code>，Windows 可用 <code>py -3</code> 或 <code>python</code></td>
+</tr>
+<tr>
+<td>Git</td>
+<td>已安装，目标目录已执行 <code>git init</code></td>
+</tr>
+<tr>
+<td>Bash</td>
+<td>4 或更新版本；现有 Git 门禁使用 Bash。Windows 使用 Git for Windows 的 Bash；macOS 自带 Bash 3 不满足要求</td>
+</tr>
+<tr>
+<td>浏览器</td>
+<td>能访问本机 HTTP 的现代浏览器</td>
+</tr>
+<tr>
+<td>项目目录</td>
+<td>当前用户可写、独立 <code>.git</code> 目录，支持中文与空格路径</td>
+</tr>
+</tbody>
+</table>
+<p>安装器会检查 Python、Git、Bash，并实际验证 Bash 中的 <code>python3</code> 命令能运行 Python 3.10+，因为已发布的 Claude hooks 使用该命令。Windows 的 <code>py -3</code> 可以启动向导，但仍需让 Bash 找到 <code>python3</code>。独立 worktree、submodule、重定向 <code>core.hooksPath</code> 和链接到其他位置的安装路径会明确拒绝，避免改到共享配置。已有 Git hooks 若与 VEMO 不同，也会显示冲突。</p>
+<p>已在 Linux、Python 3.12、Bash 和 Chrome 上执行安装、卸载及浏览器测试。Windows/macOS 启动入口已提供，但本次未在对应操作系统实测。</p>
+<h2 id="2">2. 获取完整源码</h2>
+<pre><code class="language-bash">git clone https://github.com/vemodalen-x/VEMO.git
+cd VEMO
+</code></pre>
+<p>这些新入口需要包含本次改动的 checkout。若远端尚未合入本次重构，请使用交付给你的完整工作目录；不要把远端旧版本当作已发布的新安装器。</p>
+<h2 id="3">3. 打开图形安装向导</h2>
+<p>Linux/macOS：</p>
+<pre><code class="language-bash">python3 bin/vemo ui
+</code></pre>
+<p>Windows PowerShell：</p>
+<pre><code class="language-powershell">py -3 bin/vemo ui
+</code></pre>
+<p>也可以双击 <code>ui/start.cmd</code>（Windows），或运行 <code>bash ui/start.command</code>（Linux/macOS）。后者在允许执行脚本的桌面环境中也可作为启动入口。</p>
+<p>程序自动选择空闲端口并打开浏览器。如果浏览器没有打开，复制终端输出的<strong>完整地址</strong>，包括 <code>#token=...</code>。保持终端运行；关闭服务用 <code>Ctrl+C</code>。</p>
+<pre><code class="language-bash">python3 bin/vemo ui --no-browser        # 手动打开终端给出的地址
+python3 bin/vemo ui --port 8765         # 需要固定端口时
+</code></pre>
+<p>服务只监听 <code>127.0.0.1</code>；无需管理员权限，也不会注册系统服务或修改全局 Git 配置。</p>
+<h2 id="4">4. 按向导安装</h2>
+<ol>
+<li><strong>选择项目</strong>：粘贴目标 Git 仓库的绝对路径，选择技术栈和使用场景。</li>
+<li><strong>检查并预览</strong>：查看运行环境、待创建/合并/更新的文件及冲突。此步骤不写项目文件。</li>
+<li><strong>确认安装并验证</strong>：无冲突时执行。页面显示运行状态、检查结果和验证输出。</li>
+<li><strong>完成宿主接入</strong>：在项目中重新打开 AI 助手，按宿主自己的提示信任项目，并检查实际 hooks 加载状态。</li>
+</ol>
+<p>使用场景（个人/团队/审计）保存在安装清单中，帮助识别部署用途；它不自动改变 VEMO 的风险等级、审批门槛或远端权限，也不代表合规认证。</p>
+<p>安装还携带 CI 所需的 <code>eval/run.py</code>、框架测试、文档及资源。框架测试放在 <code>eval/tests/</code>，与项目自己的 <code>tests/</code> 分开；CI 的框架检查只运行这份测试集。已有 README 通过 VEMO 标记块追加框架说明，卸载时恢复原文；其他文档或文件同名且内容不同时，会显示冲突供审查。不会携带源码仓库的历史任务或 <code>eval/out/</code> 运行结果。</p>
+<p>技术栈预设写入 <code>vemo.config.preset.yaml</code>。Python 预设的 smoke 使用 <code>pytest</code>，Node 预设使用 <code>npm test</code>，C++ 预设使用 <code>ctest</code>；这些属于项目自己的构建环境，<strong>安装检查不会代替业务测试，也不会安装这些依赖</strong>。</p>
+<h2 id="5">5. 安装后验证什么</h2>
+<p>安装器实际运行 CLI、<code>selfcheck</code>、<code>extensions --check</code>，检查所有 Claude hook 事件的接线、CI 文件、Git hooks 的 Bash 语法、内容与可执行权限。仅全部通过才保存成功安装清单。完整 conformance 套件由项目 CI 运行，也可在安装后手动执行 <code>python3 eval/run.py</code>。</p>
+<p>安装清单位于 <code>.vemo/install.json</code>，包含版本、源码 checkout commit（存在时）、实际载荷 SHA-256、每个文件的安装摘要、原始内容备份和执行结果。源码存在未提交修改时，<strong>载荷摘要</strong>标识实际内容，commit 只标识其基础版本。请保留清单，用于升级和卸载。</p>
+<p>这个清单用于安装验收。业务任务仍需 <code>vemo verify</code> 生成自己的验收证据；它与 <code>.vemo/run/receipt.json</code> 是不同的记录。</p>
+<p><strong>远端权限需要在代码托管平台设置</strong>：安装器写入 <code>.github/workflows/vemo-ci.yml</code>，但无法据此证明远端 CI 已运行或保护分支已要求 <code>vemo</code> 检查。完成业务项目的 CI 适配与分支保护后，服务端门禁才具有相应约束力。</p>
+<h2 id="_1">升级</h2>
+<p>在新版完整 VEMO checkout 中打开 UI，选择同一项目、相同技术栈和场景，再次预览并安装。清单记录的文件未被用户修改时可以更新；用户修改过的文件显示冲突。重复安装当前内容保持幂等。</p>
+<p>如果新版本删除了旧组件，安装器会要求单独迁移，不会静默保留旧运行文件。技术栈/场景迁移同样需要单独审查。这个版本不提供自动联网升级或跨版本配置迁移。</p>
+<h2 id="_2">检查与卸载</h2>
+<p>UI 左侧选择“检查与维护”，填入项目路径：</p>
+<ul>
+<li><strong>运行安装检查</strong>：验证已登记安装；运行代码摘要不匹配时，先报告漂移，不执行被修改的运行文件。</li>
+<li><strong>预览卸载</strong>：列出要移除的新增文件和要恢复的原有文件。</li>
+<li><strong>确认卸载</strong>：仅当清单内文件均未发生后续修改时执行。任何冲突都会停止整个卸载，避免移除运行组件后留下失效 hooks。</li>
+</ul>
+<p>任务、验收日志、judge 记录、业务代码以及空目录保留。已有项目说明与设置恢复安装前内容。没有 <code>.vemo/install.json</code> 的历史手动安装不会被自动卸载。</p>
+<p>卸载最好从独立保留的 VEMO 源码目录启动，以便卸载后仍可运行向导。接入其他项目也必须从独立 VEMO 源码目录启动，安装器会拒绝把已受管业务项目当作另一项目的框架来源，防止携带业务项目的规则和配置。</p>
+<h2 id="_3">失败与恢复</h2>
+<p>普通写入或验证失败会自动按 <code>.vemo/setup-journal.json</code> 回退。恢复按内容摘要核对文件，后续修改的内容会保留并报告冲突。</p>
+<p>如果进程被强制结束，先确认原安装进程已经退出；遗留 <code>.vemo/setup.lock</code> 时仅删除这个锁文件，然后在 UI 点击“恢复中断操作”。不要删除安装清单或恢复日志来跳过恢复。</p>
+<pre><code class="language-bash">python3 bin/vemo setup recover /absolute/project --apply
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>会话失效 / 403</td>
+<td>使用当前终端输出的完整地址重新打开页面</td>
+</tr>
+<tr>
+<td>目标不是 Git 根目录</td>
+<td>在项目根运行 <code>git init</code>，填写绝对路径</td>
+</tr>
+<tr>
+<td>Bash 检查不通过</td>
+<td>安装/配置 Bash 4+，重新打开终端后启动向导</td>
+</tr>
+<tr>
+<td>已有 hooks 或配置冲突</td>
+<td>备份并审查该文件，与项目维护者协调合并；安装器不会强制覆盖</td>
+</tr>
+<tr>
+<td>预览后文件已变化</td>
+<td>重新预览，确认新的变更清单</td>
+</tr>
+<tr>
+<td>运行文件发生变化</td>
+<td>审查漂移文件，恢复已知内容或进行受审查的升级</td>
+</tr>
+<tr>
+<td>安装验证失败</td>
+<td>展开错误和验证输出，处理根因；成功回退后可直接重试</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_4">无图形环境的相同流程</h2>
+<p>CLI 与 UI 调用同一个安装服务。下面的安装与卸载命令默认只预览；加入 <code>--apply</code> 执行。</p>
+<pre><code class="language-bash">python3 bin/vemo setup install /absolute/project --preset python --profile solo --json
+python3 bin/vemo setup install /absolute/project --preset python --profile solo --apply
+python3 bin/vemo setup check /absolute/project --json
+python3 bin/vemo setup uninstall /absolute/project --json
+python3 bin/vemo setup uninstall /absolute/project --apply
+</code></pre>
+<p>可以把预览返回的 <code>plan_id</code> 传给 <code>--plan-id</code>，要求执行时目标与预览一致。UI 自动执行这个核对。</p>
+<p>下一步：<a href="USAGE.html">开始使用</a> · <a href="DESIGN_LITE.html">设计与治理</a></p>
+<div class="footer">VEMO documentation · rendered from Markdown by <code>docs/build_html.py</code>.
+For the rich visual guide see <a href="../GUIDE.html">GUIDE.html</a>.</div>
+</div></main>
+</div></body></html>

@@ -113,6 +113,8 @@ def cmd_init(args):
 
 
 HELP = """vemo <command>
+  ui [--port N] [--no-browser]      open the local browser installation and maintenance wizard
+  setup install|check|uninstall|recover <absolute-project-path> [--apply] [--json]  shared setup lifecycle
   start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
   report [--days N] [--json]         show observed local value and next best actions
   platform [--json] [--check]        show topology/seams/invariants; --check fails on broken relationships
@@ -144,6 +146,12 @@ def main():
     if not a or a[0] in ("help", "-h", "--help"):
         print(HELP); return 0
     c = a[0]
+    if c == "ui":
+        from vemo_setup.server import main as setup_ui
+        return setup_ui(a[1:], source=ROOT)
+    if c == "setup":
+        from vemo_setup.cli import main as setup_cli
+        return setup_cli(a[1:], source=ROOT)
     if c == "status": return cmd_status()
     if c == "doctor": return cmd_doctor()
     if c == "verify":  # stream output live — this actually runs the build/smoke
