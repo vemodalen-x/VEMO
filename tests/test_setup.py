@@ -36,7 +36,7 @@ class SetupTests(unittest.TestCase):
             target = source / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(file, target)
-            if relative in {"AGENTS.md", "README.md"}:
+            if relative == "AGENTS.md":
                 text = target.read_text(encoding="utf-8")
                 if text.count(service.BEGIN) == text.count(service.END) == 1:
                     target.write_text(text.split(service.BEGIN, 1)[1].split(service.END, 1)[0].strip() + "\n", encoding="utf-8")
@@ -75,9 +75,25 @@ class SetupTests(unittest.TestCase):
         self.assertTrue(plan["ready"])
         self.assertEqual(before, self.snapshot())
         paths = {row["path"] for row in plan["actions"]}
-        for required in ("bin/vemo_extensions.py", "bin/vemo_composition/loader.py", "extensions/index.json", "ui/app.js", "skill/_catalog.md"):
+        for required in ("bin/vemo_extensions.py", "bin/vemo_composition/loader.py", "extensions/index.json", "ui/app.js", "skill/_catalog.md", "eval/run.py", "eval/tests/test_setup.py"):
             self.assertIn(required, paths)
         self.assertFalse(any(p.startswith("tasks/T-") or "VEMO_SKILLS" in p for p in paths))
+        # Repository documents a consuming project owns itself are not payload.
+        self.assertFalse({"README.md", "LICENSE", "SECURITY.md"} & paths)
+        self.assertFalse(any(p.startswith(("docs/", "assets/")) for p in paths))
+
+    def test_project_owned_documents_are_neither_conflicts_nor_payload(self):
+        owned = {"README.md": "# My application\n", "LICENSE": "Proprietary\n", "SECURITY.md": "Mail us.\n",
+                 "docs/INSTALL.md": "# Installing my application\n", "assets/logo.svg": "<svg/>\n"}
+        for relative, content in owned.items():
+            self.write(relative, content)
+        plan = service.plan_install(ROOT, str(self.root), "docs")
+        self.assertEqual([], plan["conflicts"])
+        self.assertFalse(set(owned) & {row["path"] for row in plan["actions"]})
+        self.install()
+        for relative, content in owned.items():
+            self.assertEqual(content, (self.root / relative).read_text(encoding="utf-8"), relative)
+        self.assertFalse((self.root / "docs/PLATFORM.md").exists())
 
     def test_unicode_install_idempotence_and_uninstall_preserve_originals_and_records(self):
         self.write("AGENTS.md", "# 项目规则\n保留它。\n")
@@ -88,6 +104,7 @@ class SetupTests(unittest.TestCase):
         result = self.install()
         self.assertTrue(result["verification"]["ready"])
         self.assertIn("保留它", (self.root / "AGENTS.md").read_text())
+        self.assertEqual("# My application\n", (self.root / "README.md").read_text())
         self.assertEqual(["Read"], json.loads((self.root / ".claude/settings.json").read_text())["permissions"]["allow"])
         again = service.plan_install(ROOT, str(self.root), "docs")
         self.assertTrue(all(row["status"] == "unchanged" for row in again["actions"]))
@@ -284,9 +301,16 @@ class SetupTests(unittest.TestCase):
         del manifest["files"]["bin/vemo"]
         path.write_text(json.dumps(manifest))
         with mock.patch.object(service, "run", wraps=service.run) as run:
-            with self.assertRaises(service.SetupError):
+            with self.assertRaisesRegex(service.SetupError, "缺少运行文件记录"):
                 service.check_install(str(self.root))
             self.assertFalse(any("bin/vemo" in call.args[0] for call in run.call_args_list))
+        # An older manifest is not a damaged one: upgrade and uninstall stay available so the
+        # inventory can be completed by a reviewed reinstall from a full checkout.
+        self.assertTrue(service.plan_uninstall(str(self.root))["ready"])
+        plan = service.plan_install(ROOT, str(self.root), "docs")
+        self.assertTrue(plan["ready"])
+        service.apply_install(ROOT, str(self.root), "docs", plan_id=plan["plan_id"])
+        self.assertTrue(service.check_install(str(self.root))["ready"])
 
     def test_recovery_validates_all_fields_before_restoring_files(self):
         self.write("AGENTS.md", "new")

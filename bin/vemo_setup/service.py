@@ -98,9 +98,12 @@ def read_manifest(root):
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+        # Structural integrity only. A manifest written before a release added a runtime file is
+        # older, not damaged: it must still support upgrade and uninstall (check_install refuses
+        # to execute until the inventory is complete).
         if (not isinstance(data, dict) or type(data.get("schema_version")) is not int
                 or data["schema_version"] != 1 or not isinstance(data.get("files"), dict)
-                or not INSTALL_FILES.issubset(data["files"])
+                or not data["files"]
                 or data.get("preset") not in PRESETS or data.get("profile") not in PROFILES):
             raise ValueError("schema")
         for relative, row in data["files"].items():
@@ -183,7 +186,8 @@ def _desired(source, root, preset):
     desired = {relative: path.read_bytes() for relative, path in managed_sources(source).items()}
     if not REQUIRED_FILES.issubset(desired):
         raise SetupError("VEMO 源码包不完整；请使用完整 checkout。")
-    for filename in ("AGENTS.md", "CLAUDE.md", "README.md"):
+    # Only the agent entry points are merged; the project's README stays untouched.
+    for filename in ("AGENTS.md", "CLAUDE.md"):
         path = safe_path(root, filename)
         original = path.read_bytes() if path.is_file() else b""
         body = ("Read AGENTS.md and follow its VEMO session routing and safety specifications."
@@ -244,7 +248,7 @@ def plan_install(source, target, preset="python", profile="solo"):
     previous = (manifest or {}).get("files", {})
     desired = _desired(source, root, preset)
     actions, conflicts = [], []
-    mergeable = {"AGENTS.md", "CLAUDE.md", "README.md", ".gitignore", ".claude/settings.json"}
+    mergeable = {"AGENTS.md", "CLAUDE.md", ".gitignore", ".claude/settings.json"}
     for relative, content in sorted(desired.items()):
         path = safe_path(root, relative)
         before = snapshot(path)
@@ -369,6 +373,10 @@ def check_install(target, expected=None):
     hashes = expected or {key: row["installed_hash"] for key, row in (manifest or {}).get("files", {}).items()}
     if not hashes:
         raise SetupError("没有 setup 安装记录；请先预览安装，检查不会运行未知项目脚本。")
+    missing = sorted(INSTALL_FILES - set(hashes))
+    if missing:
+        raise SetupError("安装清单缺少运行文件记录，未执行诊断；请从完整 VEMO 源码重新预览并安装以补齐："
+                         + ", ".join(missing))
     # Refuse changed executable payload before launching any of its code. Task files and project
     # source are not in this inventory and do not prevent checking a working project.
     for relative, expected_hash in hashes.items():

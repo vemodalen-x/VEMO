@@ -1,15 +1,20 @@
-"""One distribution inventory: never ship live tasks or machine state."""
+"""One distribution inventory: never ship live tasks or machine state.
+
+The payload is the framework runtime plus what its CI conformance run executes. Files a consuming
+project normally owns itself (README, LICENSE, SECURITY policy, docs/, assets/) stay in this
+repository: shipping them made every project with its own README or docs/ a conflict.
+"""
 
 from pathlib import Path
 
 SINGLE_FILES = (
-    "AGENTS.md", "vemo.config.yaml", "VERSION", "LICENSE", "SECURITY.md", "README.md",
+    "AGENTS.md", "vemo.config.yaml", "VERSION",
     "tasks/_TASK_TEMPLATE.md", "bin/vemo", "bin/vemo_product.py",
     "bin/vemo_fleet.py", "bin/vemo_extensions.py",
 )
 DIRECTORIES = (
     "bin/vemo_setup", "bin/vemo_composition", "specs", "enforcement", "presets",
-    "profiles", "extensions", "agents", "skill", "ui", "eval", "tests", "docs", "assets",
+    "profiles", "extensions", "agents", "skill", "ui", "eval", "tests",
 )
 # Minimum executable contract, independent of whatever files remain in a damaged installation.
 REQUIRED_FILES = frozenset(SINGLE_FILES) | {

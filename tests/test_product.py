@@ -370,6 +370,10 @@ class ProductTests(unittest.TestCase):
         self.assertEqual("vemo platform", payload["command"])
         self.assertEqual("pass", payload["summary"]["check_status"])
 
+    # Repository documentation is not part of the installed payload; installed copies of this suite
+    # under eval/tests verify the runtime only.
+    @unittest.skipUnless((ROOT / "docs" / "PLATFORM.md").is_file(), "repository docs are not installed payload")
+    def test_repository_docs_link_the_platform_contract(self):
         platform_doc = (ROOT / "docs" / "PLATFORM.md").read_text(encoding="utf-8")
         for phrase in (
             "Responsibility planes", "Capability seams", "Relationship invariants",
@@ -377,7 +381,8 @@ class ProductTests(unittest.TestCase):
             "DeepSeek Harness",
         ):
             self.assertIn(phrase, platform_doc)
-        for relative in ("README.md", "docs/ADAPTERS.md", "docs/INDEX.md"):
+        self.assertIn("docs/PLATFORM.md", (ROOT / "docs" / "ADAPTERS.md").read_text(encoding="utf-8"))
+        for relative in ("README.md", "docs/INDEX.md"):
             self.assertIn("docs/PLATFORM.md", (ROOT / relative).read_text(encoding="utf-8"))
         self.assertIn("docs/EXTENSIONS.md", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("EXTENSIONS.md", (ROOT / "docs" / "INDEX.md").read_text(encoding="utf-8"))

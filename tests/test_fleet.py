@@ -34,7 +34,8 @@ class FleetTests(unittest.TestCase):
         subprocess.run(["git", "config", "user.name", "VEMO Test"], cwd=project, check=True)
         subprocess.run(["git", "config", "user.email", "vemo@example.invalid"], cwd=project, check=True)
         if commit:
-            (project / "README.md").write_bytes((ROOT / "README.md").read_bytes())
+            # A project-owned README is the normal case and must never count as a payload conflict.
+            (project / "README.md").write_text("test\n", encoding="utf-8")
             subprocess.run(["git", "add", "README.md"], cwd=project, check=True)
             subprocess.run(["git", "commit", "-q", "-m", "initial"], cwd=project, check=True)
         return project
