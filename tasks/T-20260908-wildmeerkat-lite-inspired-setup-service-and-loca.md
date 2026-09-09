@@ -17,11 +17,11 @@ judge:
   required: true
   verdict: pass
   violations: []
-  evidence_checked: [".vemo/run/judge-correctness-rework-independent.json", ".vemo/run/judge-correctness-rework-rerun.json", ".vemo/run/judge-correctness-rework-negative-gate.json", ".vemo/run/judge-safety-rework-independent.json", ".vemo/run/setup-browser.json", ".vemo/run/deployed-isolation.json", "bin/vemo_setup/service.py:331", "enforcement/ci/pre-push:20"]
+  evidence_checked: ["bin/vemo_setup/service.py:340-402", "bin/vemo_setup/service.py:45-57 (safe_path symlink refusal, negative-tested)", "tests/test_setup.py:153-168", "python3 -m unittest tests.test_setup -v (24/24 OK)", "python3 eval/run.py (125/125)", "python3 enforcement/validators/task_state.py selfcheck (OK)", "/tmp live-fire: poisoned sitecustomize.py + shadowed bin/subprocess.py, marker never created across plan/install/check_install, both files byte-preserved after uninstall", "bin/vemo_setup/server.py:29-30 (127.0.0.1 loopback bind)", "git diff origin/main...HEAD --stat (62 files, 4470 insertions/145 deletions, all within scope_in, no secrets)", "grep bin/vemo_setup/ for requests./socket.connect/http.client/urlopen (none found; only urllib.parse.urlsplit)", "docs/DESIGN_LITE.md:9-12 (pinned reference commits)", "two contiguous pass records: vemo-judge-safety-b-20260909 (02:30:04Z) + vemo-judge-correctness-b-20260909 (02:32:43Z), required-judge gate=ok"]
   confidence: high
 approved_commands: []
-owning_chat: "codex-vemo-lite-20260908"
-heartbeat: 2026-09-08T07:33:13Z
+owning_chat: "358118fc-0f6d-4c4e-bbbd-c037c38b13aa"
+heartbeat: 2026-09-09T02:08:22Z
 ---
 
 # Wildmeerkat lite inspired setup service and local UI
@@ -70,6 +70,7 @@ Existing accepted tasks are not taken over. Untracked VEMO_SKILLS is not modifie
 - 2026-09-08T07:20:15Z Review repairs complete. Full verify passes 125/125 with build/smoke=0; installed conformance passes 125/125 independently of application tests; browser smoke passes. Prepare the final staged snapshot for two R2 verifier contexts before authorized commit/push.
 - 2026-09-08T07:31:52Z Independent safety review reproduced unowned Python import execution during diagnostics (FAIL recorded). Rework isolates verified runtime snapshots and Python startup/import paths, adds poisoned-module regression, then requires a fresh full receipt and two new independent passes.
 - 2026-09-08T07:33:13Z Import-isolation rework passes fresh full verify (125/125; 61 unit tests), 23 setup tests and real Chrome browser smoke. Evidence .vemo/run/T-20260908-wildmeerkat-lite-inspired-setup-service-and-loca-20260908T073218Z.log. Prior safety FAIL disposition RCA-inline; two fresh independent passes required. Push preflight returns GitHub403: current account lacks origin write permission; prepare local commit after gates.
+- 2026-09-09T02:08:22Z Takeover (user-authorized push): owning_chat codex-vemo-lite-20260908 stale (heartbeat 2026-09-08T07:33:13Z, ~18h with no update). User explicitly asked to make the push succeed. Taking ownership to refresh the verify receipt (invalidated by the narrow-setup-payload fix, which touches this task's in-scope files) and to complete the required judge passes for capability.tier=high R2 (2 contiguous pass records).
 
 ## Acceptance Result
 - PASS: full `VEMO_SESSION=codex-vemo-lite-20260908 python3 bin/vemo verify --no-cache`, build=0,

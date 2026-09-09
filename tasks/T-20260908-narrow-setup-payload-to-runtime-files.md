@@ -18,7 +18,7 @@ judge:
   verdict: null
 approved_commands: []
 owning_chat: ""
-heartbeat: 2026-09-08T08:12:54Z
+heartbeat: 2026-09-09T02:07:59Z
 ---
 
 # Narrow setup payload to runtime files
@@ -48,6 +48,7 @@ without conflicts, and an older-but-valid install manifest stays upgradeable and
 ## Execution Log
 - 2026-09-08T08:04:05Z Task created by `vemo task create`.
 - 2026-09-08T08:11:27Z Review of 5ac509d found: payload shipped README/LICENSE/SECURITY.md/docs/assets making project-owned files conflicts for setup and fleet (masked by test_fleet fixture copying VEMO's README); _desired merged a VEMO marker block into project README; read_manifest rejected any manifest missing a newly required file, bricking upgrade/uninstall. Fixed all three; 64 unit tests pass; deployed eval 125/125 in a project owning README/LICENSE/docs; fleet onboards such a project with zero conflicts.
+- 2026-09-09T02:07:59Z Takeover: owning_chat codex-vemo-lite-20260908 stale (heartbeat 2026-09-08T07:33:13Z, >18h old, no response). User explicitly requested push to succeed. Taking over to refresh the verify receipt (invalidated by the narrow-setup-payload fix touching this task's scope) and complete the 2 required independent judge passes per capability.tier=high.
 
 ## Acceptance Result
 - PASS Correctness (project-owned documents): `test_project_owned_documents_are_neither_conflicts_nor_payload` plus a live probe installing into a project owning README.md/LICENSE/SECURITY.md/docs/INSTALL.md/assets/logo.svg: setup conflicts `[]`, fleet conflicts `[]`, all five files byte-identical after install and after uninstall.
