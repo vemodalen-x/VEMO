@@ -14,3 +14,8 @@ __pycache__/
 .idea/
 .vscode/
 *.swp
+
+# VEMO_SKILLS is a separate repository (vemodalen-x/VEMO_SKILLS) that is commonly cloned into this
+# working tree. Staging it records a bare 160000 gitlink with no .gitmodules, which clones of VEMO
+# cannot populate — ignore the path rather than commit a reference that resolves to nothing.
+VEMO_SKILLS/
