@@ -6,6 +6,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- **Windows offline distribution**: content-addressed user-level ZIP installer with pinned PSF Python,
+  full payload checksums, side-by-side installs and a Start menu entry; no global PATH or Git changes.
+- **Native Windows verification**: packaged lifecycle smoke, real blocked Git commit, browser installation,
+  junction regression and release payload scan. The package remains unsigned; CI/host activation is separate.
+- **Portability fixes**: select Git for Windows Bash instead of WSL, reject reparse points on Python 3.10+,
+  normalize scope paths, accept CRLF push-hook input, and restore Python fallback in pre-push.
+- **Workflow correctness**: honor bound sessions, share the governance task parser, and compare UTC instants.
+- **gstack-inspired delivery loop**: added read-only `vemo workflow` plus thin role skills for Think, Plan, Build,
+  Review, Test, Ship, and Reflect. The loop improves repeat use while keeping VEMO task state, receipts, judge
+  provenance, and CI as the authoritative evidence.
 - **Command-guard read-only probe exemption** (`enforcement/hooks/run.py` `is_readonly_probe`): a DESTRUCTIVE
   literal that appears only as the text argument of a read-only inspection tool (`grep -n 'rm -rf' log`,
   `rg "git push --force" .`, `cat`/`head`/`tail`/`wc`/`jq`/`od`/…) is no longer blocked — such a command has

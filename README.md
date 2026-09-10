@@ -79,7 +79,8 @@ python3 bin/vemo ui
 
 浏览器中选择项目 → 检查环境与文件变更 → 确认安装并验证。支持诊断、升级预览、失败恢复与卸载。
 需要 Python 3.10+、Git 和 Bash 4+；UI 无需 Node.js 或云服务。当前为源码自带的本地安装器，
-尚未发行自带解释器的桌面安装包。Linux 已实测，Windows/macOS 待平台验收。
+Windows x64 另提供内置 Python 的离线 ZIP 安装包，见 [Windows 安装](docs/WINDOWS.md)。
+Windows 已完成原生安装、门禁与浏览器验收；macOS 尚待平台验收。安装包未签名，不是系统级沙箱。
 
 **[中文安装与维护](docs/INSTALL.md)** · **[使用指南](docs/USAGE.md)** · **[参考设计与治理取舍](docs/DESIGN_LITE.md)**
 
@@ -156,6 +157,7 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo setup install\|check\|uninstall\|recover <absolute-project-path> [--apply]` | the same installation service for terminal use; mutations are preview-first |
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
+| `vemo workflow [--json]` | show the Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect delivery loop |
 | `vemo platform [--json] [--check]` | show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight |
 | `vemo extensions [--json] [--check]` | inspect declarative capabilities, dependencies, activation order, contributions, and stable composition failures |
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |

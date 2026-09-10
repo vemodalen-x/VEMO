@@ -736,7 +736,7 @@ def run_validator_checks(r):
     release_cfg = [
         (r'(?m)^(\s*build:\s*)""', r'\1python3 .vemo/run/mark.py build'),
         (r'(?m)^(\s*smoke:\s*)""', r'\1python3 .vemo/run/mark.py smoke'),
-        (r'(?m)^(\s*package_scan:\s*)""', r'\1python3 .vemo/run/mark.py scan'),
+        (r'(?m)^([ \t]*package_scan:[ \t]*).*', r'\1python3 .vemo/run/mark.py scan'),
     ]
     d = marker_fixture("release", "", release_cfg)
     released = run(d, "verify-run", "--no-cache")

@@ -16,14 +16,14 @@ ROOT="$(cd "$SELF/../.." && pwd)"
 [ -f "$ROOT/enforcement/validators/task_state.py" ] || ROOT="$(git rev-parse --show-toplevel)"
 export VEMO_ROOT="$ROOT"
 PYTHON_CMD=python3
-if ! "$PYTHON_CMD" -c "import sys" >/dev/null 2>&1; then
+if ! "$PYTHON_CMD" -I -S -c "import sys; sys.exit(sys.version_info < (3, 10))" >/dev/null 2>&1; then
   PYTHON_CMD=python
 fi
-if ! "$PYTHON_CMD" -c "import sys" >/dev/null 2>&1; then
-  echo "[VEMO] no working Python launcher (tried python3 and python)." >&2
+if ! "$PYTHON_CMD" -I -S -c "import sys; sys.exit(sys.version_info < (3, 10))" >/dev/null 2>&1; then
+  echo "[VEMO] no working Python 3.10+ launcher (tried python3 and python)." >&2
   exit 1
 fi
-vemo(){ "$PYTHON_CMD" "$ROOT/enforcement/validators/task_state.py" "$@"; }
+vemo(){ "$PYTHON_CMD" -S "$ROOT/enforcement/validators/task_state.py" "$@"; }
 
 if [ -n "${VEMO_DIFF_RANGE:-}" ]; then
   staged="$(git diff --no-renames --name-only "$VEMO_DIFF_RANGE")"

@@ -161,6 +161,44 @@ class ProductTests(unittest.TestCase):
         finally:
             task_state.RUN_DIR, task_state.RECEIPT, task_state.TASK_RECEIPTS = original
 
+    def test_workflow_report_maps_task_state_to_next_stage(self):
+        (self.temp / "tasks").mkdir()
+        (self.temp / "tasks" / "T-demo.md").write_text(
+            "---\nid: T-demo\nrisk: R1\nstate: ImplementationDone\n"
+            "heartbeat: 2026-07-25T00:00:00Z\n---\n", encoding="utf-8"
+        )
+        report = product.build_workflow_report(self.temp)
+        self.assertEqual("review", report["current_stage"])
+        self.assertEqual("T-demo", report["task"]["id"])
+        self.assertEqual("done", report["stages"][2]["status"])
+        self.assertEqual("next", report["stages"][3]["status"])
+        self.assertTrue(report["data_local_only"])
+
+    def test_workflow_report_without_task_starts_with_think(self):
+        report = product.build_workflow_report(self.temp)
+        self.assertIsNone(report["task"])
+        self.assertEqual("think", report["current_stage"])
+        self.assertEqual("next", report["stages"][0]["status"])
+
+    def test_workflow_uses_bound_session_and_governance_yaml_parser(self):
+        (self.temp / "tasks").mkdir()
+        (self.temp / ".vemo").mkdir()
+        (self.temp / "tasks/T-own.md").write_text(
+            '---\nid: T-own\nstate: "ReviewApproved" # approved\nheartbeat: 2026-01-01T00:00:00Z\n---\n', encoding="utf-8")
+        (self.temp / "tasks/T-other.md").write_text(
+            '---\nid: T-other\nstate: AcceptancePassed\nheartbeat: 2026-08-01T00:00:00Z\n---\n', encoding="utf-8")
+        (self.temp / ".vemo/session_task.json").write_text('{"worker":"T-own.md"}', encoding="utf-8")
+        with mock.patch.dict(os.environ, {"VEMO_SESSION": "worker"}):
+            report = product.build_workflow_report(self.temp)
+        self.assertEqual("T-own", report["task"]["id"])
+        self.assertEqual("build", report["current_stage"])
+
+    def test_workflow_compares_utc_instants_not_heartbeat_text(self):
+        (self.temp / "tasks").mkdir()
+        for name, timestamp in (("earlier", "2026-01-01T08:00:00+08:00"), ("later", "2026-01-01T01:00:00Z")):
+            (self.temp / f"tasks/T-{name}.md").write_text(
+                f'---\nid: T-{name}\nstate: PlanCreated\nheartbeat: {timestamp}\n---\n', encoding="utf-8")
+        self.assertEqual("T-later", product.build_workflow_report(self.temp)["task"]["id"])
     def test_platform_topology_is_read_only_content_minimizing_and_stable(self):
         self._install_platform_contract()
         canonical = self._hook_document(("SessionStart", "session-start"), ("Stop", "stop"))

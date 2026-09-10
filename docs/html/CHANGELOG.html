@@ -90,6 +90,16 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
 <h2 id="unreleased">[Unreleased]</h2>
 <h3 id="added">Added</h3>
 <ul>
+<li><strong>Windows offline distribution</strong>: content-addressed user-level ZIP installer with pinned PSF Python,
+  full payload checksums, side-by-side installs and a Start menu entry; no global PATH or Git changes.</li>
+<li><strong>Native Windows verification</strong>: packaged lifecycle smoke, real blocked Git commit, browser installation,
+  junction regression and release payload scan. The package remains unsigned; CI/host activation is separate.</li>
+<li><strong>Portability fixes</strong>: select Git for Windows Bash instead of WSL, reject reparse points on Python 3.10+,
+  normalize scope paths, accept CRLF push-hook input, and restore Python fallback in pre-push.</li>
+<li><strong>Workflow correctness</strong>: honor bound sessions, share the governance task parser, and compare UTC instants.</li>
+<li><strong>gstack-inspired delivery loop</strong>: added read-only <code>vemo workflow</code> plus thin role skills for Think, Plan, Build,
+  Review, Test, Ship, and Reflect. The loop improves repeat use while keeping VEMO task state, receipts, judge
+  provenance, and CI as the authoritative evidence.</li>
 <li><strong>Command-guard read-only probe exemption</strong> (<code>enforcement/hooks/run.py</code> <code>is_readonly_probe</code>): a DESTRUCTIVE
   literal that appears only as the text argument of a read-only inspection tool (<code>grep -n 'rm -rf' log</code>,
   <code>rg "git push --force" .</code>, <code>cat</code>/<code>head</code>/<code>tail</code>/<code>wc</code>/<code>jq</code>/<code>od</code>/…) is no longer blocked — such a command has
@@ -154,6 +164,48 @@ Format: <a href="https://keepachangelog.com/">Keep a Changelog</a>; versioning: 
 </ul>
 <h3 id="fixed">Fixed</h3>
 <ul>
+<li><strong>A judge verdict now binds to the code it reviewed, or it does not count</strong>
+  (<code>enforcement/validators/task_state.py</code>, <code>enforcement/ci/pre-push</code>). <code>_judge_snapshot</code> binds a verdict to the
+  patch the judge reviewed, but an empty in-scope diff hashed nothing and returned <code>sha256("")</code> — a
+  valid-looking digest that <em>every</em> empty diff reproduces. Two live consequences: (1) a judge invoked with an
+  empty index recorded a <code>pass</code> bound to no code and the gate accepted it; (2) the local push gate and CI
+  disagreed about the same commit, because after a commit the local index is empty while CI recomputes over
+  <code>VEMO_DIFF_RANGE=&lt;before&gt;...HEAD</code>. Now only a <strong>64-hex content digest binds a verdict</strong>
+  (<code>_binds_to_content</code>): the empty-diff sentinel, <code>unresolved-range</code>, <code>invalid-range</code>, a git failure (<code>""</code>)
+  and legacy rows with no <code>snapshot</code> key are all refused — at write time (<code>judge_record</code> returns <code>refused:</code>
+  and exits non-zero) and again at gate time, so a row injected straight into the log is still rejected. A
+  <code>fail</code> remains recordable with no staged diff, since a judge may fail a task precisely because the change
+  is absent. <code>enforcement/ci/pre-push</code> now hands the pushed range it already derives to the validator, so the
+  local gate stops evaluating an empty index. When Git supplies refs on stdin, that current push range also
+  overrides any stale inherited <code>VEMO_DIFF_RANGE</code>; only CI's stdin-free invocation keeps the environment range,
+  preventing an older reviewed snapshot from being replayed to accept a newer push. A push carrying more than
+  one non-deletion ref now fails closed with <code>multi-ref-push-unsupported</code> and asks for one ref at a time: the
+  scalar snapshot contract cannot honestly prove several independently moving ranges, and checking only the
+  first let its passes authorize an unreviewed change on the second. For a new single ref, the hook now derives
+  the full outgoing range from one known target-remote boundary; it fails closed when that boundary is missing
+  or ambiguous instead of checking only the tip commit and omitting earlier unreviewed history. Existing-ref
+  pushes and push-event CI use the exact two-tree range (<code>remote..local</code> / <code>before..HEAD</code>), so a non-fast-forward
+  update cannot omit remote-only files that it deletes; an all-zero initial CI baseline uses Git's empty tree.
+  <strong>Why a whitelist:</strong> the first attempt blacklisted the empty hash, and an independent governance-judge pass
+  recorded FAIL demonstrating that the same class stayed open through the other sentinels — they are
+  <em>self-matching</em> strings, so recording and re-reading both yield the same value and an equality check sees a
+  match. Two <code>pass</code> rows against a nonexistent commit range opened the R2 gate. The same review found one of
+  the new tests was <strong>vacuous</strong> (deleting the clause it claimed to cover left the suite green). A redundant
+  re-check inside the pass-counting loop was removed rather than tested: the guard above it proves the current
+  snapshot binds and equality then forces the recorded one to bind, so the check was unreachable by
+  construction, and an unreachable check reads as coverage it cannot provide.
+  Regression-covered by <code>tests/test_judge_snapshot.py</code> (13 tests; the two range-bypass tests fail against the
+  old blacklist) plus an <strong>executed</strong> conformance scenario driving <code>pre-push</code> through git's stdin contract in
+  a real repository, including stale-environment, multi-ref, new-branch-history, and non-fast-forward replay
+  attempts — a grep of the script cannot see a local/CI divergence or range-selection bug. Six existing conformance
+  scenarios that recorded passes in git-less sandboxes were given real reviewable diffs, so judge-depth
+  requirements are still proven rather than relaxed.
+  <strong>Honest coverage note:</strong> <code>.vemo/judge.jsonl</code> is append-only, so the 12 pre-existing rows carrying the empty
+  hash (across <code>T-20260724-…readonly-probe-ex</code>, <code>T-20260908-wildmeerkat-…</code>, <code>T-20260909-ignore-nested-…</code>) and
+  the 28 older rows with no <code>snapshot</code> key at all are NOT rewritten — they are rejected on read. Those tasks'
+  local gates were opened by snapshots that bound to nothing, so their recorded passes are weaker evidence
+  than their task files claim, and their merged code was never re-judged under this rule. New multi-ref pushes
+  are rejected rather than being represented by the first range alone.</li>
 <li><code>vemo verify</code> now executes configured leading <code>python3</code> commands with the current interpreter on Windows,
   avoiding the non-runnable WindowsApps launcher placeholder (<code>9009</code>) while preserving Unix behavior.</li>
 <li>Workflow risk classification now uses patch semantics: pure additive Python/dependency initialization may be R1,

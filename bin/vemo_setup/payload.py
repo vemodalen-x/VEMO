@@ -6,9 +6,10 @@ repository: shipping them made every project with its own README or docs/ a conf
 """
 
 from pathlib import Path
+from .windows import linked_path
 
 SINGLE_FILES = (
-    "AGENTS.md", "vemo.config.yaml", "VERSION",
+    "AGENTS.md", ".gitattributes", "vemo.config.yaml", "VERSION",
     "tasks/_TASK_TEMPLATE.md", "bin/vemo", "bin/vemo_product.py",
     "bin/vemo_fleet.py", "bin/vemo_extensions.py",
 )
@@ -20,10 +21,12 @@ DIRECTORIES = (
 REQUIRED_FILES = frozenset(SINGLE_FILES) | {
     "bin/vemo_setup/__init__.py", "bin/vemo_setup/service.py", "bin/vemo_setup/payload.py",
     "bin/vemo_setup/cli.py", "bin/vemo_setup/server.py",
+    "bin/vemo_setup/windows.py",
     "bin/vemo_composition/__init__.py", "bin/vemo_composition/context.py",
     "bin/vemo_composition/contracts.py", "bin/vemo_composition/loader.py",
     "enforcement/hooks/run.py", "enforcement/hooks/hooks.json",
     "enforcement/validators/task_state.py", "enforcement/validators/skill_check.py",
+    "enforcement/validators/package_check.py",
     "enforcement/ci/pre-commit", "enforcement/ci/pre-push", "enforcement/ci/vemo-ci.yml",
     "extensions/index.json",
     "eval/run.py",
@@ -42,7 +45,7 @@ def managed_sources(source_root):
         if ("__pycache__" in path.parts or path.suffix in {".pyc", ".pyo"}
                 or relative == "eval/out" or relative.startswith("eval/out/")):
             continue
-        if path.is_symlink() or not path.resolve().is_relative_to(root):
+        if linked_path(path) or not path.resolve().is_relative_to(root):
             raise ValueError(f"linked payload is not supported: {path}")
         if path.is_file():
             # Keep framework verification separate from the consuming application's test discovery.

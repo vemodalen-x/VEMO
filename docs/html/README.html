@@ -210,7 +210,8 @@ that fails the moment the model doesn't read it.</p>
 </code></pre>
 <p>浏览器中选择项目 → 检查环境与文件变更 → 确认安装并验证。支持诊断、升级预览、失败恢复与卸载。
 需要 Python 3.10+、Git 和 Bash 4+；UI 无需 Node.js 或云服务。当前为源码自带的本地安装器，
-尚未发行自带解释器的桌面安装包。Linux 已实测，Windows/macOS 待平台验收。</p>
+Windows x64 另提供内置 Python 的离线 ZIP 安装包，见 <a href="WINDOWS.html">Windows 安装</a>。
+Windows 已完成原生安装、门禁与浏览器验收；macOS 尚待平台验收。安装包未签名，不是系统级沙箱。</p>
 <p><strong><a href="INSTALL.html">中文安装与维护</a></strong> · <strong><a href="USAGE.html">使用指南</a></strong> · <strong><a href="DESIGN_LITE.html">参考设计与治理取舍</a></strong></p>
 <p>Headless installation uses the same service:</p>
 <pre><code class="language-bash">python3 bin/vemo setup install /absolute/your-project --preset python --json   # preview
@@ -284,6 +285,10 @@ ceremony matrix) are in <strong><a href="../GUIDE.html">docs/GUIDE.html</a></str
 <tr>
 <td><code>vemo report [--days N] [--json]</code></td>
 <td>show observed local value, verification, readiness, and next actions</td>
+</tr>
+<tr>
+<td><code>vemo workflow [--json]</code></td>
+<td>show the Think -&gt; Plan -&gt; Build -&gt; Review -&gt; Test -&gt; Ship -&gt; Reflect delivery loop</td>
 </tr>
 <tr>
 <td><code>vemo platform [--json] [--check]</code></td>

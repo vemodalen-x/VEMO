@@ -1,3 +1,9 @@
 # append-only audit log: concurrent branches both append rows — union-merge keeps every record
 # (order within the file is by-branch; gates read per-task suffixes, which union preserves)
 .vemo/judge.jsonl merge=union
+
+# Git for Windows must not rewrite shell entry points to CRLF on checkout.
+enforcement/ci/pre-* text eol=lf
+enforcement/*.sh text eol=lf
+skill/**/*.sh text eol=lf
+bin/vemo text eol=lf

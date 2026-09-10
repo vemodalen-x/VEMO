@@ -2,7 +2,7 @@
 
 VEMO 是放进项目的 AI 开发治理框架。安装向导把框架文件、项目入口、Claude hooks、Git 门禁和 CI 工作流接入一个已有仓库，再运行本地验证。
 
-本次提供的是**源码自带的本地浏览器安装器**，无需 Node.js、前端构建、账号或云服务。运行时使用本机 Python，尚未提供自带 Python 的 EXE、DMG 或签名安装包。
+提供**源码自带的本地浏览器安装器**，以及 [Windows x64 离线 ZIP 安装包](WINDOWS.md)。后者内置经 SHA-256 核验的 Python，无需修改全局 Python 或 PATH。两者均无需 Node.js、前端构建、账号或云服务；目前没有签名 EXE、MSI 或 DMG。
 
 ## 1. 安装前准备
 
@@ -16,7 +16,7 @@ VEMO 是放进项目的 AI 开发治理框架。安装向导把框架文件、�
 
 安装器会检查 Python、Git、Bash，并实际验证 Bash 中的 `python3` 命令能运行 Python 3.10+，因为已发布的 Claude hooks 使用该命令。Windows 的 `py -3` 可以启动向导，但仍需让 Bash 找到 `python3`。独立 worktree、submodule、重定向 `core.hooksPath` 和链接到其他位置的安装路径会明确拒绝，避免改到共享配置。已有 Git hooks 若与 VEMO 不同，也会显示冲突。
 
-已在 Linux、Python 3.12、Bash 和 Chrome 上执行安装、卸载及浏览器测试。Windows/macOS 启动入口已提供，但本次未在对应操作系统实测。
+已在 Linux，以及原生 Windows、内置 Python 3.13、Git for Windows 和 Chrome 上执行安装、卸载及浏览器测试。Windows 还验证了无计划的真实 Git 提交被拒绝、中文路径、幂等安装和目录联接拒绝；macOS 尚未实测。
 
 ## 2. 获取完整源码
 
@@ -61,7 +61,7 @@ python3 bin/vemo ui --port 8765         # 需要固定端口时
 
 使用场景（个人/团队/审计）保存在安装清单中，帮助识别部署用途；它不自动改变 VEMO 的风险等级、审批门槛或远端权限，也不代表合规认证。
 
-安装还携带 CI 所需的 `eval/run.py` 和框架测试。框架测试放在 `eval/tests/`，与项目自己的 `tests/` 分开；CI 的框架检查只运行这份测试集。项目自己的 `README.md`、`LICENSE`、`SECURITY.md`、`docs/` 和 `assets/` 不属于载荷，安装器不读取也不修改它们；VEMO 源码仓库的这些文件同样不会被带入项目。只有 `AGENTS.md`、`CLAUDE.md`、`.gitignore` 和 `.claude/settings.json` 采用标记块或结构合并；其他同名且内容不同的受管文件会显示冲突供审查。不会携带源码仓库的历史任务或 `eval/out/` 运行结果。
+安装还携带 CI 所需的 `eval/run.py` 和框架测试。框架测试放在 `eval/tests/`，与项目自己的 `tests/` 分开；CI 的框架检查只运行这份测试集。项目自己的 `README.md`、`LICENSE`、`SECURITY.md`、`docs/` 和 `assets/` 不属于载荷，安装器不读取也不修改它们；VEMO 源码仓库的这些文件同样不会被带入项目。只有 `AGENTS.md`、`CLAUDE.md`、`.gitignore`、`.gitattributes` 和 `.claude/settings.json` 采用标记块或结构合并；其他同名且内容不同的受管文件会显示冲突供审查。Git 属性保留原规则并固定 Bash 门禁的 LF 换行，避免 Windows 克隆转换破坏门禁。不会携带源码仓库的历史任务或 `eval/out/` 运行结果。
 
 技术栈预设写入 `vemo.config.preset.yaml`。Python 预设的 smoke 使用 `pytest`，Node 预设使用 `npm test`，C++ 预设使用 `ctest`；这些属于项目自己的构建环境，**安装检查不会代替业务测试，也不会安装这些依赖**。
 

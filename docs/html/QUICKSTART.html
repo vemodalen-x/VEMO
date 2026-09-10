@@ -117,15 +117,17 @@ auto mode, run budgets) builds on this one idea: <em>the important rules are mec
 <h2 id="4-see-where-you-stand-any-time">4. See where you stand, any time</h2>
 <pre><code class="language-bash">python3 bin/vemo status      # tier / enforcement / budget / auto mode / active task
 python3 bin/vemo report      # observed events / verification / setup gaps / next best actions
+python3 bin/vemo workflow    # Think -&gt; Plan -&gt; Build -&gt; Review -&gt; Test -&gt; Ship -&gt; Reflect
 python3 bin/vemo explain gates
 </code></pre>
 <p>On Windows, use <code>python bin/vemo status</code>.</p>
 <h2 id="next">Next</h2>
-<ul>
-<li>中文首次任务与验收流程 → <a href="USAGE.html">USAGE.md</a>。</li>
-<li>Going unattended (CI / overnight)? → <a href="MENTAL_MODEL.html#auto-mode">HOWTO: auto mode</a> — but read the stop-rules note.</li>
-<li>Want the <em>why</em>? → <a href="MENTAL_MODEL.html">MENTAL_MODEL.md</a>. Want the full map? → <a href="guide-index.html">INDEX.md</a>.</li>
-</ul>
+<p>Use the delivery loop when the request is larger than a one-file fix: <code>vemo workflow</code>, then <code>/office-hours</code>,
+<code>/plan-ceo-review</code>, <code>/plan-eng-review</code>, <code>/review</code>, <code>/qa</code>, <code>/ship</code>, and <code>/retro</code>. Each role is a thin skill;
+the task file, receipt, judge log, and CI remain authoritative.
+- 中文首次任务与验收流程 → <a href="USAGE.html">USAGE.md</a>。
+- Going unattended (CI / overnight)? → <a href="MENTAL_MODEL.html#auto-mode">HOWTO: auto mode</a> — but read the stop-rules note.
+- Want the <em>why</em>? → <a href="MENTAL_MODEL.html">MENTAL_MODEL.md</a>. Want the full map? → <a href="guide-index.html">INDEX.md</a>.</p>
 <blockquote>
 <p>Tip: add <code>bin</code> to PATH (<code>export PATH="$PWD/bin:$PATH"</code>) so you can type <code>vemo status</code> directly.</p>
 </blockquote>

@@ -18,6 +18,7 @@ import sys
 import tempfile
 
 from .payload import DIRECTORIES, REQUIRED_FILES, SINGLE_FILES, managed_sources
+from .windows import git_bash, linked_path
 
 PRESETS = ("python", "node", "cpp", "docs")
 PROFILES = ("solo", "team", "regulated")
@@ -51,7 +52,7 @@ def safe_path(root, relative):
     path = root
     for part in rel.parts:
         path = path / part
-        if path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction()):
+        if linked_path(path):
             raise SetupError(f"路径为符号链接或目录联接，请先处理：{relative}")
         if path.exists() and path != root / relative and not path.is_dir():
             raise SetupError(f"父路径不是目录：{relative}")
@@ -63,6 +64,9 @@ def run(args, root, timeout=30, input=None):
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("VEMO_", "PYTHON")) and k != "CLAUDE_PROJECT_DIR"}
     env.update(VEMO_ROOT=str(root), PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1")
+    args = list(args)
+    if args[0] == "bash":
+        args[0] = git_bash()
     return subprocess.run(args, cwd=root, env=env, input=input, capture_output=True,
                           text=True, encoding="utf-8", errors="replace", timeout=timeout)
 
@@ -215,6 +219,10 @@ def _desired(source, root, preset):
     ignore = safe_path(root, ".gitignore")
     desired[".gitignore"] = _merge_block(ignore.read_bytes() if ignore.is_file() else b"",
         "# VEMO:BEGIN\n/.vemo/*\n!/.vemo/judge.jsonl\n/eval/out/\n# VEMO:END", "# VEMO:BEGIN", "# VEMO:END")
+    attributes = safe_path(root, ".gitattributes")
+    desired[".gitattributes"] = _merge_block(attributes.read_bytes() if attributes.is_file() else b"",
+        "# VEMO:BEGIN\n" + desired[".gitattributes"].decode().rstrip() + "\n# VEMO:END",
+        "# VEMO:BEGIN", "# VEMO:END")
     desired["vemo.config.preset.yaml"] = desired[f"presets/{preset}.yaml"]
     for name in ("pre-commit", "pre-push"):
         desired[f".git/hooks/{name}"] = desired[f"enforcement/ci/{name}"]
@@ -248,7 +256,7 @@ def plan_install(source, target, preset="python", profile="solo"):
     previous = (manifest or {}).get("files", {})
     desired = _desired(source, root, preset)
     actions, conflicts = [], []
-    mergeable = {"AGENTS.md", "CLAUDE.md", ".gitignore", ".claude/settings.json"}
+    mergeable = {"AGENTS.md", "CLAUDE.md", ".gitignore", ".gitattributes", ".claude/settings.json"}
     for relative, content in sorted(desired.items()):
         path = safe_path(root, relative)
         before = snapshot(path)

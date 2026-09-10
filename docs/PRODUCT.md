@@ -9,6 +9,20 @@ to make the controls durable. Use an OS or container sandbox when the host is un
 
 ## The user loop
 
+### 0. Use a repeatable delivery loop
+
+gstack's most transferable idea is the role-based sequence, not its browser runtime. VEMO exposes the same
+sequence as a read-only map and thin skills:
+
+```text
+Think -> Plan -> Build -> Review -> Test -> Ship -> Reflect
+```
+
+Run `vemo workflow` at any time. It reads the active task state and points to the next stage without changing
+files. The stages deliberately reuse VEMO's existing artifacts: a task plan, scoped implementation, judge
+provenance, executed receipt, protected-branch CI, and local telemetry. This keeps the product loop useful on
+Windows and in any coding-agent host without adding a browser daemon or a hosted dependency.
+
 ### 1. Start without risk
 
 ```bash

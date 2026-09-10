@@ -26,7 +26,18 @@ BLOCK for safety-critical gates (fail closed), never as silent pass.
 import sys, os, glob, fnmatch, argparse, re, json, subprocess, hashlib, shutil
 from datetime import datetime, timedelta, timezone
 
-ROOT = os.environ.get("VEMO_ROOT") or os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip() or "."
+def _repository_root():
+    if os.environ.get("VEMO_ROOT"):
+        return os.environ["VEMO_ROOT"]
+    try:
+        result = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                                text=True, encoding="utf-8", errors="replace")
+        return result.stdout.strip() if result.returncode == 0 else "."
+    except OSError:
+        return "."
+
+
+ROOT = _repository_root()
 TASKS_DIR = os.path.join(ROOT, "tasks")
 CONFIG = os.path.join(ROOT, "vemo.config.yaml")
 CONFIG_OVERLAY = os.path.join(ROOT, "vemo.config.preset.yaml")  # per-stack preset overlay (vemo init)
@@ -188,7 +199,7 @@ def _strip_comment(v):
     if s.startswith("{"):                               # inline map: keep up to closing }, drop trailing comment
         end = s.find("}")
         return s[:end + 1] if end != -1 else s
-    return re.split(r"\s+#", v, 1)[0]
+    return re.split(r"\s+#", v, maxsplit=1)[0]
 
 
 def _scalar(v):
@@ -254,7 +265,8 @@ def _load_yaml_subset(text):
 
 def _parse_front_matter(path):
     try:
-        text = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as stream:
+            text = stream.read()
     except OSError:
         return {}
     if not text.lstrip().startswith("---"):
@@ -289,7 +301,7 @@ def _load_config():
 def _rel(target):
     # resolve a relative input against ROOT (repo-relative), not the process CWD
     t = target if os.path.isabs(target) else os.path.join(ROOT, target)
-    return os.path.relpath(os.path.abspath(t), ROOT)
+    return os.path.relpath(os.path.abspath(t), ROOT).replace("\\", "/")
 
 
 def _match(rel, g):

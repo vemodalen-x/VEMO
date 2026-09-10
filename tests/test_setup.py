@@ -40,6 +40,10 @@ class SetupTests(unittest.TestCase):
                 text = target.read_text(encoding="utf-8")
                 if text.count(service.BEGIN) == text.count(service.END) == 1:
                     target.write_text(text.split(service.BEGIN, 1)[1].split(service.END, 1)[0].strip() + "\n", encoding="utf-8")
+            if relative == ".gitattributes":
+                text = target.read_text(encoding="utf-8")
+                if text.count("# VEMO:BEGIN") == text.count("# VEMO:END") == 1:
+                    target.write_text(text.split("# VEMO:BEGIN", 1)[1].split("# VEMO:END", 1)[0].strip() + "\n", encoding="utf-8")
         ROOT = source
 
     @classmethod
@@ -100,6 +104,7 @@ class SetupTests(unittest.TestCase):
         self.write("README.md", "# My application\n")
         self.write(".claude/settings.json", '{"permissions":{"allow":["Read"]},"hooks":{"SessionStart":[]}}')
         self.write(".gitignore", "private/\n")
+        self.write(".gitattributes", "*.custom binary\n")
         original = self.snapshot()
         result = self.install()
         self.assertTrue(result["verification"]["ready"])
@@ -109,6 +114,9 @@ class SetupTests(unittest.TestCase):
         again = service.plan_install(ROOT, str(self.root), "docs")
         self.assertTrue(all(row["status"] == "unchanged" for row in again["actions"]))
         self.assertTrue(service.check_install(str(self.root))["ready"])
+        self.assertIn("*.custom binary", (self.root / ".gitattributes").read_text(encoding="utf-8"))
+        attributes = service.run(["git", "check-attr", "eol", "--", "enforcement/ci/pre-push"], self.root)
+        self.assertIn("eol: lf", attributes.stdout)
         # Probe the actual installed edit guard against a bounded task, not just file presence.
         self.write("tasks/T-probe.md", '---\nid: T-probe\nrisk: R1\nstate: PlanCreated\nscope_in: ["allowed/**"]\n---\n## Plan\nProbe\n')
         probe = service.run([sys.executable, "enforcement/hooks/run.py", "edit"], self.root,
@@ -197,7 +205,12 @@ class SetupTests(unittest.TestCase):
         for name in ("bin", ".vemo", ".claude"):
             with self.subTest(name=name):
                 link = self.root / name
-                link.symlink_to(Path(self.temp.name) / "does-not-exist", target_is_directory=True)
+                try:
+                    link.symlink_to(Path(self.temp.name) / "does-not-exist", target_is_directory=True)
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) == 1314:
+                        self.skipTest("Windows account cannot create symbolic links; junction coverage runs separately")
+                    raise
                 with self.assertRaises(service.SetupError):
                     service.plan_install(ROOT, str(self.root))
                 link.unlink()

@@ -138,7 +138,7 @@ paths:
   # require a machine receipt — the framework eats its executed-ground-truth rule.
   build:        "python3 eval/run.py"                              # `vemo verify` EXECUTES this and writes the receipt
   smoke:        "python3 enforcement/validators/task_state.py selfcheck"
-  package_scan: ""       # required only by verification.profile=release; set to a real dependency/package scanner
+  package_scan: "python3 enforcement/validators/package_check.py"  # payload completeness/syntax, not CVE coverage
 
 concurrency:
   stale_threshold_hours: 4   # doctor flags live tasks with a heartbeat older than this (takeover candidates)
