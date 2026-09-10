@@ -2,7 +2,7 @@
 id: T-20260910-merge-upstream-and-deliver-windows-supervision-i
 risk: R2
 change_class: release
-state: ImplementationDone
+state: AcceptancePassed
 scope_in: ["AGENTS.md", ".github/**", ".gitignore", ".gitattributes", ".vemo/judge.jsonl", "CHANGELOG.md", "README.md", "agents/**", "bin/**", "docs/**", "enforcement/**", "eval/**", "extensions/**", "skill/**", "tasks/**", "tests/**", "ui/**", "packaging/**", "vemo.config.yaml"]
 scope_out: []
 trifecta: []
@@ -26,7 +26,7 @@ judge:
   confidence: high
 approved_commands: []
 owning_chat: "codex-windows-supervision-20260910"
-heartbeat: 2026-09-10T14:12:58Z
+heartbeat: 2026-09-10T14:17:49Z
 ---
 
 # Merge upstream and deliver Windows supervision installer
@@ -58,6 +58,7 @@ The user requested merge, review, commit and installation on this machine; earli
 - 2026-09-10T13:43:27Z Task created by `vemo task create`.
 - 2026-09-10T14:10:45Z Release acceptance evidence passed: conformance 133/133; release receipt build/smoke/package_scan exit 0; package integrity, browser UI, Windows Git gate, idempotency and uninstall smoke passed.
 - 2026-09-10T14:12:58Z Found release provenance gap: package content IDs did not include source commit, so distinct revisions could share an install directory; fixing builder before final package publication.
+- 2026-09-10T14:17:49Z Final release receipt passed after provenance fix: conformance 133/133; build/smoke/package_scan exit 0; final package 0b814605ed3c8a6d binds to source commit 9cf08de; Windows package smoke passed.
 
 ## Acceptance Result
 PASS: full conformance 133/133, selfcheck, release receipt build/smoke/package scan, package checksum
