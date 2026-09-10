@@ -124,6 +124,14 @@ CHECK_INDEX = (
     ("validator", "receipt: failing build -> receipt-failed BLOCKED"),
     ("ci", "ci workflow: verify-run before pre-push (enforcement/ci/vemo-ci.yml)"),
     ("ci", "ci workflow: verify-run before pre-push (.github/workflows/vemo-ci.yml)"),
+    ("ci", "ci workflow: push range compares before..head (enforcement/ci/vemo-ci.yml)"),
+    ("ci", "ci workflow: push range compares before..head (.github/workflows/vemo-ci.yml)"),
+    ("ci", "push gate: hands the pushed range to the validator (no empty-index snapshot)"),
+    ("ci", "push gate: stdin range overrides a stale inherited range"),
+    ("ci", "push gate: rejects multi-ref snapshots instead of checking only the first"),
+    ("ci", "push gate: new branch rejects an unresolved remote boundary"),
+    ("ci", "push gate: new branch snapshots all commits after the remote boundary"),
+    ("ci", "push gate: non-fast-forward range includes remote-only deletions"),
     ("validator", "judge: front-matter pass w/o provenance BLOCKED"),
     ("validator", "judge: high-tier R2 one pass still BLOCKED"),
     ("validator", "judge: high-tier R2 required pass count ok"),
@@ -377,6 +385,25 @@ def sandbox(tier=None, task=None, cfg_sub=()):
     return d
 
 
+def stage_reviewable_change(d, path="src/app.py"):
+    """Give a sandbox a real staged in-scope change so a judge `pass` can bind to content.
+
+    A verdict only counts when its snapshot is a digest of the reviewed diff, so depth scenarios
+    (how MANY passes a tier needs) must operate on a repository with something to review — an empty
+    index would be refused for the right reason and would stop exercising the counting logic.
+    """
+    git = lambda *a: subprocess.run(["git", *a], cwd=d, check=True,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    git("init")
+    git("config", "user.email", "eval@example.invalid")
+    git("config", "user.name", "eval")
+    full = os.path.join(d, path)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    open(full, "w", encoding="utf-8").write("x = 1\n")
+    git("add", path)
+    return d
+
+
 def remove_tree(path):
     """Best-effort temp cleanup that handles read-only Git object files on Windows."""
     def retry(func, target, _exc):
@@ -555,18 +582,18 @@ def run_validator_checks(r):
     r.chk("validator", "receipt: failing build -> receipt-failed BLOCKED", run(d, "gate-check", "--gate", "acceptance-before-push"), "receipt-failed")
     remove_tree(d)
 
-    d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
+    d = stage_reviewable_change(sandbox(task=task('["src/**"]', risk="R2", verdict="pass")))
     r.chk("validator", "judge: front-matter pass w/o provenance BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-no-provenance")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e")
     r.chk("validator", "judge: high-tier R2 one pass still BLOCKED", run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "e2e-2")
     r.chk("validator", "judge: high-tier R2 required pass count ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
     remove_tree(d)
-    d = sandbox(task=task('["src/**"]', risk="R2", verdict="pass"))
+    d = stage_reviewable_change(sandbox(task=task('["src/**"]', risk="R2", verdict="pass")))
     run(d, "judge-record", "--task", "T", "--verdict", "fail")
     r.chk("validator", "judge: provenance says FAIL, front-matter says pass -> BLOCKED", run(d, "gate-check", "--gate", "r2-judge"), "judge-provenance-mismatch")
     remove_tree(d)
-    d = sandbox(tier="low", task=task('["src/**"]', risk="R1", verdict="pass"))
+    d = stage_reviewable_change(sandbox(tier="low", task=task('["src/**"]', risk="R1", verdict="pass")))
     r.chk("validator", "judge: low-tier R1 requires provenance", run(d, "gate-check", "--gate", "required-judge"), "judge-no-provenance")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "low-r1")
     r.chk("validator", "judge: low-tier R1 one pass ok", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
@@ -574,14 +601,16 @@ def run_validator_checks(r):
     d = sandbox(tier="high", task=task('["src/**"]', risk="R1", verdict="null"))
     r.chk("validator", "judge: high-tier R1 self-verifies (no judge required)", run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
     remove_tree(d)
-    d = sandbox(tier="high", task=task('[".github/workflows/**"]', risk="R2", verdict="pass",
-                                       change_class="ci-narrow"))
+    d = stage_reviewable_change(sandbox(tier="high", task=task('[".github/workflows/**"]', risk="R2",
+                                       verdict="pass", change_class="ci-narrow")),
+                                path=".github/workflows/ci.yml")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "ci")
     r.chk("validator", "judge depth: ci-narrow R2 needs one pass",
           run(d, "gate-check", "--gate", "required-judge"), lambda g: g == "ok")
     remove_tree(d)
-    d = sandbox(tier="high", task=task('["enforcement/**"]', risk="R2", verdict="pass",
-                                       change_class="security"))
+    d = stage_reviewable_change(sandbox(tier="high", task=task('["enforcement/**"]', risk="R2",
+                                       verdict="pass", change_class="security")),
+                                path="enforcement/x.py")
     run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "security")
     r.chk("validator", "judge depth: security R2 keeps two high-tier passes",
           run(d, "gate-check", "--gate", "required-judge"), "judge-pass-count=1")
@@ -635,7 +664,10 @@ def run_validator_checks(r):
     task_path = os.path.join(d, rel)
     run(d, "task-state", "--state", "ReviewApproved", "--task-file", task_path)
     run(d, "task-note", "--message", "machine timestamp", "--task-file", task_path)
-    run(d, "judge-record", "--task", "utc-check", "--verdict", "pass")
+    # `fail`, not `pass`: this sandbox has no git repository, so no snapshot can bind to reviewed
+    # content and a `pass` is refused by design. The assertion below only reads `ts`, which both
+    # verdicts stamp identically.
+    run(d, "judge-record", "--task", "utc-check", "--verdict", "fail")
     run(d, "budget-reset", "--session", "utc")
     task_text = open(task_path, encoding="utf-8").read()
     judge_row = json.loads(open(os.path.join(d, ".vemo", "judge.jsonl"), encoding="utf-8").readline())
@@ -769,6 +801,182 @@ def run_ci_checks(r):
         r.chk("ci", f"ci workflow: verify-run before pre-push ({wf})", txt,
               lambda g: "verify-run" in g and "bash enforcement/ci/pre-push" in g
               and g.index("verify-run") < g.index("bash enforcement/ci/pre-push"))
+        r.chk("ci", f"ci workflow: push range compares before..head ({wf})", txt,
+              lambda g: 'RANGE="origin/${{ github.base_ref }}...HEAD"' in g
+              and 'BEFORE="$(git hash-object -t tree /dev/null)"' in g
+              and 'RANGE="${BEFORE}..HEAD"' in g
+              and 'RANGE="${BEFORE}...HEAD"' not in g)
+
+    # The push gate must judge the SAME diff the server re-checks. It receives the pushed range on
+    # stdin (git's hook contract) and must hand it to the validator; without that the validator falls
+    # back to the index, which is EMPTY right after a commit, so the local gate bound verdicts to
+    # nothing while CI bound them to the pushed range. Executed end-to-end against a real repository,
+    # because a divergence between the local hook and CI is invisible to any check that only greps
+    # the script. The discriminator is the block REASON: "snapshot-unbound" means the gate saw an
+    # empty index; a pass-count means it actually read the range.
+    d = stage_reviewable_change(sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R2",
+                                                  status="passed", build_exit="0",
+                                                  evidence=".vemo/run/1.log", verdict="pass")))
+    os.makedirs(os.path.join(d, ".vemo", "run"), exist_ok=True)
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    commit = lambda msg: subprocess.run(
+        ["git", "-c", "user.email=eval@example.invalid", "-c", "user.name=eval", "commit", "-qm", msg],
+        cwd=d, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    add = lambda: subprocess.run(["git", "add", "-A"], cwd=d, check=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    add(); commit("base")
+    open(os.path.join(d, "src", "app.py"), "w", encoding="utf-8").write("x = 2\n")
+    add()
+    # The verdict is recorded while the change is STAGED, so it binds to real content; the commit
+    # then empties the index, reproducing the exact state the push gate runs in.
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "push-range-1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "push-range-2")
+    add(); commit("change")
+    rev = lambda spec: subprocess.run(["git", "rev-parse", spec], cwd=d,
+                                      capture_output=True, text=True).stdout.strip()
+    # Run the sandbox's OWN copy: pre-push exports VEMO_ROOT from its own location, so invoking this
+    # repository's script would gate this repository's tasks instead of the fixture's.
+    for part in ("enforcement/validators", "enforcement/ci"):
+        os.makedirs(os.path.join(d, part), exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "enforcement", "ci", "pre-push"),
+                os.path.join(d, "enforcement", "ci", "pre-push"))
+    shutil.copy(VAL, os.path.join(d, "enforcement", "validators", "task_state.py"))
+    env = child_env(VEMO_ROOT=d)
+    env.pop("VEMO_DIFF_RANGE", None)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push")],
+                            cwd=d, env=env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input="refs/heads/main %s refs/heads/main %s\n" % (rev("HEAD"), rev("HEAD~1")))
+    r.chk("ci", "push gate: hands the pushed range to the validator (no empty-index snapshot)",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] == 0 and "judge-snapshot-unbound" not in g[1] and "empty-diff" not in g[1])
+
+    # An ambient range can survive from an earlier command in the caller's environment. Once git
+    # supplies refs on stdin, those refs describe THIS push and must win. Otherwise two valid passes
+    # for an older range can be replayed to accept a newer commit that no judge reviewed.
+    reviewed_range = "%s...%s" % (rev("HEAD~1"), rev("HEAD"))
+    open(os.path.join(d, "src", "app.py"), "w", encoding="utf-8").write("x = 3\n")
+    add(); commit("unreviewed")
+    stale_env = child_env(VEMO_ROOT=d, VEMO_DIFF_RANGE=reviewed_range)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push")],
+                            cwd=d, env=stale_env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input="refs/heads/main %s refs/heads/main %s\n" % (rev("HEAD"), rev("HEAD~1")))
+    r.chk("ci", "push gate: stdin range overrides a stale inherited range",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] != 0 and "judge-pass-count=0" in g[1]
+          and "judge-snapshot-unbound" not in g[1] and "empty-diff" not in g[1])
+
+    # One scalar snapshot cannot honestly cover several independently moving refs. The first range
+    # below is fully reviewed; the second contains the unreviewed commit. Silently checking only the
+    # first would let its two passes authorize both refs, so fail closed and require separate pushes.
+    multi_env = child_env(VEMO_ROOT=d)
+    multi_env.pop("VEMO_DIFF_RANGE", None)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push")],
+                            cwd=d, env=multi_env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input=("refs/heads/reviewed %s refs/heads/reviewed %s\n"
+                                   "refs/heads/main %s refs/heads/main %s\n")
+                                  % (rev("HEAD~1"), rev("HEAD~2"), rev("HEAD"), rev("HEAD~1")))
+    r.chk("ci", "push gate: rejects multi-ref snapshots instead of checking only the first",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] != 0 and "multi-ref-push-unsupported" in g[1])
+    remove_tree(d)
+
+    # New refs report an all-zero remote SHA. Reviewing only tip~1..tip lets an earlier persistent
+    # commit ride under passes for the tip. Refuse when no target-remote boundary is known; with one
+    # known boundary, snapshot the full outgoing history so tip-only passes do not match.
+    d = stage_reviewable_change(sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R2",
+                                                  status="passed", build_exit="0",
+                                                  evidence=".vemo/run/1.log", verdict="pass")))
+    os.makedirs(os.path.join(d, ".vemo", "run"), exist_ok=True)
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    add = lambda: subprocess.run(["git", "add", "-A"], cwd=d, check=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    commit = lambda msg: subprocess.run(
+        ["git", "-c", "user.email=eval@example.invalid", "-c", "user.name=eval", "commit", "-qm", msg],
+        cwd=d, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    add(); commit("known remote base")
+    base_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                              text=True, check=True).stdout.strip()
+    open(os.path.join(d, "src", "hidden.py"), "w", encoding="utf-8").write("persistent = True\n")
+    add(); commit("unreviewed earlier commit")
+    open(os.path.join(d, "src", "app.py"), "w", encoding="utf-8").write("x = 2\n")
+    add()
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "tip-only-1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "tip-only-2")
+    add(); commit("reviewed tip only")
+    tip_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                             text=True, check=True).stdout.strip()
+    for part in ("enforcement/validators", "enforcement/ci"):
+        os.makedirs(os.path.join(d, part), exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "enforcement", "ci", "pre-push"),
+                os.path.join(d, "enforcement", "ci", "pre-push"))
+    shutil.copy(VAL, os.path.join(d, "enforcement", "validators", "task_state.py"))
+    env = child_env(VEMO_ROOT=d)
+    env.pop("VEMO_DIFF_RANGE", None)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push"), "origin", "unused"],
+                            cwd=d, env=env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input="refs/heads/topic %s refs/heads/topic %s\n" % (tip_sha, "0" * 40))
+    r.chk("ci", "push gate: new branch rejects an unresolved remote boundary",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] != 0 and "new-branch-range-unresolved" in g[1])
+
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", base_sha], cwd=d, check=True)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push"), "origin", "unused"],
+                            cwd=d, env=env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input="refs/heads/topic %s refs/heads/topic %s\n" % (tip_sha, "0" * 40))
+    r.chk("ci", "push gate: new branch snapshots all commits after the remote boundary",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] != 0 and "judge-pass-count=0" in g[1]
+          and "new-branch-range-unresolved" not in g[1])
+    remove_tree(d)
+
+    # For a non-fast-forward update, merge-base...local omits remote-only files that the push deletes.
+    # Two-dot remote..local represents the actual tree transition and must invalidate passes recorded
+    # against only the local-side change.
+    d = stage_reviewable_change(sandbox(task=task('["src/**"]', state="AcceptancePassed", risk="R2",
+                                                  status="passed", build_exit="0",
+                                                  evidence=".vemo/run/1.log", verdict="pass")))
+    os.makedirs(os.path.join(d, ".vemo", "run"), exist_ok=True)
+    open(os.path.join(d, ".vemo", "run", "1.log"), "w", encoding="utf-8").write("x\n")
+    add = lambda: subprocess.run(["git", "add", "-A"], cwd=d, check=True,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    commit = lambda msg: subprocess.run(
+        ["git", "-c", "user.email=eval@example.invalid", "-c", "user.name=eval", "commit", "-qm", msg],
+        cwd=d, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    add(); commit("common base")
+    base_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                              text=True, check=True).stdout.strip()
+    open(os.path.join(d, "src", "remote_only.py"), "w", encoding="utf-8").write("remote = True\n")
+    add(); commit("remote-only commit")
+    remote_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                                text=True, check=True).stdout.strip()
+    subprocess.run(["git", "checkout", "-qb", "local-side", base_sha], cwd=d, check=True)
+    open(os.path.join(d, "src", "app.py"), "w", encoding="utf-8").write("x = 2\n")
+    add()
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "local-only-1")
+    run(d, "judge-record", "--task", "T", "--verdict", "pass", "--evidence", "local-only-2")
+    add(); commit("local reviewed commit")
+    local_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True,
+                               text=True, check=True).stdout.strip()
+    for part in ("enforcement/validators", "enforcement/ci"):
+        os.makedirs(os.path.join(d, part), exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "enforcement", "ci", "pre-push"),
+                os.path.join(d, "enforcement", "ci", "pre-push"))
+    shutil.copy(VAL, os.path.join(d, "enforcement", "validators", "task_state.py"))
+    env = child_env(VEMO_ROOT=d)
+    env.pop("VEMO_DIFF_RANGE", None)
+    pushed = subprocess.run([BASH, os.path.join(d, "enforcement", "ci", "pre-push")],
+                            cwd=d, env=env, capture_output=True, text=True, encoding="utf-8",
+                            errors="replace",
+                            input="refs/heads/main %s refs/heads/main %s\n" % (local_sha, remote_sha))
+    r.chk("ci", "push gate: non-fast-forward range includes remote-only deletions",
+          (pushed.returncode, pushed.stdout + pushed.stderr),
+          lambda g: g[0] != 0 and "judge-pass-count=0" in g[1])
+    remove_tree(d)
 
 
 def run_hook_checks(r):

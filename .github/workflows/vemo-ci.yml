@@ -31,8 +31,10 @@ jobs:
             RANGE="origin/${{ github.base_ref }}...HEAD"
           else
             BEFORE="${{ github.event.before }}"
-            case "$BEFORE" in ''|0000000000000000000000000000000000000000) BEFORE="HEAD~1";; esac
-            RANGE="${BEFORE}...HEAD"
+            case "$BEFORE" in
+              ''|0000000000000000000000000000000000000000) BEFORE="$(git hash-object -t tree /dev/null)";;
+            esac
+            RANGE="${BEFORE}..HEAD"
           fi
           echo "VEMO_DIFF_RANGE=$RANGE" >> "$GITHUB_ENV"
 

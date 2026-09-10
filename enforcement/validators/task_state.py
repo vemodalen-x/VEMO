@@ -38,6 +38,23 @@ RECEIPT = os.path.join(RUN_DIR, "receipt.json")
 TASK_RECEIPTS = os.path.join(RUN_DIR, "receipts")
 CACHE = os.path.join(RUN_DIR, "cache.json")
 TIER_RANK = {"R0": 1, "R1": 2, "R2": 3}
+# A judge verdict binds to the code it reviewed only if its snapshot IS a content digest of that
+# code. Every other value -- the empty-diff sentinel, an unresolvable/invalid range, a git failure,
+# or a legacy row with no snapshot at all -- means the judge demonstrably saw nothing, so it cannot
+# carry a gate. Whitelist the one binding shape instead of blacklisting the failure modes: sentinels
+# are self-matching strings, so any blacklist silently reopens the hole each time one is added.
+EMPTY_SNAPSHOT = "empty-diff"
+LEGACY_EMPTY_SNAPSHOT = hashlib.sha256(b"").hexdigest()  # what empty diffs hashed to before the sentinel
+_NON_BINDING_SNAPSHOTS = frozenset({EMPTY_SNAPSHOT, LEGACY_EMPTY_SNAPSHOT, "invalid-range", "unresolved-range"})
+
+
+def _binds_to_content(snapshot):
+    """True only for a real sha256 digest that is not the digest of an empty diff."""
+    text = "" if snapshot is None else str(snapshot)
+    return (len(text) == 64 and all(c in "0123456789abcdef" for c in text)
+            and text not in _NON_BINDING_SNAPSHOTS)
+
+
 CHANGE_CLASS_RANK = {
     "standard": 1, "ci-init": 1, "ci-narrow": 2,
     "security": 3, "permissions": 4, "release": 5,
@@ -554,7 +571,12 @@ def _judge_records(task_id):
 
 
 def _judge_snapshot(fm=None):
-    """Hash only this task's staged/range patch, excluding the provenance log itself."""
+    """Hash only this task's staged/range patch, excluding the provenance log itself.
+
+    Returns EMPTY_SNAPSHOT when the diff carries no in-scope content: a judge that saw nothing
+    reviewed nothing, so binding a verdict to it would let an empty index mint a pass that
+    matches no code. Callers must treat that value as unusable, never as "matches everything".
+    """
     diff_range = os.environ.get("VEMO_DIFF_RANGE")
     if diff_range and (diff_range.startswith("-") or any(c in diff_range for c in ("\0", "\n", "\r"))):
         return "invalid-range"
@@ -577,6 +599,8 @@ def _judge_snapshot(fm=None):
                  for raw in names.stdout.split(b"\0") if raw]
         paths = sorted(path for path in paths if path != ".vemo/judge.jsonl"
                        and (not scopes or any(_match(path, pattern) for pattern in scopes)))
+        if not paths:
+            return EMPTY_SNAPSHOT
         h = hashlib.sha256()
         for path in paths:
             if path == active_task_path:
@@ -637,9 +661,17 @@ def _judge_gate_result(fm, required):
         return "block:judge-no-provenance (front-matter says pass but .vemo/judge.jsonl has no record — the judge must write its verdict via `task_state.py judge-record`, a pasted verdict does not count)"
     suffix = 0
     snapshot = _judge_snapshot(fm)
+    if not _binds_to_content(snapshot):
+        return ("block:judge-snapshot-unbound=%s (no in-scope change is resolvable here, so no judge record "
+                "can bind to it — record the verdict against the staged diff, or set VEMO_DIFF_RANGE to a "
+                "range that resolves)" % (snapshot or "unavailable"))
     for row in reversed(rows):
-        snapshot_ok = not snapshot or row.get("snapshot") == snapshot
-        if row.get("verdict") == "pass" and snapshot_ok:
+        # Plain equality against a snapshot already proven to bind (see the guard above) is the whole
+        # check: it rejects legacy rows (missing key, sha256("")) and sentinel rows alike, because
+        # none of them can equal a content digest. Re-testing `_binds_to_content(recorded)` here
+        # would be unreachable by construction, and an unreachable check reads as coverage it cannot
+        # provide -- the guard is what stops "unresolvable range matches everything".
+        if row.get("verdict") == "pass" and row.get("snapshot") == snapshot:
             suffix += 1
             continue
         break
@@ -787,9 +819,15 @@ def gate_check(gate, session=None, task_files=None):
 def judge_record(task, verdict, evidence="", confidence=""):
     task_fm = next((fm for path in glob.glob(os.path.join(TASKS_DIR, "*.md"))
                     if (fm := _parse_front_matter(path)).get("id") == task), None)
+    snapshot = _judge_snapshot(task_fm)
+    # Refuse at write time, not just at gate time: a row bound to nothing is noise in an
+    # append-only log, and the judge should learn its context is wrong while it can still fix it.
+    if verdict == "pass" and not _binds_to_content(snapshot):
+        return ("refused:%s — snapshot '%s' binds to no code, so this pass would prove nothing. Stage the "
+                "change under review, or set VEMO_DIFF_RANGE to a range that resolves." % (task, snapshot or "unavailable"))
     row = {"ts": _utc_stamp(), "task": task, "verdict": verdict,
            "session": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("VEMO_SESSION") or "unknown",
-           "snapshot": _judge_snapshot(task_fm), "evidence": evidence, "confidence": confidence}
+           "snapshot": snapshot, "evidence": evidence, "confidence": confidence}
     os.makedirs(os.path.dirname(JUDGE_LOG), exist_ok=True)
     with open(JUDGE_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1535,7 +1573,8 @@ def main():
         out = verify_run_all(a.session, a.no_cache) if a.all_tasks else verify_run(a.session, a.no_cache); print(out)
         sys.exit(0 if out.startswith(("pass", "no-build-configured")) else 1)
     elif a.cmd == "judge-record":
-        print(judge_record(a.task, a.verdict, a.evidence, a.confidence))
+        out = judge_record(a.task, a.verdict, a.evidence, a.confidence); print(out)
+        sys.exit(1 if out.startswith("refused:") else 0)
     elif a.cmd == "bind":
         print(bind_session(a.session, a.task))
     elif a.cmd == "context":
