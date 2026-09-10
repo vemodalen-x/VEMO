@@ -42,7 +42,10 @@ def build(runtime_zip, output):
     files["runtime/python3.exe"] = files["runtime/python.exe"]
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     inventory = {name: sha(data) for name, data in sorted(files.items())}
-    content_id = sha(json.dumps(inventory, sort_keys=True).encode())[:16]
+    # The payload hash alone is not enough for release provenance: the same bytes can be rebuilt
+    # from a different source revision. Include the exact source commit so side-by-side installs
+    # and package manifests cannot silently reuse a prior revision's identity.
+    content_id = sha(json.dumps({"base_commit": commit, "files": inventory}, sort_keys=True).encode())[:16]
     manifest = {"schema_version": 1, "build_id": content_id,
                 "framework_version": (ROOT / "VERSION").read_text().strip(),
                 "built_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
