@@ -54,7 +54,8 @@ hook registration, or rewriting these rules takes the *highest*-ceremony path (h
 lowest. Additionally `selfcheck` (run in CI) flags hooks deregistered from `.claude/settings.json` and
 `ENFORCED-BY` tags pointing at missing mechanisms. `ENFORCED-BY: git+ci` via risk-tier integrity.
 
-The judge provenance log `.vemo/judge.jsonl` is **tracked by git** (the rest of `.vemo/` is per-machine
+The judge provenance log `.vemo/judge.jsonl` is **tracked by git** and new rows are hash-linked to an anchored
+legacy prefix (the rest of `.vemo/` is per-machine
 runtime state and stays ignored): the required-judge gate's authority is CI, and CI can only read records
 that are in the repo — while git history is what makes an append-only log tamper-evident. `selfcheck` fails
 if the log is gitignored.

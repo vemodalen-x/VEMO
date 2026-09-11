@@ -65,6 +65,9 @@ confidence: high|med|low
   provenance log and only the active task's normalized `judge:` verdict cache); changing task criteria, a task
   template/sibling task, or another in-scope file
   invalidates old passes, while mirroring the verdict and sibling-task files do not.
+  Newly appended records use a versioned SHA-256 chain whose first link anchors the exact legacy prefix.
+  `selfcheck` and the judge gate reject malformed links and ledger deletion/reordering visible in the current
+  Git comparison; historical rows are never rewritten merely to adopt the new format.
 - A `fail` verdict blocks `AcceptancePassed`. The judge cannot be the same session that did the work.
 - Cost control: judge runs only on tiers that require it. At `tier=high`/`frontier`, most R1 work
   self-verifies; at `tier=medium`/`low`, R1 needs one judge pass. R2 requires

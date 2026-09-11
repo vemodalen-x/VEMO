@@ -4,6 +4,8 @@ Honest, prioritized. VEMO is young; the items below are what stand between it an
 Most are good first contributions — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Near-term (raises the weakest scores)
+- **Externally anchored evidence** — the local judge ledger is now hash-linked and Git-diff deletion-aware;
+  add signatures/transparency-log or immutable remote retention for off-repository truncation resistance.
 - **OpenTelemetry telemetry** — export gate events as OTel spans (agent id, intervention/violation rates) so
   observability is production-grade, not just `.vemo/telemetry.jsonl`. *(observability → 10)*
 - **Transcript-level eval** — beyond mechanism-conformance (`vemo eval`), run an agent through scenarios and

@@ -67,7 +67,7 @@ python3 bin/vemo ui --port 8765         # 需要固定端口时
 
 ## 5. 安装后验证什么
 
-安装器实际运行 CLI、`selfcheck`、`extensions --check`，检查所有 Claude hook 事件的接线、CI 文件、Git hooks 的 Bash 语法、内容与可执行权限。仅全部通过才保存成功安装清单。完整 conformance 套件由项目 CI 运行，也可在安装后手动执行 `python3 eval/run.py`。
+安装器实际运行 CLI、`selfcheck`、`extensions --check`，检查所有 Claude hook 事件的接线、CI 文件、Git hooks 的 Bash 语法、内容与可执行权限；还会在私有临时 fixture 中执行三次 bounded live-fire：范围内写入应允许、范围外写入应拒绝、validator 不可用且配置 fail-closed 时应拒绝。探针不会写业务源码，也不会执行项目构建命令；结果包含退出码和修复建议。仅全部通过才保存成功安装清单。完整 conformance 套件由项目 CI 运行，也可在安装后手动执行 `python3 eval/run.py`。
 
 安装清单位于 `.vemo/install.json`，包含版本、源码 checkout commit（存在时）、实际载荷 SHA-256、每个文件的安装摘要、原始内容备份和执行结果。源码存在未提交修改时，**载荷摘要**标识实际内容，commit 只标识其基础版本。请保留清单，用于升级和卸载。
 

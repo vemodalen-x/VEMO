@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import hashlib
 
 
 BIN_DIR = Path(__file__).resolve().parent
@@ -23,7 +24,9 @@ from vemo_extensions import build_extension_report
 
 ROOT = Path(os.environ.get("VEMO_ROOT") or Path(__file__).resolve().parents[1]).resolve()
 SCHEMA_VERSION = 1
-PLATFORM_SCHEMA_VERSION = 3
+PLATFORM_SCHEMA_VERSION = 4
+POLICY_DECISION_SCHEMA_VERSION = 1
+JUDGE_LEDGER_SCHEMA_VERSION = 1
 PROFILES = {
     "solo": {
         "name": "Solo Core",
@@ -426,8 +429,85 @@ def _receipt_chain_invariant(root):
     }
 
 
+def _judge_ledger_invariant(root):
+    """Validate linked judge evidence without exposing verdicts, actors, or evidence text. @codex-comment"""
+    state, path = _resolve_local_file(root, ".vemo/judge.jsonl")
+    if state == "missing":
+        return {"id": "judge_evidence_ledger", "owner": "evidence", "kind": "hash_chain",
+                "status": "not_observed", "observed": False, "checks": {}, "failure_codes": []}
+    if state != "valid":
+        return {"id": "judge_evidence_ledger", "owner": "evidence", "kind": "hash_chain",
+                "status": "fail", "observed": True, "checks": {"ledger_safe": False},
+                "failure_codes": ["ledger_safe"]}
+    failures = []
+    legacy = bytearray()
+    linked = False
+    head = None
+    legacy_rows = linked_rows = 0
+    try:
+        lines = path.read_bytes().splitlines(keepends=True)
+    except OSError:
+        lines = []
+        failures.append("ledger_readable")
+    for number, raw in enumerate(lines, 1):
+        try:
+            row = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            failures.append("row_%d_json" % number)
+            continue
+        if not isinstance(row, dict):
+            failures.append("row_%d_object" % number)
+            continue
+        has_link = any(key in row for key in ("ledger_version", "prev_hash", "entry_hash"))
+        if not linked and not has_link:
+            legacy.extend(raw)
+            legacy_rows += 1
+            continue
+        if linked and not has_link:
+            failures.append("row_%d_legacy_after_link" % number)
+            continue
+        expected = hashlib.sha256(bytes(legacy)).hexdigest() if not linked else head
+        linked = True
+        linked_rows += 1
+        payload = {key: value for key, value in row.items() if key != "entry_hash"}
+        calculated = hashlib.sha256(json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
+        if row.get("ledger_version") != JUDGE_LEDGER_SCHEMA_VERSION:
+            failures.append("row_%d_version" % number)
+        if row.get("prev_hash") != expected:
+            failures.append("row_%d_prev_hash" % number)
+        if row.get("entry_hash") != calculated:
+            failures.append("row_%d_entry_hash" % number)
+        head = row.get("entry_hash")
+    checks = {"ledger_safe": state == "valid", "rows_parse": not failures,
+              "linked_suffix_valid": not failures}
+    return {"id": "judge_evidence_ledger", "owner": "evidence", "kind": "hash_chain",
+            "status": "pass" if not failures else "fail", "observed": True, "checks": checks,
+            "legacy_rows": legacy_rows, "linked_rows": linked_rows,
+            "failure_codes": failures[:20]}
+
+
+def _installation_probe_invariant(root):
+    state, manifest = _load_local_json(root, ".vemo/install.json")
+    observed = state != "missing"
+    runtime_present = all(_resolve_local_file(root, relative)[0] == "valid" for relative in (
+        "enforcement/hooks/run.py", "enforcement/validators/task_state.py", "bin/vemo_setup/service.py",
+    ))
+    valid = state == "valid" and isinstance((manifest or {}).get("files"), dict)
+    failures = [] if not observed else [name for name, ok in {
+        "install_manifest_valid": valid, "probe_runtime_present": runtime_present,
+    }.items() if not ok]
+    return {"id": "installation_live_fire", "owner": "enforcement", "kind": "executable_probe",
+            "status": "not_observed" if not observed else ("available" if not failures else "fail"),
+            "observed": observed, "checks": {} if not observed else {
+                "install_manifest_valid": valid, "probe_runtime_present": runtime_present,
+            }, "probe_set": ["allow", "deny", "fail_closed"], "failure_codes": failures}
+
+
 def _platform_invariants(root):
-    return [_adapter_binding_invariant(root), _receipt_chain_invariant(root)]
+    return [_adapter_binding_invariant(root), _receipt_chain_invariant(root),
+            _judge_ledger_invariant(root), _installation_probe_invariant(root)]
 
 
 def _delivery_authority(root):
@@ -505,11 +585,21 @@ def build_platform(root=None):
             "capability_tier": _config_value(root, "capability", "tier", "unknown"),
             "enforcement_mode": _config_value(root, "enforcement", "mode", "unknown"),
         },
+        "contracts": {
+            "policy_decision": {
+                "schema_version": POLICY_DECISION_SCHEMA_VERSION,
+                "effects": ["allow", "deny", "ask"],
+                "required_fields": ["effect", "reason_code", "obligations"],
+            },
+            "judge_ledger": {"schema_version": JUDGE_LEDGER_SCHEMA_VERSION,
+                             "legacy_prefix": "anchored_read_only"},
+        },
         "summary": {
             "core_status": "ready" if not missing else "incomplete",
             "missing_required_components": missing,
             "extension_status": extensions["summary"]["status"],
             "extension_issue_codes": sorted({issue["code"] for issue in extensions["issues"]}),
+            "extension_compatibility_status": "compatible" if not extension_failed else "incomplete",
             "capability_seam_status": "ready" if not extension_failed and not failed_seams else "incomplete",
             "failed_capability_seams": failed_seams,
             "invariant_status": "pass" if not failed_invariants else "fail",
@@ -550,6 +640,9 @@ def print_platform(platform):
         platform["version"], runtime["capability_tier"], runtime["enforcement_mode"]))
     print("  extensions       : %s (%d active)" % (
         summary["extension_status"], platform["extensions"]["summary"]["active"]))
+    print("  contracts        : policy-decision=v%d judge-ledger=v%d" % (
+        platform["contracts"]["policy_decision"]["schema_version"],
+        platform["contracts"]["judge_ledger"]["schema_version"]))
     print("  responsibility planes:")
     for plane in platform["planes"]:
         print("    %-11s %-10s %d/%d required components" % (

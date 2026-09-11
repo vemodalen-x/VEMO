@@ -219,6 +219,8 @@ class ProductTests(unittest.TestCase):
         self.assertEqual("available", ring1["status"])
         self.assertFalse((self.temp / "docs" / "ADAPTERS.md").exists())
         self.assertTrue(all(invariant["status"] == "not_observed" for invariant in payload["invariants"]))
+        self.assertEqual(["allow", "deny", "ask"], payload["contracts"]["policy_decision"]["effects"])
+        self.assertEqual("anchored_read_only", payload["contracts"]["judge_ledger"]["legacy_prefix"])
         self.assertEqual(before, after)
         self.assertNotIn(sentinel, encoded)
         self.assertNotIn(str(self.temp), encoded)
@@ -365,10 +367,37 @@ class ProductTests(unittest.TestCase):
         completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(0, completed.returncode, completed.stderr)
         payload = json.loads(completed.stdout)
-        self.assertEqual(3, payload["schema_version"])
+        self.assertEqual(4, payload["schema_version"])
         self.assertTrue(payload["read_only"])
         self.assertEqual("vemo platform", payload["command"])
         self.assertEqual("pass", payload["summary"]["check_status"])
+
+    def test_platform_reports_judge_chain_integrity_without_ledger_payload(self):
+        self._install_platform_contract()
+        ledger = self.temp / ".vemo" / "judge.jsonl"
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        legacy = (json.dumps({"task": "T-old", "evidence": "private-legacy-evidence"}) + "\n").encode()
+        row = {"ledger_version": 1, "task": "T-new", "verdict": "pass",
+               "prev_hash": __import__("hashlib").sha256(legacy).hexdigest(),
+               "evidence": "private-linked-evidence"}
+        canonical = json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        row["entry_hash"] = __import__("hashlib").sha256(canonical).hexdigest()
+        ledger.write_bytes(legacy + (json.dumps(row) + "\n").encode())
+
+        payload = product.build_platform(self.temp)
+        invariant = next(item for item in payload["invariants"] if item["id"] == "judge_evidence_ledger")
+        self.assertEqual("pass", invariant["status"])
+        self.assertEqual(1, invariant["legacy_rows"])
+        self.assertEqual(1, invariant["linked_rows"])
+        encoded = json.dumps(payload)
+        self.assertNotIn("private-legacy-evidence", encoded)
+        self.assertNotIn("private-linked-evidence", encoded)
+
+        row["verdict"] = "fail"
+        ledger.write_bytes(legacy + (json.dumps(row) + "\n").encode())
+        broken = product.build_platform(self.temp)
+        invariant = next(item for item in broken["invariants"] if item["id"] == "judge_evidence_ledger")
+        self.assertEqual("fail", invariant["status"])
 
     # Repository documentation is not part of the installed payload; installed copies of this suite
     # under eval/tests verify the runtime only.

@@ -118,7 +118,7 @@ provider executed. Existing scope guards, Git gates, receipts, judge provenance,
 
 ## Manifest schema v1
 
-Every manifest has exactly these top-level fields:
+Every manifest has these required top-level fields and two optional, additive metadata fields:
 
 ```json
 {
@@ -126,6 +126,8 @@ Every manifest has exactly these top-level fields:
   "id": "example.audit-view",
   "name": "Audit view",
   "version": "1.0.0",
+  "compatibility": {"vemo_major": 1},
+  "permissions": ["filesystem.read"],
   "provides": ["example.audit-view"],
   "requires": ["vemo.platform"],
   "contributes": {
@@ -139,7 +141,14 @@ Every manifest has exactly these top-level fields:
 - `version`: manifest implementation version. It does not change schema semantics.
 - `provides`: one or more uniquely owned capability keys.
 - `requires`: capability keys that must be active before this extension.
+- `compatibility.vemo_major` (optional): fail-closed major-version compatibility. If declared, an unknown or
+  different host major leaves the extension inactive with a stable diagnostic.
+- `permissions` (optional): bounded, unique capability-style permission declarations. They are inventory for
+  policy/reporting and do **not** grant authority; executable behavior still passes normal VEMO gates.
 - `contributes.platform_seams`: optional list handled by the built-in typed contribution spec.
+
+Unknown fields, malformed compatibility, duplicate permissions, and incompatible host versions fail
+deterministically. Existing schema-v1 manifests without either optional field continue unchanged.
 
 A platform seam has a stable `id`, display `name`, one responsibility-plane `owner`, and exactly the
 `definition`, `provider`, and `consumer` roles. Each role declares repository-relative candidate `paths`, a

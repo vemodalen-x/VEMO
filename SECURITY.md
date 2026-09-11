@@ -12,7 +12,7 @@ VEMO is a governance layer for AI coding agents. It is honest about what it does
 | Hand-editing binaries / model weights | blob guard (hook); vendor drops under `exclusions.third_party` exempt |
 | Secret committed | edit guard (hook) + pre-commit/CI diff scan |
 | "Verified" without running it | acceptance gate requires an evidence file that **exists**, and — when `paths.build/smoke` are configured — the machine receipt written by `vemo verify` (the gate executes the build; typed exit codes do not count) |
-| Forged or under-counted judge verdict | `judge.verdict` in front-matter must match the judge's own `judge-record` entries in append-only `.vemo/judge.jsonl`; a pasted `pass`, a later `fail`, or too few pass records blocks at commit/push/CI. The log is **tracked by git** (`selfcheck` fails if it's gitignored): CI can read it, and history makes edits to it visible |
+| Forged, altered, or under-counted judge verdict | `judge.verdict` in front-matter must match the judge's own `judge-record` entries. New rows form a schema-v1 SHA-256 chain anchored to the exact historical legacy prefix; malformed links and diff-visible deletion/reordering block `selfcheck` and the judge gate. A pasted `pass`, later `fail`, or too few content-bound passes also blocks. The ledger is tracked so CI can verify it |
 | Self-classifying a risky change as trivial | diff-derived risk tier at pre-commit/CI blocks a downgrade; unmatched paths default **R1**, the governance layer itself is **R2** |
 | Agent removes its own oversight | `vemo auto on` refuses without an interactive TTY + typed human confirmation; the skill exposes status/off only; `off` (restoring oversight) is always allowed |
 | Runaway unattended run | `run_budget` hard-stop when auto mode is ON (write-touched files counted, per-session counters) |
@@ -33,6 +33,8 @@ VEMO is a governance layer for AI coding agents. It is honest about what it does
 - Locally, an agent with shell access could in principle fabricate the receipt/provenance files too — they
   raise the bar from "type a number" to "actively forge an audit artifact" (visible in the diff/telemetry).
   The layer that cannot be forged from the client is CI, which re-executes build/smoke itself.
+- Hash linking detects mutation/reordering and, through Git/CI range inspection, deletion in a proposed change;
+  it is tamper-evidence, not an external timestamp/signature or immutable off-repository retention service.
 - The command blacklist and secret regexes are best-effort pattern matching, not a sandbox or a scanner.
 - `trifecta:` (Rule of Two) is self-declared; it bounds honest mistakes, not a determined injection —
   deriving it from observed tool usage is ROADMAP.

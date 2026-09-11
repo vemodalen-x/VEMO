@@ -9,7 +9,7 @@
 | **开始第一次任务并验证结果** | Tutorial | [USAGE.md](USAGE.md) |
 | **理解 Wildmeerkat lite 设计借鉴与治理取舍** | Explanation | [DESIGN_LITE.md](DESIGN_LITE.md) |
 | **See the whole picture (usage + architecture diagrams)** | Visual guide | 🖼️ [GUIDE.html](GUIDE.html) |
-| **Understand the AI platform planes, ownership, and request lifecycle** | Explanation + executable reference | [`docs/PLATFORM.md`](PLATFORM.md) · `vemo platform --json` |
+| **Understand platform planes, policy decisions, evidence integrity, and request lifecycle** | Explanation + executable reference | [`docs/PLATFORM.md`](PLATFORM.md) · `vemo platform --json` |
 | **Add or diagnose declarative capabilities and dependencies** | Reference + how-to | [EXTENSIONS.md](EXTENSIONS.md) · `vemo extensions --check --json` |
 | **Get it working in 5 min** | Tutorial | [QUICKSTART.md](QUICKSTART.md) |
 | **Migrate an existing agent playbook into VEMO** | How-to | [PLAYBOOK_ADOPTION.md](PLAYBOOK_ADOPTION.md) |

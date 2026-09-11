@@ -109,6 +109,15 @@ class SetupTests(unittest.TestCase):
         again = service.plan_install(ROOT, str(self.root), "docs")
         self.assertTrue(all(row["status"] == "unchanged" for row in again["actions"]))
         self.assertTrue(service.check_install(str(self.root))["ready"])
+        diagnostics = service.check_install(str(self.root))
+        live_fire = {row["name"]: row for row in diagnostics["checks"] if row.get("kind") == "live_fire"}
+        self.assertEqual({"Guard allow live-fire", "Guard deny live-fire", "Guard fail-closed live-fire"},
+                         set(live_fire))
+        self.assertTrue(all(row["ok"] for row in live_fire.values()))
+        self.assertEqual(0, live_fire["Guard allow live-fire"]["exit_code"])
+        self.assertEqual(2, live_fire["Guard deny live-fire"]["exit_code"])
+        self.assertEqual(2, live_fire["Guard fail-closed live-fire"]["exit_code"])
+        self.assertTrue(all(row["remediation"] for row in live_fire.values()))
         # Probe the actual installed edit guard against a bounded task, not just file presence.
         self.write("tasks/T-probe.md", '---\nid: T-probe\nrisk: R1\nstate: PlanCreated\nscope_in: ["allowed/**"]\n---\n## Plan\nProbe\n')
         probe = service.run([sys.executable, "enforcement/hooks/run.py", "edit"], self.root,

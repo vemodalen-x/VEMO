@@ -40,6 +40,12 @@ unknown extra fields are tolerated — the minimal-payload path is part of `eval
 checks, so the contract is executable, not aspirational. `judge-record` accepts a generic `VEMO_SESSION`
 env var where no Claude session id exists.
 
+Internally every allow/block/degraded outcome is normalized as policy-decision schema v1:
+`effect` (`allow|deny|ask`), stable `reason_code`, and a bounded `obligations` list. Telemetry records this
+content-minimized envelope when its configured level permits; raw prompts, file contents, and command bodies
+are not contract fields. The process exit/stderr behavior above remains the backward-compatible adapter API.
+`ask` is reserved for approval-capable adapters; current pre-tool guards resolve to allow or deny.
+
 Shipped wiring: **Claude Code** — `enforcement/install.sh` registers all six guards in
 `.claude/settings.json` (see `enforcement/hooks/hooks.json`). Other harnesses (Codex CLI, Cursor, Gemini
 CLI, …) expose similar pre-tool hook APIs; wire them to the table above. VEMO ships no per-product glue it

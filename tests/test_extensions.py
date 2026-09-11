@@ -364,6 +364,39 @@ class ExtensionTests(unittest.TestCase):
         self.assertIn("manifest_schema_version", codes)
         self.assertIn("manifest_name", codes)
 
+    def test_optional_compatibility_and_permissions_are_additive_and_bounded(self):
+        self._write_index(["compatible/extension.json"])
+        manifest = self._manifest("demo.compatible", ("demo.compatible",), ("vemo.platform",))
+        manifest["compatibility"] = {"vemo_major": 1}
+        manifest["permissions"] = ["filesystem.read", "telemetry.emit"]
+        self._write_manifest("compatible/extension.json", manifest)
+        (self.temp / "VERSION").write_text("1.9.0\n", encoding="utf-8")
+
+        report = extensions.build_extension_report(self.temp)
+
+        self.assertEqual("pass", report["summary"]["status"])
+        row = report["extensions"][0]
+        self.assertEqual({"vemo_major": 1}, row["compatibility"])
+        self.assertEqual(["filesystem.read", "telemetry.emit"], row["permissions"])
+
+        manifest["permissions"] = ["filesystem.read", "filesystem.read"]
+        self._write_manifest("compatible/extension.json", manifest)
+        duplicate = extensions.build_extension_report(self.temp)
+        self.assertIn("manifest_capability_duplicate", {row["code"] for row in duplicate["issues"]})
+
+    def test_incompatible_extension_is_not_activated(self):
+        self._write_index(["future/extension.json"])
+        manifest = self._manifest("demo.future", ("demo.future",), ("vemo.platform",))
+        manifest["compatibility"] = {"vemo_major": 2}
+        self._write_manifest("future/extension.json", manifest)
+        (self.temp / "VERSION").write_text("1.9.0\n", encoding="utf-8")
+
+        report = extensions.build_extension_report(self.temp)
+
+        self.assertEqual("fail", report["summary"]["status"])
+        self.assertEqual([], report["load_order"])
+        self.assertIn("extension_host_version_incompatible", {row["code"] for row in report["issues"]})
+
     def test_discovery_rejects_bad_json_traversal_and_external_symlink_without_reading_target(self):
         references = [
             "bad/extension.json",

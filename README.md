@@ -156,8 +156,8 @@ One verb-based entry point (run `vemo` for the map, `vemo explain <topic>` to le
 | `vemo setup install\|check\|uninstall\|recover <absolute-project-path> [--apply]` | the same installation service for terminal use; mutations are preview-first |
 | `vemo start [--preset ...] [--profile ...] [--apply]` | preview or apply the product onboarding path |
 | `vemo report [--days N] [--json]` | show observed local value, verification, readiness, and next actions |
-| `vemo platform [--json] [--check]` | show read-only planes, capability seams, relationship invariants, and local delivery posture; optionally fail preflight |
-| `vemo extensions [--json] [--check]` | inspect declarative capabilities, dependencies, activation order, contributions, and stable composition failures |
+| `vemo platform [--json] [--check]` | show read-only planes, decision/evidence contracts, relationship invariants, installation-probe availability, and local delivery posture |
+| `vemo extensions [--json] [--check]` | inspect declarative capabilities, compatibility/permission metadata, activation order, contributions, and stable composition failures |
 | `vemo init [--preset python\|node\|cpp\|docs]` | low-level setup (used by `vemo start --apply`) |
 | `vemo status` | plain-language dashboard: mode · tier · enforcement · budget · auto mode · active task |
 | `vemo context` | machine-read session brief (≤20 lines: task · gates · budget · rules) — read this, not the raw config |

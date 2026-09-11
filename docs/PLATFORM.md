@@ -88,7 +88,7 @@ is `incomplete`; a complete row still means “the composition is wired,” not 
 ## Relationship invariants
 
 DeepSeek Harness makes an important distinction: runtime invariants should protect observable relationships,
-not merely confirm that a package, method, or plugin exists. VEMO applies that rule to the two relationships
+not merely confirm that a package, method, or plugin exists. VEMO applies that rule to the relationships
 it can inspect locally without taking authority from the existing gates:
 
 - `ring1_adapter_binding` derives event/action bindings from the canonical hook map and each installed adapter.
@@ -97,6 +97,12 @@ it can inspect locally without taking authority from the existing gates:
 - `verification_receipt_chain` checks that an observed receipt is valid JSON, names a safe task record, and
   points to a non-empty evidence log under `.vemo/run/`. It checks referential integrity without reading log
   content or reimplementing the push gate's fingerprint and acceptance rules.
+- `judge_evidence_ledger` validates the legacy-prefix anchor and every schema-v1 hash-linked judge row without
+  emitting verdict, actor, or evidence text. `selfcheck` and the required-judge gate additionally reject ledger
+  deletions/reordering visible in the staged/worktree or CI comparison.
+- `installation_live_fire` reports whether an installed manifest and the bounded probe runtime are available.
+  The actual allow/deny/fail-closed probes run under `setup check`; platform output does not pretend that static
+  presence proves they ran.
 
 An absent optional adapter or receipt is `not_observed`. A present but malformed, incomplete, unsafe, or
 dangling relationship is `fail`. `vemo platform --check` exits non-zero when a required component or seam is
@@ -139,9 +145,9 @@ not claim that a remote host requires the check: branch protection is always rep
 check on protected branches.
 
 The platform command is therefore a preflight and integration contract, not a compliance certificate. It is
-safe for local dashboards and adapter diagnostics. Schema version `3` adds the resolved extension composition
-and makes composition failure part of check status. The version must change again when field meaning or stable
-IDs change incompatibly.
+safe for local dashboards and adapter diagnostics. Schema version `4` adds the policy-decision contract,
+hash-linked judge-ledger posture, extension compatibility metadata, and installation live-fire availability.
+The version must change again when field meaning or stable IDs change incompatibly.
 
 ## What was learned from Cordis
 

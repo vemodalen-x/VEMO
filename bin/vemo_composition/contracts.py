@@ -9,6 +9,7 @@ MANIFEST_SCHEMA_VERSION = 1
 MAX_CAPABILITIES = 64
 MAX_SEAMS = 32
 MAX_TOTAL_SEAMS = 128
+MAX_PERMISSIONS = 32
 PLATFORM_OWNERS = {"ingress", "control", "policy", "execution", "enforcement", "evidence"}
 ROLE_IDS = {"definition", "provider", "consumer"}
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
@@ -159,6 +160,18 @@ def _validate_string_list(value, field, extension_id, source, allow_empty=True):
     return normalized, issues
 
 
+def _validate_compatibility(value, extension_id, source):
+    """Normalize the optional major-version compatibility declaration. @codex-comment"""
+    if value is None or value == {}:
+        return {}, []
+    if not isinstance(value, dict) or set(value) != {"vemo_major"}:
+        return {}, [issue("manifest_compatibility_fields", extension=extension_id, source=source)]
+    major = value.get("vemo_major")
+    if isinstance(major, bool) or not isinstance(major, int) or not 1 <= major <= 999:
+        return {}, [issue("manifest_compatibility_version", extension=extension_id, source=source)]
+    return {"vemo_major": major}, []
+
+
 def _validate_platform_role(value, extension_id, source):
     """Validate one Definition/Provider/Consumer role and its local path quorum. @codex-comment"""
     issues = []
@@ -256,8 +269,9 @@ def validate_manifest(value, source, contribution_specs=None):
         return None, [issue("manifest_source_unsafe")]
     if not isinstance(value, dict):
         return None, [issue("manifest_type", source=source)]
-    expected = {"schema_version", "id", "name", "version", "provides", "requires", "contributes"}
-    if set(value) != expected:
+    required = {"schema_version", "id", "name", "version", "provides", "requires", "contributes"}
+    optional = {"compatibility", "permissions"}
+    if not required <= set(value) or not set(value) <= required | optional:
         issues.append(issue("manifest_fields", source=source))
     extension_id = value.get("id") if valid_id(value.get("id")) else None
     if type(value.get("schema_version")) is not int or value.get("schema_version") != MANIFEST_SCHEMA_VERSION:
@@ -278,6 +292,17 @@ def validate_manifest(value, source, contribution_specs=None):
     )
     issues.extend(provide_issues)
     issues.extend(require_issues)
+    permissions, permission_issues = _validate_string_list(
+        value.get("permissions", []), "permissions", extension_id, source, allow_empty=True
+    )
+    if len(permissions) > MAX_PERMISSIONS:
+        permission_issues.append(issue("manifest_field_count", extension=extension_id,
+                                       source=source, field="permissions"))
+    compatibility, compatibility_issues = _validate_compatibility(
+        value.get("compatibility"), extension_id, source
+    )
+    issues.extend(permission_issues)
+    issues.extend(compatibility_issues)
     contributes = value.get("contributes")
     normalized_contributions = {key: [] for key in specs}
     if not isinstance(contributes, dict) or not set(contributes) <= set(specs):
@@ -296,6 +321,8 @@ def validate_manifest(value, source, contribution_specs=None):
         "version": version,
         "provides": list(provides),
         "requires": list(requires),
+        "permissions": list(permissions),
+        "compatibility": compatibility,
         "contributes": normalized_contributions,
     }, []
 

@@ -16,6 +16,16 @@ MAX_EXTENSIONS = 64
 HOST_CAPABILITIES = ("vemo.platform",)
 
 
+def _host_major(root):
+    """Return the local VEMO major version without exposing paths or file contents. @codex-comment"""
+    try:
+        value = (Path(root) / "VERSION").read_text(encoding="utf-8").strip()
+        major = value.split(".", 1)[0]
+        return int(major) if major.isdigit() else None
+    except OSError:
+        return None
+
+
 def _resolve_local_file(root, relative, boundary):
     """Resolve a file while rejecting missing, invalid, or symlink-escaped targets. @codex-comment"""
     try:
@@ -172,12 +182,20 @@ class ExtensionLoader:
             return report
 
         desired = {}
+        host_major = _host_major(self.root)
         for manifest, source in manifests:
             normalized, manifest_issues = validate_manifest(
                 manifest, source, self.context.contribution_specs
             )
             issues.extend(manifest_issues)
             if normalized is None:
+                continue
+            required_major = normalized["compatibility"].get("vemo_major")
+            if required_major is not None and host_major is None:
+                issues.append(issue("extension_host_version_unknown", extension=normalized["id"], source=source))
+                continue
+            if required_major is not None and required_major != host_major:
+                issues.append(issue("extension_host_version_incompatible", extension=normalized["id"], source=source))
                 continue
             desired[source] = {
                 "id": normalized["id"],

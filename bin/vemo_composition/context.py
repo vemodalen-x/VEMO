@@ -311,6 +311,8 @@ class CompositionContext:
                 "state": state_by_token[record["token"]],
                 "provides": list(manifest["provides"]),
                 "requires": list(manifest["requires"]),
+                "permissions": list(manifest.get("permissions", [])),
+                "compatibility": dict(manifest.get("compatibility", {})),
                 "waiting_on": waiting_on,
             })
         states = list(state_by_token.values())

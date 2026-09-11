@@ -222,7 +222,8 @@ def _desired(source, root, preset):
 
 
 def _environment(root):
-    checks = [{"name": "Python", "ok": sys.version_info >= (3, 10), "detail": sys.version.split()[0]},
+    checks = [{"name": "Python", "ok": sys.version_info >= (3, 10), "detail": sys.version.split()[0],
+               "runtime_source": "setup_process", "remediation": "安装 Python 3.10+ 并重新运行检查。"},
               {"name": "Git", "ok": True, "detail": run(["git", "--version"], root).stdout.strip()}]
     try:
         bash = run(["bash", "-c", 'test "${BASH_VERSINFO[0]}" -ge 4'], root)
@@ -363,6 +364,48 @@ def _python_probes(root, hashes):
                        "output": (result.stdout + result.stderr)[-6000:]}
             except (OSError, subprocess.TimeoutExpired) as exc:
                 yield {"name": name, "ok": False, "exit_code": -1, "output": str(exc)}
+        probe_root = runtime / "live-fire"
+        (probe_root / "tasks").mkdir(parents=True)
+        (probe_root / ".vemo").mkdir()
+        (probe_root / "allowed").mkdir()
+        (probe_root / "vemo.config.yaml").write_text(
+            "enforcement:\n  mode: enforce\n  block_on: [scope_violation]\n"
+            "  fail_closed: [scope_violation]\n  degrade_gracefully: false\n",
+            encoding="utf-8",
+        )
+        (probe_root / "tasks" / "T-setup-live-fire.md").write_text(
+            "---\nid: T-setup-live-fire\nrisk: R1\nstate: PlanCreated\n"
+            "scope_in: [\"allowed/**\"]\nheartbeat: 2099-01-01T00:00:00Z\n---\n",
+            encoding="utf-8",
+        )
+        dispatcher = runtime / "enforcement" / "hooks" / "run.py"
+        validator = runtime / "enforcement" / "validators" / "task_state.py"
+
+        def live_fire(name, target, expected_exit, remediation):
+            request = json.dumps({"tool_name": "Write", "tool_input": {
+                "file_path": str(probe_root / target), "content": "probe\n",
+            }})
+            try:
+                result = run([sys.executable, "-I", "-S", "-B", str(dispatcher), "edit"],
+                             probe_root, input=request)
+                return {"name": name, "kind": "live_fire", "ok": result.returncode == expected_exit,
+                        "exit_code": result.returncode, "expected_exit": expected_exit,
+                        "output": (result.stdout + result.stderr)[-2000:], "remediation": remediation}
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                return {"name": name, "kind": "live_fire", "ok": False, "exit_code": -1,
+                        "expected_exit": expected_exit, "output": str(exc), "remediation": remediation}
+
+        yield live_fire("Guard allow live-fire", "allowed/probe.py", 0,
+                        "检查任务 scope_in 与目标路径是否一致。")
+        yield live_fire("Guard deny live-fire", "outside.py", 2,
+                        "确认 scope_violation 已启用且 dispatcher 使用当前任务状态。")
+        disabled = validator.with_suffix(".disabled")
+        validator.replace(disabled)
+        try:
+            yield live_fire("Guard fail-closed live-fire", "allowed/probe.py", 2,
+                            "恢复 validator，并保持 scope_violation 在 fail_closed 列表中。")
+        finally:
+            disabled.replace(validator)
 
 
 def check_install(target, expected=None):

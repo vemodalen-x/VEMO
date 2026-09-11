@@ -40,6 +40,8 @@ except Exception:
 
 WRITE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 TELE = os.path.join(ROOT, ".vemo", "telemetry.jsonl")
+POLICY_DECISION_VERSION = 1
+POLICY_EFFECTS = frozenset({"allow", "deny", "ask"})
 
 SECRET_RE = re.compile(
     r'(api[_-]?key|secret|password|token)["\' ]*[:=]["\' ]*[A-Za-z0-9/_+\-]{16,}'
@@ -224,10 +226,31 @@ def fail_closed(rule):
     return listed and not cfg("enforcement.degrade_gracefully", False)
 
 
+def decision_envelope(effect, reason_code, obligations=(), **details):
+    """Build the portable, content-minimized PDP result consumed by host adapters. @codex-comment"""
+    if effect not in POLICY_EFFECTS:
+        raise ValueError("unknown policy effect")
+    safe_details = {
+        key: value for key, value in details.items()
+        if key in {"target", "session", "why", "guard", "tool"}
+        and isinstance(value, (str, int, float, bool, type(None)))
+    }
+    return {
+        "schema_version": POLICY_DECISION_VERSION,
+        "effect": effect,
+        "reason_code": str(reason_code),
+        "obligations": sorted({str(item) for item in obligations if item}),
+        "details": safe_details,
+    }
+
+
 def block(rule, msg, **kw):
     """Central block/monitor/telemetry decision for one violation."""
-    log(rule, **kw)                                   # blocks are always logged — audit first
+    envelope = decision_envelope("deny", rule, ("resolve_violation",), **kw)
+    log(rule, decision=envelope, **kw)                # blocks are always logged — audit first
     if monitor():
+        envelope = decision_envelope("allow", rule, ("monitor_only", "resolve_violation"), **kw)
+        log("policy_decision_monitor_override", decision=envelope)
         print(f"[VEMO] {msg}  (monitor mode: logged, not blocking)", file=sys.stderr)
         return 0
     print(f"[VEMO] BLOCKED {msg}", file=sys.stderr)
@@ -236,7 +259,7 @@ def block(rule, msg, **kw):
 
 def allow(rule, **kw):
     if tele_level() == "full":
-        log("allow_" + rule, **kw)
+        log("allow_" + rule, decision=decision_envelope("allow", rule, (), **kw), **kw)
     return 0
 
 
@@ -254,7 +277,11 @@ def target_of(d):
 
 def degraded(rule, what):
     """The check itself failed (validator error). A missing guard is not a safe guard."""
-    log("guard_degraded", rule=rule, target=what)
+    effect = "deny" if fail_closed(rule) else "allow"
+    obligations = ("repair_guard",) if effect == "deny" else ("repair_guard", "degraded_allow")
+    envelope = decision_envelope(effect, "guard_degraded", obligations,
+                                 guard=rule, target=what)
+    log("guard_degraded", rule=rule, target=what, decision=envelope)
     if fail_closed(rule):
         print(f"[VEMO] BLOCKED (fail-closed): {rule} cannot verify '{what}' (validator error). "
               f"Fix the error, or set enforcement.degrade_gracefully: true to opt into fail-open.", file=sys.stderr)
@@ -461,6 +488,18 @@ def _selftest():
     """Two-way hermetic check of strip_data_regions against the real DESTRUCTIVE set (no I/O).
     Literals are concatenated so this source file is not itself flagged as a dangerous command."""
     pp, rr = "git" + " push --force", "rm" + " -rf"
+
+    contract = decision_envelope("ask", "approval_required", ("human_approval",),
+                                 target="src/app.py", cmd="secret command", private="hidden")
+    assert contract == {
+        "schema_version": 1, "effect": "ask", "reason_code": "approval_required",
+        "obligations": ["human_approval"], "details": {"target": "src/app.py"},
+    }, "policy decision envelope is stable and content-minimizing"
+    try:
+        decision_envelope("maybe", "invalid")
+        assert False, "unknown policy effects must fail"
+    except ValueError:
+        pass
 
     def hits(cmd):
         scan = strip_data_regions(cmd)

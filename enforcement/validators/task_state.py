@@ -46,6 +46,8 @@ TIER_RANK = {"R0": 1, "R1": 2, "R2": 3}
 EMPTY_SNAPSHOT = "empty-diff"
 LEGACY_EMPTY_SNAPSHOT = hashlib.sha256(b"").hexdigest()  # what empty diffs hashed to before the sentinel
 _NON_BINDING_SNAPSHOTS = frozenset({EMPTY_SNAPSHOT, LEGACY_EMPTY_SNAPSHOT, "invalid-range", "unresolved-range"})
+JUDGE_LEDGER_VERSION = 1
+JUDGE_LEDGER_EMPTY_HASH = hashlib.sha256(b"").hexdigest()
 
 
 def _binds_to_content(snapshot):
@@ -53,6 +55,94 @@ def _binds_to_content(snapshot):
     text = "" if snapshot is None else str(snapshot)
     return (len(text) == 64 and all(c in "0123456789abcdef" for c in text)
             and text not in _NON_BINDING_SNAPSHOTS)
+
+
+def _judge_entry_hash(row):
+    """Hash one linked ledger row without its self-referential entry hash. @codex-comment"""
+    payload = {key: value for key, value in row.items() if key != "entry_hash"}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                           separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _judge_ledger_integrity():
+    """Validate the legacy-prefix anchor and every subsequent hash-linked judge row. @codex-comment"""
+    try:
+        with open(JUDGE_LOG, "rb") as handle:
+            raw_lines = handle.readlines()
+    except FileNotFoundError:
+        return {"valid": True, "observed": False, "legacy_rows": 0, "linked_rows": 0,
+                "head_hash": JUDGE_LEDGER_EMPTY_HASH, "failure_codes": []}
+    except OSError:
+        return {"valid": False, "observed": True, "legacy_rows": 0, "linked_rows": 0,
+                "head_hash": None, "failure_codes": ["ledger_unreadable"]}
+    legacy_bytes = bytearray()
+    legacy_rows = linked_rows = 0
+    linked = False
+    head_hash = None
+    failures = []
+    for number, raw in enumerate(raw_lines, 1):
+        try:
+            row = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            failures.append("row_%d_invalid_json" % number)
+            continue
+        if not isinstance(row, dict):
+            failures.append("row_%d_not_object" % number)
+            continue
+        is_linked = any(key in row for key in ("ledger_version", "prev_hash", "entry_hash"))
+        if not linked and not is_linked:
+            legacy_bytes.extend(raw)
+            legacy_rows += 1
+            continue
+        if linked and not is_linked:
+            failures.append("row_%d_legacy_after_linked" % number)
+            continue
+        expected_previous = (hashlib.sha256(bytes(legacy_bytes)).hexdigest()
+                             if not linked else head_hash)
+        linked = True
+        linked_rows += 1
+        if row.get("ledger_version") != JUDGE_LEDGER_VERSION:
+            failures.append("row_%d_version" % number)
+        if row.get("prev_hash") != expected_previous:
+            failures.append("row_%d_prev_hash" % number)
+        calculated = _judge_entry_hash(row)
+        if row.get("entry_hash") != calculated:
+            failures.append("row_%d_entry_hash" % number)
+        head_hash = row.get("entry_hash") if isinstance(row.get("entry_hash"), str) else None
+    if not linked:
+        head_hash = hashlib.sha256(bytes(legacy_bytes)).hexdigest()
+    return {"valid": not failures, "observed": bool(raw_lines), "legacy_rows": legacy_rows,
+            "linked_rows": linked_rows, "head_hash": head_hash,
+            "failure_codes": failures[:20]}
+
+
+def _judge_log_has_deletions():
+    """Detect ledger deletion/reordering in the current staged/worktree or CI comparison. @codex-comment"""
+    diff_range = os.environ.get("VEMO_DIFF_RANGE")
+    commands = []
+    if diff_range:
+        if diff_range.startswith("-") or any(c in diff_range for c in ("\0", "\n", "\r")):
+            return False  # _judge_snapshot owns invalid-range semantics and blocks independently
+        commands.append(["git", "-C", ROOT, "diff", "--no-renames", "--unified=0",
+                         diff_range, "--", ".vemo/judge.jsonl"])
+    else:
+        commands.extend([
+            ["git", "-C", ROOT, "diff", "--no-renames", "--unified=0", "--cached", "--", ".vemo/judge.jsonl"],
+            ["git", "-C", ROOT, "diff", "--no-renames", "--unified=0", "--", ".vemo/judge.jsonl"],
+        ])
+    try:
+        for command in commands:
+            result = subprocess.run(command, capture_output=True, timeout=30, text=True,
+                                    encoding="utf-8", errors="replace")
+            if result.returncode != 0:
+                return False  # unresolved ranges are blocked by the content-binding check
+            if any(line.startswith("-") and not line.startswith("---")
+                   for line in result.stdout.splitlines()):
+                return True
+    except OSError:
+        return True
+    return False
 
 
 CHANGE_CLASS_RANK = {
@@ -254,7 +344,8 @@ def _load_yaml_subset(text):
 
 def _parse_front_matter(path):
     try:
-        text = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
     except OSError:
         return {}
     if not text.lstrip().startswith("---"):
@@ -558,13 +649,14 @@ def _judge_records(task_id):
     """All judge provenance rows for a task from the append-only .vemo/judge.jsonl."""
     rows = []
     try:
-        for line in open(JUDGE_LOG, encoding="utf-8"):
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue
-            if row.get("task") == task_id:
-                rows.append(row)
+        with open(JUDGE_LOG, encoding="utf-8") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if row.get("task") == task_id:
+                    rows.append(row)
         return rows
     except OSError:
         return []
@@ -653,6 +745,10 @@ def _judge_gate_result(fm, required):
     """Return ok/block for the front-matter verdict plus the required pass suffix in the judge log."""
     if required <= 0:
         return "ok"
+    integrity = _judge_ledger_integrity()
+    if not integrity["valid"] or _judge_log_has_deletions():
+        codes = integrity["failure_codes"] or ["ledger_lines_deleted"]
+        return "block:judge-ledger-integrity=%s" % ",".join(codes)
     v = _dig(fm, "judge.verdict")
     if v != "pass":
         return f"block:judge-verdict={v} (requires {required} governance-judge pass record(s))"
@@ -825,9 +921,14 @@ def judge_record(task, verdict, evidence="", confidence=""):
     if verdict == "pass" and not _binds_to_content(snapshot):
         return ("refused:%s — snapshot '%s' binds to no code, so this pass would prove nothing. Stage the "
                 "change under review, or set VEMO_DIFF_RANGE to a range that resolves." % (task, snapshot or "unavailable"))
+    integrity = _judge_ledger_integrity()
+    if not integrity["valid"] or _judge_log_has_deletions():
+        return "refused:%s — judge ledger integrity failed; restore the append-only log before recording." % task
     row = {"ts": _utc_stamp(), "task": task, "verdict": verdict,
            "session": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("VEMO_SESSION") or "unknown",
-           "snapshot": snapshot, "evidence": evidence, "confidence": confidence}
+           "snapshot": snapshot, "evidence": evidence, "confidence": confidence,
+           "ledger_version": JUDGE_LEDGER_VERSION, "prev_hash": integrity["head_hash"]}
+    row["entry_hash"] = _judge_entry_hash(row)
     os.makedirs(os.path.dirname(JUDGE_LOG), exist_ok=True)
     with open(JUDGE_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1405,6 +1506,11 @@ def selfcheck():
                               "(track it: ignore `.vemo/*` with `!.vemo/judge.jsonl`)")
         except OSError:
             pass
+    ledger = _judge_ledger_integrity()
+    if not ledger["valid"]:
+        issues.append("judge ledger integrity failed: %s" % ", ".join(ledger["failure_codes"]))
+    if _judge_log_has_deletions():
+        issues.append("judge ledger is append-only: deletion or reordering detected in the current diff")
     # every ENFORCED-BY claim in safety.spec must map to an existing mechanism file
     spec = os.path.join(ROOT, "specs", "safety.spec.md")
     if os.path.exists(spec):

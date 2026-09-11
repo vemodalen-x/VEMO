@@ -115,6 +115,40 @@ class JudgeSnapshotTests(unittest.TestCase):
         with open(self.temp / ".vemo" / "judge.jsonl", "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row) + "\n")
 
+    def test_new_rows_hash_link_the_legacy_prefix_and_each_other(self):
+        self._stage_change()
+        legacy = {"task": "T-old", "verdict": "pass"}
+        legacy_bytes = (json.dumps(legacy) + "\n").encode()
+        (self.temp / ".vemo" / "judge.jsonl").write_bytes(legacy_bytes)
+        self.assertTrue(self._record("pass").startswith("recorded:"))
+        self.assertTrue(self._record("pass").startswith("recorded:"))
+        rows = [json.loads(line) for line in
+                (self.temp / ".vemo" / "judge.jsonl").read_text().splitlines()]
+        self.assertEqual(hashlib.sha256(legacy_bytes).hexdigest(), rows[1]["prev_hash"])
+        self.assertEqual(rows[1]["entry_hash"], rows[2]["prev_hash"])
+        self.assertEqual(1, rows[1]["ledger_version"])
+        self.assertTrue(self.ts._judge_ledger_integrity()["valid"])
+
+    def test_tampered_linked_row_blocks_integrity_and_gate(self):
+        self._stage_change()
+        self.assertTrue(self._record("pass").startswith("recorded:"))
+        path = self.temp / ".vemo" / "judge.jsonl"
+        row = json.loads(path.read_text())
+        row["confidence"] = "low"
+        path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+        self.assertFalse(self.ts._judge_ledger_integrity()["valid"])
+        self.assertTrue(self.ts._judge_gate_result(self._fm(), 1).startswith(
+            "block:judge-ledger-integrity="))
+
+    def test_legacy_row_after_linked_suffix_is_rejected(self):
+        self._stage_change()
+        self.assertTrue(self._record("pass").startswith("recorded:"))
+        with (self.temp / ".vemo" / "judge.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"task": "T-old", "verdict": "pass"}) + "\n")
+        status = self.ts._judge_ledger_integrity()
+        self.assertFalse(status["valid"])
+        self.assertTrue(any("legacy_after_linked" in code for code in status["failure_codes"]))
+
     def test_binds_to_content_accepts_only_real_digests(self):
         """The whitelist is the whole defense, so pin its shape directly."""
         self.assertTrue(self.ts._binds_to_content("a" * 64))

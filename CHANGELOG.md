@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/); versioning: [SemVer](ht
 ## [Unreleased]
 
 ### Added
+- **Report-driven governance kernel increment**: policy decisions now have a content-minimized schema-v1
+  `allow|deny|ask` envelope behind the existing exit-code adapter contract; new judge records form a SHA-256
+  chain anchored to the untouched legacy prefix, with selfcheck/gate rejection for malformed links and
+  diff-visible deletion/reordering; extension schema v1 accepts optional bounded `compatibility.vemo_major`
+  and `permissions` metadata without granting execution authority; installed diagnostics execute isolated
+  allow/deny/fail-closed live-fire probes; `vemo platform` schema v4 reports these contracts and postures.
 - **Command-guard read-only probe exemption** (`enforcement/hooks/run.py` `is_readonly_probe`): a DESTRUCTIVE
   literal that appears only as the text argument of a read-only inspection tool (`grep -n 'rm -rf' log`,
   `rg "git push --force" .`, `cat`/`head`/`tail`/`wc`/`jq`/`od`/…) is no longer blocked — such a command has
