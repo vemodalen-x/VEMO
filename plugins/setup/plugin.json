@@ -1,0 +1,1 @@
+{"version": 1, "name": "setup", "commands": {"setup": ["plugins/setup/entry.py", "setup"], "ui": ["plugins/setup/entry.py", "ui"]}}

@@ -1,115 +1,15 @@
 #!/usr/bin/env bash
-# VEMO push gate — safety.spec#3 (acceptance-before-push) + required judge provenance, enforced at the
-# moment that matters. Installed as .git/hooks/pre-push by enforcement/install.sh and mirrored in CI
-# (enforcement/ci/vemo-ci.yml), so `git push --no-verify` only defers the same check to the server.
-#
-# What it requires of the ACTIVE task (validators/task_state.py is the single source of logic):
-#   * risk R1+  -> state >= AcceptancePassed, evidence file exists, and — when paths.build/smoke are
-#                  configured — a machine-written verify-run receipt with exit 0 (executed ground
-#                  truth; exit codes typed into front-matter do not count).
-#   * judge-required tiers -> judge.verdict == pass in front-matter AND enough contiguous pass records
-#                  in .vemo/judge.jsonl for capability.tier × risk.
-#   * unattended (auto mode ON) R1+ -> at least one judge pass + provenance regardless of tier config.
 set -euo pipefail
-SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SELF/../.." && pwd)"
-# installed copy lives in .git/hooks/ — fall back to the repo root git reports
-[ -f "$ROOT/enforcement/validators/task_state.py" ] || ROOT="$(git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)"
 export VEMO_ROOT="$ROOT"
-# Preserve project paths with whitespace/Unicode as one argument in every gate invocation.
-V=(python3 "$ROOT/enforcement/validators/task_state.py")
-REMOTE_NAME="${1:-}"
-REMOTE_SELECTOR=(--remotes)
-[ -z "$REMOTE_NAME" ] || REMOTE_SELECTOR=("--remotes=$REMOTE_NAME")
-
-# Collect EVERY task file changed in the pushed range (not just the active task) so a multi-task
-# push cannot smuggle an unaccepted task past the gate on the strength of one accepted sibling.
-# git feeds "<local_ref> <local_sha> <remote_ref> <remote_sha>" lines on stdin; CI (no stdin) sets
-# VEMO_DIFF_RANGE instead. No range info -> gate the active task only (same as before).
-TASK_ARGS=()
-add_range_tasks(){ # $1 = a rev range or single rev for `git diff --name-only`
-  while IFS= read -r f; do
-    case "$f" in
-      tasks/_*|tasks/Archive/*) : ;;
-      tasks/*.md) [ -f "$ROOT/$f" ] && TASK_ARGS+=(--task-file "$f") ;;
-    esac
-  done < <(git -C "$ROOT" diff --name-only $1 2>/dev/null || true)
-}
 ZERO=0000000000000000000000000000000000000000
-# Judge snapshots must be computed over the SAME diff the server will re-check. Without a range the
-# validator falls back to `git diff --cached`, which is EMPTY right after a commit — so the local
-# gate bound verdicts to nothing while CI bound them to the pushed range, and the two disagreed
-# about one commit. Export the sole non-deletion range; multiple such refs are rejected below because
-# one scalar snapshot cannot bind them all. Git's stdin is authoritative when present:
-# an inherited VEMO_DIFF_RANGE may describe an older, already-reviewed push and must not override the
-# refs being pushed now. CI supplies no stdin, so only that mode keeps its environment-provided range.
-PUSH_RANGE=""
-PUSH_RANGE_COUNT=0
-SAW_PUSH_INPUT=0
-while read -r _lref lsha _rref rsha; do
-  SAW_PUSH_INPUT=1
-  [ -z "${lsha:-}" ] || [ "$lsha" = "$ZERO" ] && continue   # branch deletion: nothing to gate
-  if [ -n "${rsha:-}" ] && [ "$rsha" != "$ZERO" ]; then
-    add_range_tasks "$rsha..$lsha"
-    # Two-dot compares the actual remote and local trees. Three-dot is unsafe on a non-fast-forward
-    # update because it starts at their merge-base and omits remote-only files this push deletes.
-    THIS_RANGE="$rsha..$lsha"
-  else
-    # A new ref has no remote SHA. Bind to every commit not already reachable from THIS remote,
-    # never just tip~1..tip (which could hide earlier unreviewed commits). A scalar snapshot is safe
-    # only with one boundary; no/multiple boundaries fail closed and ask for a fetched, linear base.
-    NEW_BASES=()
-    while IFS= read -r commit; do
-      case "$commit" in -*) NEW_BASES+=("${commit#-}") ;; esac
-    done < <(git -C "$ROOT" rev-list --boundary "$lsha" --not "${REMOTE_SELECTOR[@]}" 2>/dev/null || true)
-    if [ "${#NEW_BASES[@]}" -ne 1 ]; then
-      echo "  ✗ new-branch-range-unresolved: expected one known boundary on remote '${REMOTE_NAME:-<all>}', found ${#NEW_BASES[@]}; fetch the target remote or push reviewed history through an existing ref" >&2
-      exit 1
-    fi
-    THIS_RANGE="${NEW_BASES[0]}...$lsha"
-    add_range_tasks "${NEW_BASES[0]}..$lsha"
+RANGE="${VEMO_DIFF_RANGE:-}"
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue
+  if [ -n "$remote_sha" ] && [ "$remote_sha" != "$ZERO" ]; then
+    [ -z "$RANGE" ] || { echo "[VEMO] push one ref at a time" >&2; exit 2; }
+    RANGE="$remote_sha..$local_sha"
   fi
-  [ -n "$PUSH_RANGE" ] || PUSH_RANGE="$THIS_RANGE"
-  PUSH_RANGE_COUNT=$((PUSH_RANGE_COUNT + 1))
-done || true
-if [ "$PUSH_RANGE_COUNT" -gt 1 ]; then
-  echo "  ✗ multi-ref-push-unsupported: push one non-deletion ref at a time so every judge verdict binds to the exact pushed range" >&2
-  exit 1
-fi
-if [ "$SAW_PUSH_INPUT" -eq 1 ] && [ "$PUSH_RANGE_COUNT" -eq 0 ]; then exit 0; fi
-if [ "$SAW_PUSH_INPUT" -eq 1 ]; then
-  if [ -n "$PUSH_RANGE" ]; then export VEMO_DIFF_RANGE="$PUSH_RANGE"; else unset VEMO_DIFF_RANGE; fi
-fi
-[ ${#TASK_ARGS[@]} -eq 0 ] && [ -n "${VEMO_DIFF_RANGE:-}" ] && add_range_tasks "$VEMO_DIFF_RANGE"
-
-fail=0
-say(){ echo "  ✗ $1" >&2; fail=1; }
-
-acc="$("${V[@]}" gate-check --gate acceptance-before-push ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
-case "$acc" in
-  ok) : ;;
-  block:no-active-task) : ;;   # nothing claims this push; plan-before-commit already gated code commits
-  block:*) say "acceptance-before-push: ${acc#block:} (safety.spec#3)" ;;
-  *) say "acceptance-before-push: validator error '$acc' (fail-closed)" ;;
-esac
-
-if [ "$("${V[@]}" config-get --field enforcement.require_judge_on_R2 2>/dev/null)" != "false" ]; then
-  j="$("${V[@]}" gate-check --gate required-judge ${TASK_ARGS[@]+"${TASK_ARGS[@]}"} 2>&1 || true)"
-  case "$j" in
-    ok|block:no-active-task) : ;;
-    block:*) say "required judge: ${j#block:} (verify.spec#3)" ;;
-    *) say "required judge: validator error '$j' (fail-closed)" ;;
-  esac
-fi
-
-tri="$("${V[@]}" trifecta-check 2>/dev/null || echo ok)"
-case "$tri" in
-  block:*) say "rule-of-two: ${tri#block:} (safety.spec, OWASP ASI01)" ;;
-esac
-
-if [ "$fail" -ne 0 ]; then
-  echo "[VEMO] push blocked. Fix the cause above (run \`vemo verify\` for a fresh receipt);" >&2
-  echo "       --no-verify only defers this to CI, which runs the same checks." >&2
-  exit 1
-fi
-exit 0
+done
+[ -n "$RANGE" ] || { echo "[VEMO] cannot determine push range" >&2; exit 2; }
+exec python3 "$ROOT/bin/vemo" check --range "$RANGE"

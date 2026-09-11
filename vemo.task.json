@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "id": "T-20260911-minimal-governance-kernel-and-plugin-extraction",
+  "scope": ["AGENTS.md", "README.md", "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "assets/**", "VERSION", ".gitignore", ".claude/**", "vemo.json", "vemo.task.json", "vemo.task.example.json", "vemo.config.yaml", "bin/**", "enforcement/**", "specs/**", "plugins/**", "extensions/**", "skill/**", "agents/**", "ui/**", "profiles/**", "presets/**", "eval/**", "tests/**", "docs/**", "tasks/**", ".vemo/judge.jsonl", ".vemo/run/**", ".vemo/evidence/**", ".github/**"],
+  "risk": "critical"
+}

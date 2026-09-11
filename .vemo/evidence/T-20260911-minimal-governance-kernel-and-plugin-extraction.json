@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "task": "T-20260911-minimal-governance-kernel-and-plugin-extraction",
+  "snapshot": "fa4b53567d06bb8cae0fa53dac3c7eafc3f1bde636dad4960d8a43425f70813f",
+  "critical": true,
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "python3",
+        "eval/run.py"
+      ],
+      "exit": 0
+    }
+  ],
+  "passed": true,
+  "ts": "2026-09-11T10:36:22Z"
+}

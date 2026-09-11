@@ -1,194 +1,146 @@
 #!/usr/bin/env python3
-"""vemo — one command for the whole framework.
+"""Small CLI adapter for the VEMO governance kernel."""
 
-Usability layer: wraps the enforcement scripts behind friendly verb subcommands so users type
-`vemo status` instead of `python3 enforcement/validators/task_state.py auto-status`. Convention over
-configuration + progressive disclosure: `vemo` alone prints the map; `vemo explain <topic>` teaches a
-concept in one plain sentence. Pure stdlib; resolves its own repo root, so it works wherever VEMO is dropped.
-"""
-import sys, os, subprocess, shutil
+from __future__ import annotations
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # bin/ -> repo root
-os.environ.setdefault("VEMO_ROOT", ROOT)
-PY = sys.executable or "python3"
-TS = [PY, os.path.join(ROOT, "enforcement", "validators", "task_state.py")]
-PRODUCT = os.path.join(ROOT, "bin", "vemo_product.py")
-EXTENSIONS = os.path.join(ROOT, "bin", "vemo_extensions.py")
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
 
+ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("VEMO_ROOT", str(ROOT))
+sys.path.insert(0, str(ROOT / "enforcement"))
+import core
 
-def _ts(*args):
-    return subprocess.run(TS + list(args), capture_output=True, text=True).stdout.strip()
+CORE_COMMANDS = ("task", "check", "verify", "status", "init", "plugin")
 
 
-EXPLAIN = {
-    "tiers": "Risk tiers scale ceremony to blast radius. R0 trivial (docs) = fast path; R1 standard code; "
-             "R2 critical (core/auth/migrations) = review + judge. Default to the LOWEST tier that fits.",
-    "gates": "ENFORCED (mechanical, non-negotiable): scope, no destructive cmd, no secrets, "
-             "acceptance-before-push, risk-tier integrity, required judge depth. ADVISED (your judgment): style, "
-             "comments, decomposition depth.",
-    "auto": "Full-auto mode removes human-APPROVAL pauses (records each decision instead). OFF by default; "
-            "`vemo auto on`. Never relaxes the mechanical guards or the judge. Bounded by a risk ceiling + TTL.",
-    "budget": "Run budget = stop rules for long-horizon / Mythos-class models that 'run until cut off'. "
-              "Hard-stops a runaway when UNATTENDED (auto on); advisory when a human is present.",
-    "judge": "An independent subagent (separate context, told to refute 'done') flips required gates instead "
-             "of the worker self-reporting. Narrow CI R2 uses one pass; security/release/permissions use full depth.",
-    "capability": "capability.tier (frontier|high|medium|low) scales ceremony to MODEL strength. Stronger "
-                  "model -> less prescription, more self-verify. Raise it when you upgrade the model.",
-    "presets": "`vemo init --preset python|node|cpp|docs` writes a stack overlay (vemo.config.preset.yaml) so "
-               "VEMO is preconfigured for your repo type. Convention over configuration.",
-    "fleet": "`vemo fleet` is the private local control plane for all Git projects on this PC: discover, "
-             "register, assess, and preview-first onboard against progressive policy profiles.",
-    "verify": "`vemo verify` executes the task's focused/full/release profile and writes an evidence log + a machine "
-              "receipt (.vemo/run/receipt.json). The push gate trusts the receipt — not exit codes "
-              "typed into front-matter. Use `--all-tasks` for a multi-task push.",
-    "start": "`vemo start` previews a low-friction first setup; add `--apply` only after reviewing the plan.",
-    "report": "`vemo report` summarizes observed local events, verification receipts, setup readiness, and next actions. "
-              "It does not upload source code.",
-    "platform": "`vemo platform [--json] [--check]` exposes responsibility planes, Definition/Provider/Consumer "
-                "seams, and content-minimized relationship invariants; `--check` makes failures non-zero.",
-    "extensions": "`vemo extensions [--json] [--check]` resolves declarative manifests by stable capability "
-                  "dependencies. It inspects data only and never executes extension code.",
-}
+def emit(value, code=0):
+    print(json.dumps(value, ensure_ascii=False, indent=2))
+    return code
 
 
-def cmd_status():
-    """Render the compact local operating posture and discovery hints. @codex-comment"""
-    g = lambda f: _ts("config-get", "--field", f)
-    print("VEMO status")
-    print(f"  version         : {g('vemo.version')}")
-    print(f"  capability tier : {g('capability.tier')}   (raise when you upgrade the model)")
-    print(f"  enforcement     : mode={g('enforcement.mode')}  hooks={g('enforcement.hooks')}  ci_backstop={g('enforcement.ci_backstop')}")
-    print(f"  run budget      : {_ts('budget-status')}")
-    print(f"  auto mode       : {_ts('auto-status')}")
-    print(f"  active task     : {_ts('active')}")
-    print("  tip: `vemo explain <tiers|gates|auto|budget|judge|capability|presets|verify|platform|extensions>`")
-    return 0
+def help_text(plugin_commands=None):
+    descriptions = {
+        "task": "create/show the current task authorization",
+        "check": "evaluate an action or the staged/range diff",
+        "verify": "run required commands and write snapshot-bound evidence",
+        "status": "show the derived governance decision",
+        "init": "initialize or migrate the minimal repository contract",
+        "plugin": "list/enable/disable optional local plugins",
+    }
+    lines = ["vemo — Policy · Task · Gate · Verify · Evidence", "", "commands:"]
+    lines.extend(f"  {name:8} {descriptions[name]}" for name in CORE_COMMANDS)
+    if plugin_commands:
+        lines.extend(["", "enabled plugin commands:"])
+        lines.extend(f"  {name:8} plugin={row['plugin']}" for name, row in sorted(plugin_commands.items()))
+    return "\n".join(lines)
 
 
-def cmd_doctor():
-    print(_ts("doctor"))
-    hooks = os.path.exists(os.path.join(ROOT, ".claude", "settings.json"))
-    print("  hooks installed :", "yes" if hooks else "no  (run: vemo init)")
-    for tool in ("git", "python"):
-        print(f"  {tool:15}:", "found" if shutil.which(tool) else "MISSING")
-    return 0
+def task_command(argv):
+    parser = argparse.ArgumentParser(prog="vemo task")
+    sub = parser.add_subparsers(dest="verb", required=True)
+    create = sub.add_parser("create")
+    create.add_argument("--id", required=True)
+    create.add_argument("--scope", nargs="+", required=True)
+    create.add_argument("--risk", choices=("normal", "critical"), default="normal")
+    sub.add_parser("show")
+    args = parser.parse_args(argv)
+    if args.verb == "create":
+        return emit(core.write_task(args.id, args.scope, args.risk, ROOT))
+    task = core.load_task(ROOT)
+    return emit({**task, "approval_digest": core.task_digest(task)})
 
 
-def _presets():
-    d = os.path.join(ROOT, "presets")
-    return sorted(p[:-5] for p in os.listdir(d) if p.endswith(".yaml")) if os.path.isdir(d) else []
+def check_command(argv):
+    parser = argparse.ArgumentParser(prog="vemo check")
+    parser.add_argument("--action", choices=("write", "command")); parser.add_argument("--path")
+    parser.add_argument("--command"); parser.add_argument("--content-stdin", action="store_true")
+    parser.add_argument("--range"); parser.add_argument("--no-evidence", action="store_true")
+    parser.add_argument("--self", action="store_true")
+    args = parser.parse_args(argv)
+    if args.self:
+        try: return emit({"decision": "allow", "reason": "selfcheck_passed", "details": core.selfcheck(ROOT)})
+        except core.VemoError as exc: return emit({"decision": "deny", "reason": "selfcheck_failed", "error": str(exc)}, 2)
+    if args.action:
+        content = sys.stdin.read() if args.content_stdin else None
+        result = core.check_action(args.action, args.path, args.command, content, ROOT)
+    else:
+        result = core.check_merge(ROOT, args.range or os.environ.get("VEMO_DIFF_RANGE"), not args.no_evidence)
+    return emit(result, 0 if result["decision"] == "allow" else 2)
 
 
-def cmd_init(args):
-    preset = args[args.index("--preset") + 1] if "--preset" in args else None
-    dry = "--dry-run" in args
-    if "--minimal" in args:                       # R1: no-install monitor trial (zero friction)
-        import re
-        cfgp = os.path.join(ROOT, "vemo.config.yaml")
-        if os.path.exists(cfgp):
-            _t = open(cfgp).read()                               # read BEFORE opening for write (truncates)
-            open(cfgp, "w").write(re.sub(r"(?m)^(\s*mode:\s*)\w+", r"\1monitor", _t, count=1))
-        os.makedirs(os.path.join(ROOT, "tasks", "Archive"), exist_ok=True)
-        print("[vemo] MINIMAL (monitor mode): enforcement OBSERVES + logs, blocks nothing — no hooks/git installed.")
-        print("       Kick the tires, then turn on real enforcement:  vemo init --preset <python|node|cpp|docs>")
-        return 0
-    if preset and preset not in _presets():
-        print(f"[vemo] unknown preset '{preset}'. Available: {', '.join(_presets()) or '(none)'}")
-        return 2
-    plan = ([f"apply preset '{preset}' -> vemo.config.preset.yaml"] if preset else []) + \
-           ["ensure tasks/ and tasks/Archive/", "install hooks + git pre-commit (enforcement/install.sh)"]
-    if dry:
-        print("[vemo init] DRY RUN — would:"); [print("  -", s) for s in plan]; return 0
-    if preset:
-        shutil.copyfile(os.path.join(ROOT, "presets", preset + ".yaml"),
-                        os.path.join(ROOT, "vemo.config.preset.yaml"))
-        print(f"  ✓ preset '{preset}' applied (vemo.config.preset.yaml)")
-    os.makedirs(os.path.join(ROOT, "tasks", "Archive"), exist_ok=True)
-    inst = os.path.join(ROOT, "enforcement", "install.sh")
-    if os.path.exists(inst):
-        subprocess.run(["bash", inst])
-    print("[vemo] ready. AHA: copy tasks/_TASK_TEMPLATE.md to a task file, set its Scope (In), and code — "
-          "out-of-scope edits are now blocked automatically. `vemo status` shows state.")
-    return 0
+def verify_command(argv):
+    parser = argparse.ArgumentParser(prog="vemo verify"); parser.add_argument("--range")
+    args = parser.parse_args(argv)
+    try: result = core.verify(ROOT, args.range or os.environ.get("VEMO_DIFF_RANGE"))
+    except core.VemoError as exc: return emit({"passed": False, "error": str(exc)}, 2)
+    return emit(result, 0 if result["passed"] else 2)
 
 
-HELP = """vemo <command>
-  ui [--port N] [--no-browser]      open the local browser installation and maintenance wizard
-  setup install|check|uninstall|recover <absolute-project-path> [--apply] [--json]  shared setup lifecycle
-  start [--preset python|node|cpp|docs] [--profile solo|team|regulated] [--apply]  preview/apply product onboarding
-  report [--days N] [--json]         show observed local value and next best actions
-  platform [--json] [--check]        show topology/seams/invariants; --check fails on broken relationships
-  extensions [--json] [--check]      show manifest capabilities/dependencies/load order; --check fails on conflicts
-  init [--preset python|node|cpp|docs] [--minimal] [--dry-run]   low-level setup (--minimal = monitor trial)
-  status                          plain-language dashboard (mode / tier / budget / task)
-  context                         machine-read session brief (<=20 lines: task/gates/budget/rules) — read this, not the raw config
-  verify [--no-cache] [--all-tasks] execute verification; preserve one receipt per task for multi-task pushes
-  doctor                          health check (config + hooks + tools + gates-heartbeat)
-  selfcheck                       internal consistency (ENFORCED-BY claims + config keys must have consumers)
-  eval                            executable conformance harness (validator + hook end-to-end)
-  judge-brief [--lens <l>] [--range <r>]  staged/range-only evidence dossier for a judge pass
-  heartbeat                       stamp the active task's heartbeat in place (no hand-editing the task file)
-  task create|note|state          create/update task records with tool-written UTC timestamps
-  explain <topic>                 tiers | gates | auto | budget | judge | capability | presets | verify | start | report | platform | extensions
-  auto on|off|status              full-auto (unattended) mode (`on` = human at a terminal only)
-  budget status|reset             run budget / stop rules
-  tier <paths...>                 required risk tier for the given paths
-  check <path>                    is a path inside the active task's scope?
-  fleet <command>                 install | discover | register | status | onboard | profiles | audit
-  skill-score                     quality bar for VEMO's own skills (frontmatter/name/catalog parity/backing scripts)
-  skill-audit                     catalog<->disk consistency audit of the skill registry
-  skill-roster                    list VEMO's own skills (name + purpose) — what the agent can invoke"""
+def status_command():
+    try:
+        policy, task = core.load_policy(ROOT), core.load_task(ROOT)
+        result = core.check_merge(ROOT, os.environ.get("VEMO_DIFF_RANGE"))
+        return emit({"policy": core.POLICY_FILE, "task": task["id"], "risk": task["risk"],
+                     "approval_digest": core.task_digest(task), "plugins": policy["plugins"], "merge": result})
+    except core.VemoError as exc:
+        return emit({"merge": {"decision": "deny", "reason": "configuration_invalid"}, "error": str(exc)}, 2)
 
 
-def main():
-    """Route one stable CLI verb to its owning stdlib implementation. @codex-comment"""
-    a = sys.argv[1:]
-    if not a or a[0] in ("help", "-h", "--help"):
-        print(HELP); return 0
-    c = a[0]
-    if c == "ui":
-        from vemo_setup.server import main as setup_ui
-        return setup_ui(a[1:], source=ROOT)
-    if c == "setup":
-        from vemo_setup.cli import main as setup_cli
-        return setup_cli(a[1:], source=ROOT)
-    if c == "status": return cmd_status()
-    if c == "doctor": return cmd_doctor()
-    if c == "verify":  # stream output live — this actually runs the build/smoke
-        return subprocess.run(TS + ["verify-run"] + a[1:]).returncode
-    if c == "selfcheck":  # propagate the real exit code — a red selfcheck must fail the caller
-        return subprocess.run(TS + ["selfcheck"]).returncode
-    if c == "eval": return subprocess.run([PY, os.path.join(ROOT, "eval", "run.py")] + a[1:]).returncode
-    if c in ("context", "judge-brief", "heartbeat"):
-        return subprocess.run(TS + a).returncode
-    if c == "init": return cmd_init(a[1:])
-    if c in ("start", "report", "platform"):
-        return subprocess.run([PY, PRODUCT, c] + a[1:]).returncode
-    if c == "extensions":
-        return subprocess.run([PY, EXTENSIONS] + a[1:]).returncode
-    if c == "explain":
-        print(EXPLAIN.get(a[1], "topics: " + ", ".join(EXPLAIN)) if len(a) > 1 else "topics: " + ", ".join(EXPLAIN))
-        return 0
-    if c == "auto":
-        return subprocess.run([PY, os.path.join(ROOT, "enforcement", "automation", "vemo-auto")] + a[1:]).returncode
-    if c == "budget":
-        print(_ts("budget-" + (a[1] if len(a) > 1 else "status"))); return 0
-    if c == "task":
-        if len(a) < 2 or a[1] not in ("create", "note", "state"):
-            print("usage: vemo task create|note|state [options]"); return 2
-        return subprocess.run(TS + ["task-" + a[1]] + a[2:]).returncode
-    if c == "tier":
-        print(_ts("tier-required", "--paths", *(a[1:] or ["."]))); return 0
-    if c == "check":
-        print(_ts("scope-check", "--path", a[1] if len(a) > 1 else ".")); return 0
-    if c == "fleet":
-        fleet = os.path.join(ROOT, "bin", "vemo_fleet.py")
-        return subprocess.run([PY, fleet, "--source-root", ROOT] + a[1:]).returncode
-    if c in ("skill-score", "skill-audit", "skill-roster"):
-        sk = os.path.join(ROOT, "enforcement", "validators", "skill_check.py")
-        return subprocess.run([PY, sk, c.split("-", 1)[1]]).returncode
-    print("unknown command:", c, "\n" + HELP); return 2
+def init_command(argv):
+    parser = argparse.ArgumentParser(prog="vemo init"); parser.add_argument("--migrate", action="store_true")
+    args = parser.parse_args(argv); (ROOT / core.EVIDENCE_DIR).mkdir(parents=True, exist_ok=True)
+    migration = core.migrate(ROOT) if args.migrate or not (ROOT / core.TASK_FILE).exists() else {"changed": False, "path": core.TASK_FILE}
+    if not (ROOT / core.TASK_FILE).exists():
+        source = ROOT / "vemo.task.example.json"
+        (ROOT / core.TASK_FILE).write_bytes(source.read_bytes())
+        migration = {"changed": True, "path": core.TASK_FILE, "task": "T-example"}
+    installer = ROOT / "enforcement" / "install.sh"
+    result = subprocess.run(["bash", str(installer)], cwd=ROOT) if installer.is_file() else None
+    return emit({"initialized": result is None or result.returncode == 0, "migration": migration},
+                0 if result is None or result.returncode == 0 else 2)
 
 
-if __name__ == "__main__":
-    sys.exit(main() or 0)
+def plugin_command(argv):
+    parser = argparse.ArgumentParser(prog="vemo plugin"); sub = parser.add_subparsers(dest="verb", required=True)
+    sub.add_parser("list")
+    for verb in ("enable", "disable"):
+        command = sub.add_parser(verb); command.add_argument("name")
+    args = parser.parse_args(argv); manifests = core.plugin_manifests(ROOT); policy = core.load_policy(ROOT)
+    if args.verb == "list":
+        return emit({name: {"enabled": name in policy["plugins"], "commands": sorted(row["commands"])}
+                     for name, row in manifests.items()})
+    try: enabled = core.set_plugin(args.name, args.verb == "enable", ROOT)
+    except core.VemoError as exc: return emit({"error": str(exc)}, 2)
+    return emit({"plugins": enabled})
+
+
+def run_plugin(spec, argv):
+    entry, *fixed = spec["argv"]
+    return subprocess.run([sys.executable, str(ROOT / entry), *fixed, *argv], cwd=ROOT).returncode
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    try: plugins = core.enabled_plugin_commands(ROOT)
+    except core.VemoError as exc: return emit({"error": str(exc)}, 2)
+    if not argv or argv[0] in {"-h", "--help", "help"}: print(help_text(plugins)); return 0
+    command, rest = argv[0], argv[1:]
+    try:
+        if command == "task": return task_command(rest)
+        if command == "check": return check_command(rest)
+        if command == "verify": return verify_command(rest)
+        if command == "status": return status_command()
+        if command == "init": return init_command(rest)
+        if command == "plugin": return plugin_command(rest)
+        if command in plugins: return run_plugin(plugins[command], rest)
+    except core.VemoError as exc:
+        return emit({"error": str(exc)}, 2)
+    print(help_text(plugins), file=sys.stderr); return 2
+
+
+if __name__ == "__main__": raise SystemExit(main())

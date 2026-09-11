@@ -1,9 +1,3 @@
-# VEMO server-side authority — the layer a client cannot bypass.
-# Local hooks/pre-commit are fast feedback; THIS is the guarantee: it re-runs the same validator
-# on the pushed/PR range, so `--no-verify` and a tampered client change nothing on a protected main.
-#
-# Install (consuming repo):  mkdir -p .github/workflows && cp enforcement/ci/vemo-ci.yml .github/workflows/
-# Then require the "vemo" check in your branch protection rules — without that, CI is advisory.
 name: vemo
 on:
   pull_request:
@@ -11,38 +5,56 @@ on:
     branches: [main, master]
 
 jobs:
-  vemo:
+  gate:
     runs-on: ubuntu-latest
+    env:
+      VEMO_APPROVED_TASK: ${{ vars.VEMO_APPROVED_TASK }}
+      VEMO_APPROVED_TASK_DIGEST: ${{ vars.VEMO_APPROVED_TASK_DIGEST }}
+      VEMO_APPROVED_BY: ${{ vars.VEMO_APPROVED_BY }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Framework self-consistency (selfcheck — incl. ENFORCED-BY claims map to real mechanisms)
-        run: python3 enforcement/validators/task_state.py selfcheck
-
-      - name: Conformance eval (prove the gates fire, incl. hook end-to-end)
-        run: python3 eval/run.py
-
-      - name: Resolve change range (shared by backstop AND push gate — multi-task pushes gate every task in range)
+      - name: Resolve change range
+        shell: bash
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin "${{ github.base_ref }}" || true
-            RANGE="origin/${{ github.base_ref }}...HEAD"
+            echo "VEMO_DIFF_RANGE=${{ github.event.pull_request.base.sha }}...HEAD" >> "$GITHUB_ENV"
+            echo "VEMO_TRUSTED_REF=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
           else
             BEFORE="${{ github.event.before }}"
             case "$BEFORE" in
-              ''|0000000000000000000000000000000000000000) BEFORE="$(git hash-object -t tree /dev/null)";;
+              ''|0000000000000000000000000000000000000000)
+                BEFORE="$(git hash-object -t tree /dev/null)"
+                TRUSTED_REF=""
+                ;;
+              *) TRUSTED_REF="$BEFORE" ;;
             esac
-            RANGE="${BEFORE}..HEAD"
+            echo "VEMO_DIFF_RANGE=$BEFORE..HEAD" >> "$GITHUB_ENV"
+            echo "VEMO_TRUSTED_REF=$TRUSTED_REF" >> "$GITHUB_ENV"
           fi
-          echo "VEMO_DIFF_RANGE=$RANGE" >> "$GITHUB_ENV"
-
-      - name: Governance backstop on the change range (scope / plan / tier integrity / required judge / secrets)
-        run: bash enforcement/ci/pre-commit
-
-      - name: Executed ground truth (paths.build / paths.smoke, when configured)
-        run: python3 enforcement/validators/task_state.py verify-run --all-tasks
-
-      - name: Push gate (acceptance-before-push + judge provenance + rule-of-two)
-        run: bash enforcement/ci/pre-push < /dev/null
+      - name: Preflight with trusted base evaluator
+        shell: bash
+        run: |
+          [ -n "$VEMO_TRUSTED_REF" ] || { echo "VEMO 2.0 bootstrap requires protected manual approval" >&2; exit 2; }
+          git show "$VEMO_TRUSTED_REF:enforcement/core.py" > "$RUNNER_TEMP/vemo-trusted-core.py" || {
+            echo "trusted base has no VEMO 2.0 evaluator; use the protected bootstrap process" >&2
+            exit 2
+          }
+          python3 - "$RUNNER_TEMP/vemo-trusted-core.py" <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          import sys
+          spec = importlib.util.spec_from_file_location("vemo_trusted_core", sys.argv[1])
+          core = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(core)
+          result = core.check_merge(Path(os.environ["GITHUB_WORKSPACE"]), os.environ["VEMO_DIFF_RANGE"], False)
+          print(json.dumps(result, indent=2))
+          raise SystemExit(0 if result["decision"] == "allow" else 2)
+          PY
+      - name: Validate candidate contract
+        run: python3 bin/vemo check --self
+      - name: Execute verification
+        run: python3 bin/vemo verify --range "$VEMO_DIFF_RANGE"
+      - name: Decide merge
+        run: python3 bin/vemo check --range "$VEMO_DIFF_RANGE"

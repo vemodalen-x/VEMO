@@ -1,0 +1,1 @@
+{"version": 1, "name": "fleet", "commands": {"fleet": ["plugins/fleet/main.py", "--source-root", "."]}}

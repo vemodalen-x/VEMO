@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "critical_paths": [
+    ".github/**",
+    "enforcement/**",
+    "plugins/**",
+    "vemo.json"
+  ],
+  "deny_actions": [
+    "destructive_fs",
+    "git_history_rewrite",
+    "credential_write",
+    "out_of_repo_write"
+  ],
+  "verification": {
+    "normal": [
+      ["python3", "-m", "unittest", "discover", "-s", "tests"]
+    ],
+    "critical": [
+      ["python3", "-m", "unittest", "discover", "-s", "tests"],
+      ["python3", "eval/run.py"]
+    ]
+  },
+  "plugins": []
+}

@@ -1,0 +1,1 @@
+{"version": 1, "name": "skills", "commands": {"skill-score": ["plugins/skills/skill_check.py", "score"], "skill-audit": ["plugins/skills/skill_check.py", "audit"], "skill-roster": ["plugins/skills/skill_check.py", "roster"]}}
