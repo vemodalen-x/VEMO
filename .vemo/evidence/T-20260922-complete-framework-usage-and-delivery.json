@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "task": "T-20260922-complete-framework-usage-and-delivery",
+  "snapshot": "7d769873250208a331b21df7b2c4aaf8e94d26fb24c5504fc5d4cff7511dfb3b",
+  "critical": true,
+  "commands": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests"
+      ],
+      "exit": 0
+    },
+    {
+      "command": [
+        "python3",
+        "eval/run.py"
+      ],
+      "exit": 0
+    }
+  ],
+  "passed": true,
+  "ts": "2026-09-22T06:52:30Z"
+}

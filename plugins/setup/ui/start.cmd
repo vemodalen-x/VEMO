@@ -1,9 +1,9 @@
 @echo off
-cd /d "%~dp0.."
+cd /d "%~dp0..\.."
 where py >nul 2>nul
 if %errorlevel% equ 0 (
-  py -3 bin\vemo ui
+  py -3 plugins\setup\entry.py ui
 ) else (
-  python bin\vemo ui
+  python plugins\setup\entry.py ui
 )
 if errorlevel 1 pause

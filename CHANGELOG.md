@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added complete installation and operating documentation for the 2.0 governance loop.
+- Updated the optional setup UI help and launchers to use current plugin entry points.
+- Made the lightweight installer refuse custom hook paths and conflicting managed files instead of overwriting.
+
 ## 2.0.0 — minimal kernel
 
 - Reduced the mandatory architecture to Policy, Task, Gate, Verify, and Evidence.

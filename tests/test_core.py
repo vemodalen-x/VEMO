@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -203,6 +204,31 @@ class RepositoryContractTests(unittest.TestCase):
                                        capture_output=True, text=True)
             self.assertEqual(0, completed.returncode, completed.stdout + completed.stderr)
             self.assertFalse((target / "plugins").exists())
+
+    def test_lightweight_installer_refuses_conflicting_hook(self):
+        spec = importlib.util.spec_from_file_location("payload", ROOT / "enforcement/payload.py")
+        payload = importlib.util.module_from_spec(spec); spec.loader.exec_module(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for relative in payload.CORE_FILES:
+                source, destination = ROOT / relative, target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+            hook = target / ".git/hooks/pre-commit"; hook.write_text("#!/bin/sh\necho custom\n")
+            before = hook.read_bytes()
+            completed = subprocess.run(["bash", "enforcement/install.sh"], cwd=target,
+                                       capture_output=True, text=True)
+            self.assertEqual(2, completed.returncode)
+            self.assertEqual(before, hook.read_bytes())
+            self.assertIn("refuses to overwrite", completed.stderr)
+
+    def test_repository_guides_reference_current_cli(self):
+        guides = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md"]
+        if not all(path.is_file() for path in guides):
+            self.skipTest("repository documentation is not part of the core payload")
+        retired = re.compile(r"bin/vemo (?:context|tier|report|platform|extensions|doctor|eval|explain|start)")
+        for path in guides:
+            self.assertIsNone(retired.search(path.read_text(encoding="utf-8")), str(path))
+        self.assertIn("plugins/setup/entry.py setup install", guides[2].read_text(encoding="utf-8"))
 
     def test_plugin_manifest_cannot_replace_core_command(self):
         with tempfile.TemporaryDirectory() as td:

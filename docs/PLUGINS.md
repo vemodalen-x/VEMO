@@ -34,3 +34,15 @@ Rules are intentionally small:
 Bundled plugins expose a product report/platform view, Fleet, setup UI/service, skill tooling, optional review
 guides, and automation commands. Their implementation files remain outside the default payload. The former
 extension-composition subsystem was deleted rather than preserved: plugin discovery itself replaces it.
+
+| Plugin | Commands | Purpose |
+|---|---|---|
+| `setup` | `setup`, `ui` | Transactional install, check, recover, uninstall, and local browser UI |
+| `product` | `report`, `platform` | Read-only local reporting and architecture view |
+| `fleet` | `fleet` | Optional multi-repository inventory tooling |
+| `review` | `judge-guide` | Independent-review guidance; no core policy authority |
+| `skills` | `skill-score`, `skill-audit`, `skill-roster` | Optional skill catalog tooling |
+| `automation` | `auto` | Legacy unattended-mode helper; review carefully before enabling |
+
+Bundled does not mean supported by the core contract. Each plugin owns its compatibility and documentation;
+disabled plugin code is not imported or validated during core startup.

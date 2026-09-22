@@ -18,13 +18,24 @@ a platform. Those capabilities are optional local plugins.
 ## Quick start
 
 ```bash
-python3 bin/vemo init --migrate
+python3 bin/vemo init
 python3 bin/vemo task create --id T-example --scope 'src/**' 'tests/**'
 # edit and stage the intended change
 python3 bin/vemo verify
 git add .vemo/evidence/T-example.json
 python3 bin/vemo check
 ```
+
+For a different repository, run the optional setup plugin from this checkout:
+
+```bash
+python3 plugins/setup/entry.py setup install /absolute/project --json
+python3 plugins/setup/entry.py setup install /absolute/project --apply --json
+python3 plugins/setup/entry.py setup check /absolute/project --json
+```
+
+Read [the complete usage guide](docs/USAGE.md) and [installation guide](docs/INSTALL.md) before enabling it
+in a shared repository.
 
 `check` returns one of three decisions:
 
@@ -64,8 +75,8 @@ The default CLI exposes exactly six entry points:
 task  check  verify  status  init  plugin
 ```
 
-Run `python3 bin/vemo --help` for their purpose. See [plugin documentation](docs/PLUGINS.md) and the
-[1.x migration guide](docs/MIGRATION.md) for optional capabilities and upgrades.
+Run `python3 bin/vemo --help` for their purpose. See [the usage guide](docs/USAGE.md),
+[plugin documentation](docs/PLUGINS.md), and the [1.x migration guide](docs/MIGRATION.md).
 
 ## Enforcement model
 
