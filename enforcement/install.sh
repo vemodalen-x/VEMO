@@ -3,8 +3,7 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 HOOKS_PATH="$(git -C "$ROOT" config --get core.hooksPath || true)"
 [ -z "$HOOKS_PATH" ] || { echo "VEMO refuses custom core.hooksPath: $HOOKS_PATH" >&2; exit 2; }
-mkdir -p "$ROOT/.git/hooks" "$ROOT/.github/workflows" "$ROOT/.vemo/evidence"
-install_managed() {
+check_managed() {
   source="$1"
   target="$2"
   if [ -L "$target" ]; then
@@ -15,11 +14,14 @@ install_managed() {
     echo "VEMO refuses to overwrite existing file: ${target#"$ROOT"/}" >&2
     exit 2
   fi
-  cp "$source" "$target"
 }
-install_managed "$ROOT/enforcement/ci/pre-commit" "$ROOT/.git/hooks/pre-commit"
-install_managed "$ROOT/enforcement/ci/pre-push" "$ROOT/.git/hooks/pre-push"
-install_managed "$ROOT/enforcement/ci/vemo-ci.yml" "$ROOT/.github/workflows/vemo-ci.yml"
+check_managed "$ROOT/enforcement/ci/pre-commit" "$ROOT/.git/hooks/pre-commit"
+check_managed "$ROOT/enforcement/ci/pre-push" "$ROOT/.git/hooks/pre-push"
+check_managed "$ROOT/enforcement/ci/vemo-ci.yml" "$ROOT/.github/workflows/vemo-ci.yml"
+mkdir -p "$ROOT/.git/hooks" "$ROOT/.github/workflows" "$ROOT/.vemo/evidence"
+cp "$ROOT/enforcement/ci/pre-commit" "$ROOT/.git/hooks/pre-commit"
+cp "$ROOT/enforcement/ci/pre-push" "$ROOT/.git/hooks/pre-push"
+cp "$ROOT/enforcement/ci/vemo-ci.yml" "$ROOT/.github/workflows/vemo-ci.yml"
 chmod +x "$ROOT/.git/hooks/pre-commit" "$ROOT/.git/hooks/pre-push" "$ROOT/bin/vemo" "$ROOT/enforcement/hooks/run.py"
 python3 - "$ROOT" <<'PY'
 import json, pathlib, sys

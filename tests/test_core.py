@@ -221,6 +221,25 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertEqual(before, hook.read_bytes())
             self.assertIn("refuses to overwrite", completed.stderr)
 
+    def test_lightweight_installer_preflights_all_managed_files(self):
+        spec = importlib.util.spec_from_file_location("payload", ROOT / "enforcement/payload.py")
+        payload = importlib.util.module_from_spec(spec); spec.loader.exec_module(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for relative in payload.CORE_FILES:
+                source, destination = ROOT / relative, target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+            hook = target / ".git/hooks/pre-commit"; hook.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target / "enforcement/ci/pre-commit", hook)
+            push = target / ".git/hooks/pre-push"; push.write_text("#!/bin/sh\necho custom\n")
+            before = hook.read_bytes()
+            completed = subprocess.run(["bash", "enforcement/install.sh"], cwd=target,
+                                       capture_output=True, text=True)
+            self.assertEqual(2, completed.returncode)
+            self.assertEqual(before, hook.read_bytes())
+            self.assertEqual("#!/bin/sh\necho custom\n", push.read_text())
+            self.assertFalse((target / ".github/workflows/vemo-ci.yml").exists())
+
     def test_repository_guides_reference_current_cli(self):
         guides = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md"]
         if not all(path.is_file() for path in guides):

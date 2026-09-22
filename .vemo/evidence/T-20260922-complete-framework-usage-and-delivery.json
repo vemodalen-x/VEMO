@@ -1,7 +1,7 @@
 {
   "version": 1,
   "task": "T-20260922-complete-framework-usage-and-delivery",
-  "snapshot": "7d769873250208a331b21df7b2c4aaf8e94d26fb24c5504fc5d4cff7511dfb3b",
+  "snapshot": "1a36cffe9289f387515536b9eb3f1d701f15e4ad07de2e3b16c55a421fba298f",
   "critical": true,
   "commands": [
     {
@@ -24,5 +24,5 @@
     }
   ],
   "passed": true,
-  "ts": "2026-09-22T06:52:30Z"
+  "ts": "2026-09-22T09:17:31Z"
 }
