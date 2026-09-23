@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Established the VEMO 2.0 trusted-base baseline for subsequent protected CI range checks.
 - Added complete installation and operating documentation for the 2.0 governance loop.
 - Added an explicit platform support matrix, AI-assisted installation protocol, and tested end-to-end usage cases.
 - Made setup install and uninstall apply operations require the exact content-bound preview `plan_id`.
