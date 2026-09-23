@@ -1,1 +1,14 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VEMO 设计</title><link rel="stylesheet" href="/style.css"></head><body><article class="help-content"><a href="/">← 返回安装向导</a><h1>VEMO 设计与治理边界</h1><p>VEMO 把治理内核和产品能力分开：内核只决定一个 AI-authored diff 是否在授权范围内、是否通过验证；安装 UI、Fleet 控制面、skills、automation 和 review 都是可选插件。</p><pre><code>AI/Harness → PreToolUse hook → enforcement/core.py<br>                              ↓<br>                  Git hooks / CI adapter<br>                              ↓<br>                  snapshot-bound evidence → merge decision</code></pre><h2>五个强制概念</h2><table><thead><tr><th>概念</th><th>职责</th></tr></thead><tbody><tr><td>Policy</td><td>仓库规则、critical paths、拒绝动作、argv 验证命令</td></tr><tr><td>Task</td><td>当前一次变更的 id、scope、risk 和审批摘要</td></tr><tr><td>Gate</td><td>统一 evaluator 的 allow/deny/approval_required 决策</td></tr><tr><td>Verify</td><td>实际执行 policy 命令</td></tr><tr><td>Evidence</td><td>把 task、commands、exits 和 exact diff snapshot 绑定起来</td></tr></tbody></table><h2>安装服务职责</h2><p>setup 插件负责 preview → apply → probe → manifest → recover/uninstall。它不产生第二套治理规则，也不能修改核心 evaluator。插件是可信本地代码，不是沙箱；默认全部禁用。</p><h2>不负责什么</h2><ul><li>VEMO 不是 OS sandbox，不能隔离已被攻陷的主机。</li><li>VEMO 不自动设置分支保护、CODEOWNERS 或远端审批。</li><li>VEMO 不替代业务测试；业务验证命令由 policy 明确配置。</li><li>插件不获得核心 policy authority，除非维护者明确启用并审查其本地代码。</li></ul><p>完整边界和迁移说明见项目根目录的 <code>SECURITY.md</code>、<code>docs/USAGE.md</code> 和 <code>docs/MIGRATION.md</code>。</p></article></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VEMO 设计</title><link rel="stylesheet" href="/style.css"></head>
+<body><article class="help-content">
+<a href="/">← 返回安装向导</a><h1>VEMO 设计与治理边界</h1><p>VEMO 把治理内核和产品能力分开：内核只决定一个 AI-authored diff 是否在授权范围内、是否通过验证；安装 UI、Fleet 控制面、skills、automation 和 review 都是可选插件。</p>
+<pre><code>AI/Harness → PreToolUse hook → enforcement/core.py
+                              ↓
+                  Git hooks / CI adapter
+                              ↓
+                  snapshot-bound evidence → merge decision</code></pre>
+<h2>五个强制概念</h2><table><thead><tr><th>概念</th><th>职责</th></tr></thead><tbody><tr><td>Policy</td><td>仓库规则、critical paths、拒绝动作、argv 验证命令</td></tr><tr><td>Task</td><td>当前一次变更的 id、scope、risk 和审批摘要</td></tr><tr><td>Gate</td><td>统一 evaluator 的 allow/deny/approval_required 决策</td></tr><tr><td>Verify</td><td>实际执行 policy 命令</td></tr><tr><td>Evidence</td><td>把 task、commands、exits 和 exact diff snapshot 绑定起来</td></tr></tbody></table>
+<h2>插件职责</h2><p>setup 插件负责 preview → apply → probe → manifest → recover/uninstall。Fleet 只从用户本机注册表聚合项目状态并提供只读回环中台，不执行目标代码，也不产生第二套治理规则。项目级 Gate 即使在 Fleet 停止时仍独立工作。</p>
+<h2>不负责什么</h2><ul><li>VEMO 不是 OS sandbox，不能隔离已被攻陷的主机。</li><li>VEMO 不自动设置分支保护、CODEOWNERS 或远端审批。</li><li>VEMO 不替代业务测试；业务验证命令由 policy 明确配置。</li><li>插件不获得核心 policy authority，除非维护者明确启用并审查其本地代码。</li></ul><p>完整边界和迁移说明见项目根目录的 <code>SECURITY.md</code>、<code>docs/USAGE.md</code>、<code>docs/CONTROL-PLANE.md</code> 和 <code>docs/MIGRATION.md</code>。</p>
+</article></body></html>

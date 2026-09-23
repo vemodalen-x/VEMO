@@ -48,3 +48,13 @@ disabled plugin code is not imported or validated during core startup.
 
 See [CONTROL-PLANE.md](CONTROL-PLANE.md) for the machine-wide registry, single-project inspection model, local
 dashboard, API, security boundaries, and cross-platform launch commands.
+
+The two browser surfaces have different authority: setup UI writes only through a reviewed preview and matching
+`plan_id`, while the Fleet dashboard has no write API. Fleet's registry defaults to `~/.vemo/projects.json` (or
+`$VEMO_HOME/projects.json`) and can be used directly without enabling repository commands:
+
+```bash
+python3 plugins/fleet/main.py register /absolute/project --label ProjectName
+python3 plugins/fleet/main.py status --json
+python3 plugins/fleet/main.py serve
+```

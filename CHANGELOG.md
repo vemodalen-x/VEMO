@@ -8,6 +8,8 @@
 - Rebuilt the optional Fleet plugin as a user-local multi-project control plane with repository detail inspection,
   hash-chained registry audit, read-only JSON APIs, and a responsive loopback dashboard.
 - Removed the duplicate Product reporting plugin; Fleet now owns both workstation overview and single-project views.
+- Synchronized installation, security, platform, migration, contribution, examples, and embedded help documentation
+  with the optional Fleet control plane and its read-only trust boundary.
 - Updated the optional setup UI help and launchers to use current plugin entry points.
 - Made the lightweight installer refuse custom hook paths and conflicting managed files instead of overwriting.
 

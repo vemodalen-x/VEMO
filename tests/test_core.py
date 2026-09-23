@@ -269,6 +269,23 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertTrue((ROOT / "plugins/setup/ui/start.command").is_file())
         self.assertTrue((ROOT / "plugins/setup/ui/start.cmd").is_file())
 
+    def test_control_plane_documentation_matches_current_fleet_contract(self):
+        paths = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md",
+                 ROOT / "docs/PLUGINS.md", ROOT / "docs/PLATFORMS.md"]
+        for path in paths:
+            self.assertIn("CONTROL-PLANE.md", path.read_text(encoding="utf-8"), str(path))
+        active = paths + [ROOT / "SECURITY.md", ROOT / "CONTRIBUTING.md", ROOT / "ROADMAP.md",
+                          ROOT / "docs/AI-INSTALL.md", ROOT / "docs/EXAMPLES.md",
+                          ROOT / "docs/MIGRATION.md", ROOT / "plugins/setup/ui/help/install.html",
+                          ROOT / "plugins/setup/ui/help/usage.html"]
+        combined = "\n".join(path.read_text(encoding="utf-8") for path in active)
+        for stale in ("plugin enable product", "plugin disable product", "plugins/product",
+                      "fleet onboard", "fleet profiles", "fleet install"):
+            self.assertNotIn(stale, combined)
+        self.assertIn("plugins/fleet/main.py register", combined)
+        self.assertIn("plugins/fleet/main.py serve", combined)
+        self.assertNotIn("不安装 Fleet、UI、product", combined)
+
     def test_plugin_manifest_cannot_replace_core_command(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td); (root / "plugins/bad").mkdir(parents=True); (root / "tool.py").write_text("pass\n")

@@ -100,6 +100,17 @@ For workstation-wide governance, register projects with the optional Fleet plugi
 dashboard. The registry is user-local and the dashboard is read-only; installation remains a separate setup plugin
 operation. See [CONTROL-PLANE.md](CONTROL-PLANE.md).
 
+```bash
+python3 plugins/fleet/main.py discover /absolute/root --max-depth 4 --json
+python3 plugins/fleet/main.py register /absolute/project --label ProjectName
+python3 plugins/fleet/main.py status --json
+python3 plugins/fleet/main.py inspect /absolute/project --json
+python3 plugins/fleet/main.py serve
+```
+
+Discovery is read-only and does not register every repository it finds. Registration adds inventory metadata only;
+it does not install VEMO or change the target.
+
 ## CI range checks and bootstrap
 
 On pull requests CI first loads `enforcement/core.py` from the trusted base commit and performs a no-execution

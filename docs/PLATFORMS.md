@@ -41,7 +41,7 @@ Run the normal preview/apply/check installation flow. If `bash --version` report
 claim local-hook support until the hook interpreter is explicitly validated. Server-side CI can still be the
 authoritative gate.
 
-The optional local setup UI can be started from Terminal with:
+The optional local setup UI, which can apply reviewed installation plans, can be started from Terminal with:
 
 ```bash
 ./plugins/setup/ui/start.command
@@ -52,7 +52,7 @@ The optional local setup UI can be started from Terminal with:
 WSL is the recommended route because it provides the same Git, Bash, path, and executable-bit model used by the
 local adapters. Clone and operate the governed repository inside the WSL filesystem when possible.
 
-The optional UI has a native launcher:
+The optional setup UI, which is separate from the read-only Fleet dashboard, has a native launcher:
 
 ```bat
 plugins\setup\ui\start.cmd
@@ -94,7 +94,7 @@ it with containers, virtual machines, or another isolation boundary for untruste
 
 The optional Fleet dashboard uses only Python's standard library and browser-native HTML/CSS/JavaScript. Linux is
 the verified environment. macOS uses `plugins/fleet/ui/start.command`; Windows uses
-`plugins\\fleet\\ui\\start.cmd` and selects `py -3` or `python`. All platforms bind the server to `127.0.0.1` and
+`plugins\fleet\ui\start.cmd` and selects `py -3` or `python`. All platforms bind the server to `127.0.0.1` and
 store the private registry below `$VEMO_HOME` or the user's `.vemo` directory. See
 [CONTROL-PLANE.md](CONTROL-PLANE.md); macOS and Windows launchers are provided but are not currently exercised by
 this repository's CI.

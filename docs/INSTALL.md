@@ -57,6 +57,21 @@ python3 bin/vemo setup install /absolute/project --json
 For a first installation into a repository that does not yet contain VEMO, invoke
 `plugins/setup/entry.py` directly as shown above; the target cannot enable a command it has not installed yet.
 
+## Optional workstation control plane
+
+Fleet is not part of the 14-file core payload installed into a target repository. After setup `check` succeeds,
+the trusted VEMO source checkout may register that repository in the current user's local inventory:
+
+```bash
+python3 plugins/fleet/main.py register /absolute/project --label ProjectName
+python3 plugins/fleet/main.py status --json
+python3 plugins/fleet/main.py serve
+```
+
+Registration does not install VEMO or prove compliance. The dashboard is a read-only loopback observer; use the
+setup plugin for all target-repository changes. See [CONTROL-PLANE.md](CONTROL-PLANE.md) for discovery,
+unregistration, API, security, and platform-specific launch commands.
+
 ## GitHub Actions
 
 Copying or installing VEMO does not configure branch protection. Require the `vemo` workflow check and CODEOWNERS

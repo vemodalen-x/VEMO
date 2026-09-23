@@ -86,6 +86,15 @@ For governance across all projects on one workstation, use the optional Fleet co
 described in [docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md). It observes repository-local gates without replacing
 them or executing project code.
 
+```bash
+python3 plugins/fleet/main.py register /absolute/project --label ProjectName
+python3 plugins/fleet/main.py status --json
+python3 plugins/fleet/main.py serve
+```
+
+Registration is an inventory action, not installation or a compliance claim. Use the setup plugin separately for
+repository changes, and keep the dashboard on its default loopback listener.
+
 ## Enforcement model
 
 The harness hook provides early feedback before a write or dangerous command. Git hooks provide local feedback.

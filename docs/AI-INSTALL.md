@@ -89,3 +89,8 @@ branch or tag for larger upgrades and read [MIGRATION.md](MIGRATION.md) before c
 - Store approval variables outside the repository and outside model-controlled prompts.
 - Add an OS sandbox when repository commands or dependencies are not trusted.
 - Record which operating systems were actually exercised; consult [PLATFORMS.md](PLATFORMS.md).
+- Optionally register the target in Fleet only after setup `check` succeeds; registration is inventory, not proof
+  of installation or compliance.
+- Do not bulk-register unrelated repositories, scan roots the owner did not name, or start a non-loopback listener.
+- If workstation monitoring is requested, follow [CONTROL-PLANE.md](CONTROL-PLANE.md) and keep setup mutations
+  separate from Fleet observation.

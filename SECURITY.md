@@ -27,3 +27,21 @@ Limitations:
   after that decision allows the range. The first 2.0 installation therefore requires an explicitly reviewed
   bootstrap merge. Require branch protection and CODEOWNERS for `vemo.json`, `vemo.task.json`, `enforcement/**`,
   and `.github/**`; a repository-local framework cannot make its server configuration immutable.
+
+## Optional Fleet control plane
+
+Fleet is a user-local observer, not a policy authority or remote administration service:
+
+- it binds the dashboard to `127.0.0.1` and exposes read-only `GET` endpoints;
+- it reads repository contracts and evidence but never imports target code, runs target hooks, or executes target
+  verification commands;
+- it removes inherited `VEMO_APPROVED_*` variables before evaluating a repository, so transient approval cannot
+  appear as durable compliance;
+- discovery scans only explicit roots without following symlinks, and registration never installs or changes a
+  target repository;
+- the registry and hash-chained control audit contain absolute local paths and depend on user-account filesystem
+  permissions for confidentiality and integrity.
+
+Do not expose the dashboard through a remote listener or use it as a multi-user service. Its health summary is
+operational context only; each repository's Gate and protected CI remain authoritative. See
+[docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md) for the complete boundary.

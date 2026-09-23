@@ -105,7 +105,30 @@ python3 bin/vemo plugin disable setup
 Plugins are trusted repository code and are disabled by default. Enabling one changes `vemo.json`, which is a
 critical path in the default policy and therefore follows the critical approval flow.
 
-## 8. Upgrade, recover, or uninstall
+## 8. Govern all local projects from one workstation
+
+Run Fleet from a trusted VEMO checkout. Discovery lists candidates but does not register or modify them:
+
+```bash
+python3 plugins/fleet/main.py discover /home/aimer/Project --max-depth 4 --json
+python3 plugins/fleet/main.py register /home/aimer/Project/VEMO --label VEMO
+python3 plugins/fleet/main.py status --json
+python3 plugins/fleet/main.py inspect /home/aimer/Project/VEMO --json
+python3 plugins/fleet/main.py serve
+```
+
+Open the loopback URL printed by `serve`. A registered project with no `vemo.json` appears as `unmanaged`; this is
+not an installation failure because Fleet does not install targets. Remove only the inventory entry with:
+
+```bash
+python3 plugins/fleet/main.py unregister /home/aimer/Project/VEMO
+```
+
+Unregistering never edits the repository. Fleet acceptance requires that the API and dashboard show the same
+project status, inherited `VEMO_APPROVED_*` values do not change that status, and no target hook, test, or plugin is
+executed during observation. See [CONTROL-PLANE.md](CONTROL-PLANE.md).
+
+## 9. Upgrade, recover, or uninstall
 
 ```bash
 python3 plugins/setup/entry.py setup install /srv/project --json
@@ -131,3 +154,5 @@ An installation is demonstrated, not merely configured, when all applicable chec
 | Protected approval | exact task digest allows only the approved authorization |
 | CI policy tampering | trusted-base preflight rejects an unapproved replacement policy |
 | Interrupted setup | recovery restores a checkable state without overwriting unrelated files |
+| Fleet registration | registry and local audit change, while the target repository remains byte-for-byte unchanged |
+| Fleet observation | dashboard/API agree and no target code or verification command executes |
