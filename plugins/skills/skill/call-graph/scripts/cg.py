@@ -16,7 +16,16 @@ Stdlib only. Degrades loudly: if a tool is missing it prints how to install it, 
 """
 import sys, os, subprocess, argparse, shutil
 
-ROOT = os.environ.get("VEMO_ROOT") or os.popen("git rev-parse --show-toplevel 2>/dev/null").read().strip() or "."
+
+def _repository_root():
+    configured = os.environ.get("VEMO_ROOT")
+    if configured:
+        return configured
+    result = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else "."
+
+
+ROOT = _repository_root()
 VDIR = os.path.join(ROOT, ".vemo")
 TAGS = os.path.join(VDIR, "tags")
 CSCOPE = os.path.join(VDIR, "cscope.out")
@@ -44,15 +53,21 @@ def cmd_index():
     os.makedirs(VDIR, exist_ok=True)
     if not _have("ctags"):
         print(f"[cg] ctags not found. Install: {INSTALL['ctags']}"); return 1
-    ex = " ".join(f"--exclude={d}" for d in EXCLUDE)
-    subprocess.run(f"ctags -R --fields=+nKsS {ex} -f {TAGS} {ROOT}", shell=True)
+    result = subprocess.run(["ctags", "-R", "--fields=+nKsS",
+                             *(f"--exclude={d}" for d in sorted(EXCLUDE)),
+                             "-f", TAGS, ROOT])
+    if result.returncode:
+        print("[cg] ctags indexing failed"); return result.returncode
     print(f"[cg] ctags index -> {TAGS}")
     if _have("cscope"):
         files = [f for f in _src_files() if f.endswith((".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"))]
         if files:
             namefile = os.path.join(VDIR, "cscope.files")
-            open(namefile, "w").write("\n".join(files))
-            subprocess.run(f"cscope -b -q -k -i {namefile} -f {CSCOPE}", shell=True, cwd=ROOT)
+            with open(namefile, "w", encoding="utf-8") as stream:
+                stream.write("\n".join(files))
+            result = subprocess.run(["cscope", "-b", "-q", "-k", "-i", namefile, "-f", CSCOPE], cwd=ROOT)
+            if result.returncode:
+                print("[cg] cscope indexing failed"); return result.returncode
             print(f"[cg] cscope db -> {CSCOPE} ({len(files)} C/C++ files)")
     else:
         print(f"[cg] (cscope absent — callers/callees use ctags approximation. {INSTALL['cscope']})")
@@ -95,9 +110,9 @@ def cmd_callers(sym):
     res = _cscope(3, sym)
     if res is None:
         # ctags approximation: grep call sites
-        hits = subprocess.run(f"grep -rnw --include='*.*' '{sym}' {ROOT} "
-                              + " ".join(f"--exclude-dir={d}" for d in EXCLUDE),
-                              shell=True, capture_output=True, text=True).stdout.splitlines()
+        hits = subprocess.run(["grep", "-rnw", "--include=*.*",
+                               *(f"--exclude-dir={d}" for d in sorted(EXCLUDE)),
+                               "--", sym, ROOT], capture_output=True, text=True).stdout.splitlines()
         print(f"Callers of {sym}()  [ctags approx — install cscope for precision]:")
         for h in hits[:40]:
             print("  " + h)

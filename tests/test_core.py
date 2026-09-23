@@ -109,6 +109,24 @@ class CoreTests(unittest.TestCase):
         subprocess.run(["git", "add", ".vemo/judge.jsonl"], cwd=self.root, check=True)
         self.assertEqual("allow", core.check_merge(self.root, require_evidence=False)["decision"])
 
+    def test_only_current_task_evidence_is_implicitly_authorized(self):
+        foreign = self.root / ".vemo/evidence/T-other.json"
+        foreign.write_text('{"passed":true}\n')
+        subprocess.run(["git", "add", str(foreign)], cwd=self.root, check=True)
+        result = core.check_merge(self.root, require_evidence=False)
+        self.assertEqual("scope_violation", result["reason"])
+        self.assertEqual(".vemo/evidence/T-other.json", result["evidence"]["path"])
+
+    def test_authorized_foreign_evidence_is_bound_into_snapshot(self):
+        self.write_task(scope=["src/**", ".vemo/evidence/T-other.json"])
+        foreign = self.root / ".vemo/evidence/T-other.json"
+        foreign.write_text('{"passed":true}\n')
+        subprocess.run(["git", "add", "vemo.task.json", str(foreign)], cwd=self.root, check=True)
+        first = core.snapshot(self.root)
+        foreign.write_text('{"passed":false}\n')
+        subprocess.run(["git", "add", str(foreign)], cwd=self.root, check=True)
+        self.assertNotEqual(first, core.snapshot(self.root))
+
     def test_scope_authorization_is_part_of_snapshot(self):
         self.stage_change(); self.assertTrue(core.verify(self.root)["passed"])
         self.write_task(scope=["src/**", "other/**"])
@@ -242,6 +260,62 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertEqual("#!/bin/sh\necho custom\n", push.read_text())
             self.assertFalse((target / ".github/workflows/vemo-ci.yml").exists())
 
+    @unittest.skipIf(os.name == "nt", "symbolic-link behavior is platform specific")
+    def test_lightweight_installer_rejects_linked_parent_before_any_write(self):
+        spec = importlib.util.spec_from_file_location("payload", ROOT / "enforcement/payload.py")
+        payload = importlib.util.module_from_spec(spec); spec.loader.exec_module(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target, outside = Path(td) / "target", Path(td) / "outside"
+            target.mkdir(); outside.mkdir(); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for relative in payload.CORE_FILES:
+                source, destination = ROOT / relative, target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+            (target / ".claude").symlink_to(outside, target_is_directory=True)
+            completed = subprocess.run(["bash", "enforcement/install.sh"], cwd=target,
+                                       capture_output=True, text=True)
+            self.assertEqual(2, completed.returncode)
+            self.assertIn("symlinked managed path", completed.stderr)
+            self.assertEqual([], list(outside.iterdir()))
+            self.assertFalse((target / ".git/hooks/pre-commit").exists())
+            self.assertFalse((target / ".github/workflows/vemo-ci.yml").exists())
+
+    def test_lightweight_installer_rejects_invalid_claude_settings_before_any_write(self):
+        spec = importlib.util.spec_from_file_location("payload", ROOT / "enforcement/payload.py")
+        payload = importlib.util.module_from_spec(spec); spec.loader.exec_module(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for relative in payload.CORE_FILES:
+                source, destination = ROOT / relative, target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+            settings = target / ".claude/settings.json"
+            settings.parent.mkdir(); settings.write_text("not json\n")
+            completed = subprocess.run(["bash", "enforcement/install.sh"], cwd=target,
+                                       capture_output=True, text=True)
+            self.assertNotEqual(0, completed.returncode)
+            self.assertEqual("not json\n", settings.read_text())
+            self.assertFalse((target / ".git/hooks/pre-commit").exists())
+            self.assertFalse((target / ".github/workflows/vemo-ci.yml").exists())
+
+    @unittest.skipIf(os.name == "nt", "symbolic-link behavior is platform specific")
+    def test_lightweight_installer_rejects_linked_framework_source(self):
+        spec = importlib.util.spec_from_file_location("payload", ROOT / "enforcement/payload.py")
+        payload = importlib.util.module_from_spec(spec); spec.loader.exec_module(payload)
+        with tempfile.TemporaryDirectory() as td:
+            target, outside = Path(td) / "target", Path(td) / "outside-vemo"
+            target.mkdir(); outside.mkdir(); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for relative in payload.CORE_FILES:
+                source, destination = ROOT / relative, target / relative
+                destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(source, destination)
+            (target / "bin/vemo").unlink()
+            (target / "bin/vemo").symlink_to(outside / "vemo")
+            (outside / "vemo").write_text("unchanged\n")
+            completed = subprocess.run(["bash", "enforcement/install.sh"], cwd=target,
+                                       capture_output=True, text=True)
+            self.assertEqual(2, completed.returncode)
+            self.assertIn("symlinked managed path", completed.stderr)
+            self.assertEqual("unchanged\n", (outside / "vemo").read_text())
+            self.assertFalse((target / ".git/hooks/pre-commit").exists())
+
     def test_repository_guides_reference_current_cli(self):
         guides = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md",
                   ROOT / "docs/PLATFORMS.md", ROOT / "docs/AI-INSTALL.md", ROOT / "docs/EXAMPLES.md"]
@@ -311,6 +385,11 @@ class RepositoryContractTests(unittest.TestCase):
                                            cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(0, completed.returncode,
                                  name + ":" + command + ": " + completed.stdout + completed.stderr)
+
+    def test_call_graph_tool_uses_argv_without_shell_execution(self):
+        script = (ROOT / "plugins/skills/skill/call-graph/scripts/cg.py").read_text(encoding="utf-8")
+        self.assertNotIn("shell=True", script)
+        self.assertNotIn("os.popen", script)
 
     def test_setup_apply_requires_a_content_bound_preview(self):
         with tempfile.TemporaryDirectory() as td:

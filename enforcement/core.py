@@ -273,8 +273,9 @@ def unstaged_contract_paths(root=ROOT):
 def snapshot(root=ROOT, diff_range=None, task=None, paths=None):
     task = task or load_task(root)
     paths = paths if paths is not None else changed_paths(root, diff_range)
+    current_evidence = evidence_relative(task)
     relevant = [path for path in paths if in_scope(path, task)
-                and path not in {TASK_FILE} and not path.startswith(EVIDENCE_DIR + "/")
+                and path not in {TASK_FILE, current_evidence}
                 and path != ".vemo/judge.jsonl" and not path.startswith("tasks/")]
     if not relevant:
         return "empty-diff"
@@ -300,6 +301,10 @@ def snapshot(root=ROOT, diff_range=None, task=None, paths=None):
 
 def evidence_path(task, root=ROOT):
     return Path(root) / EVIDENCE_DIR / (task["id"] + ".json")
+
+
+def evidence_relative(task):
+    return f"{EVIDENCE_DIR}/{task['id']}.json"
 
 
 def verification_commands(policy, critical):
@@ -354,13 +359,13 @@ def check_merge(root=ROOT, diff_range=None, require_evidence=True):
         return decision("deny", "configuration_invalid", task=str(exc))
     if not paths:
         return decision("allow", "no_changes", task=task["id"])
-    outside = next((path for path in paths if path not in {TASK_FILE, ".vemo/judge.jsonl"}
-                    and not path.startswith(EVIDENCE_DIR + "/") and not in_scope(path, task)), None)
+    current_evidence = evidence_relative(task)
+    outside = next((path for path in paths if path not in {TASK_FILE, ".vemo/judge.jsonl", current_evidence}
+                    and not in_scope(path, task)), None)
     if outside:
         return decision("deny", "scope_violation", path=outside, task=task["id"])
     try:
-        scanned = [path for path in paths if path != ".vemo/judge.jsonl"
-                   and not path.startswith(EVIDENCE_DIR + "/")]
+        scanned = [path for path in paths if path not in {".vemo/judge.jsonl", current_evidence}]
         diff = _diff_text(root, diff_range, scanned) if scanned else ""
     except VemoError as exc:
         return decision("deny", "diff_unavailable", task=str(exc))
