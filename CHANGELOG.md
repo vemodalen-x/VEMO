@@ -3,6 +3,11 @@
 ## Unreleased
 
 - Added complete installation and operating documentation for the 2.0 governance loop.
+- Added an explicit platform support matrix, AI-assisted installation protocol, and tested end-to-end usage cases.
+- Made setup install and uninstall apply operations require the exact content-bound preview `plan_id`.
+- Rebuilt the optional Fleet plugin as a user-local multi-project control plane with repository detail inspection,
+  hash-chained registry audit, read-only JSON APIs, and a responsive loopback dashboard.
+- Removed the duplicate Product reporting plugin; Fleet now owns both workstation overview and single-project views.
 - Updated the optional setup UI help and launchers to use current plugin entry points.
 - Made the lightweight installer refuse custom hook paths and conflicting managed files instead of overwriting.
 

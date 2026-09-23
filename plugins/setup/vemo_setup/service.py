@@ -430,6 +430,8 @@ def check_install(target, expected=None):
 
 
 def apply_install(source, target, preset="python", profile="solo", plan_id=None):
+    if not plan_id:
+        raise SetupError("安装必须携带预览返回的 plan_id；请先运行不带 --apply 的预览。")
     root = project_root(target)
     with project_lock(root):
         plan = plan_install(source, str(root), preset, profile)
@@ -507,6 +509,8 @@ def plan_uninstall(target):
 
 
 def uninstall(target, plan_id=None):
+    if not plan_id:
+        raise SetupError("卸载必须携带预览返回的 plan_id；请先运行不带 --apply 的预览。")
     root = project_root(target)
     with project_lock(root):
         plan = plan_uninstall(str(root))

@@ -16,7 +16,7 @@ def main(argv=None, source=None):
     parser.add_argument("--preset", choices=PRESETS, default="python")
     parser.add_argument("--profile", choices=PROFILES, default="solo")
     parser.add_argument("--apply", action="store_true", help="执行已选择的安装/卸载/恢复")
-    parser.add_argument("--plan-id", help="要求项目与指定预览一致")
+    parser.add_argument("--plan-id", help="安装/卸载 --apply 必填；要求项目与指定预览一致")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     source = source or Path(__file__).resolve().parents[2]

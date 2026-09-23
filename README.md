@@ -30,12 +30,14 @@ For a different repository, run the optional setup plugin from this checkout:
 
 ```bash
 python3 plugins/setup/entry.py setup install /absolute/project --json
-python3 plugins/setup/entry.py setup install /absolute/project --apply --json
+# copy plan_id from the reviewed preview
+python3 plugins/setup/entry.py setup install /absolute/project --apply --plan-id '<plan-id>' --json
 python3 plugins/setup/entry.py setup check /absolute/project --json
 ```
 
-Read [the complete usage guide](docs/USAGE.md) and [installation guide](docs/INSTALL.md) before enabling it
-in a shared repository.
+Read [the installation guide](docs/INSTALL.md), [platform matrix](docs/PLATFORMS.md), and
+[complete usage guide](docs/USAGE.md) before enabling it in a shared repository. For agent-operated setup, use the
+[AI installation protocol](docs/AI-INSTALL.md); for copyable workflows, see [the examples](docs/EXAMPLES.md).
 
 `check` returns one of three decisions:
 
@@ -76,7 +78,13 @@ task  check  verify  status  init  plugin
 ```
 
 Run `python3 bin/vemo --help` for their purpose. See [the usage guide](docs/USAGE.md),
-[plugin documentation](docs/PLUGINS.md), and the [1.x migration guide](docs/MIGRATION.md).
+[platform support](docs/PLATFORMS.md), [AI installation guide](docs/AI-INSTALL.md),
+[examples](docs/EXAMPLES.md), [plugin documentation](docs/PLUGINS.md), and the
+[1.x migration guide](docs/MIGRATION.md).
+
+For governance across all projects on one workstation, use the optional Fleet control plane and visual dashboard
+described in [docs/CONTROL-PLANE.md](docs/CONTROL-PLANE.md). It observes repository-local gates without replacing
+them or executing project code.
 
 ## Enforcement model
 

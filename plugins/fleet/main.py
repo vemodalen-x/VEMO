@@ -1,41 +1,42 @@
 #!/usr/bin/env python3
-"""Local VEMO control plane for governing a fleet of Git projects."""
+"""Optional local control plane for multiple VEMO-governed Git projects.
+
+The control plane never executes code from a registered project. It reads contract files,
+uses this trusted checkout's evaluator, and invokes Git with fixed argv for observation only.
+"""
+
+from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 from pathlib import Path
-import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
-from uuid import uuid4
+from urllib.parse import parse_qs, urlparse
+import webbrowser
 
-BIN_DIR = str(Path(__file__).resolve().parent)
-if BIN_DIR not in sys.path:
-    sys.path.insert(0, BIN_DIR)
-SETUP_DIR = str(Path(__file__).resolve().parents[1] / "setup")
-if SETUP_DIR not in sys.path:
-    sys.path.insert(0, SETUP_DIR)
-from vemo_setup.payload import managed_sources
 
+ROOT = Path(__file__).resolve().parents[2]
+UI_ROOT = Path(__file__).resolve().parent / "ui"
+sys.path.insert(0, str(ROOT / "enforcement"))
+import core
 
 SCHEMA_VERSION = 1
-DEFAULT_PROFILE = "solo"
-ZERO_HASH = "0" * 64
-SKIP_DIRS = {
-    ".git", ".hg", ".svn", ".tox", ".venv", "venv", "node_modules",
-    "dist", "build", "target", "__pycache__", "AppData", "$Recycle.Bin",
-}
+SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules", "dist",
+             "build", "target", "__pycache__", ".cache", "AppData", "$Recycle.Bin"}
+APPROVAL_ENV = ("VEMO_APPROVED_TASK", "VEMO_APPROVED_TASK_DIGEST", "VEMO_APPROVED_BY",
+                "VEMO_APPROVED_ACTIONS")
 
 
 class FleetError(Exception):
-    """A user-actionable fleet operation failure."""
+    """A bounded, user-actionable control-plane error."""
 
 
 def utc_now():
@@ -46,37 +47,20 @@ def canonical_path(value):
     return str(Path(value).expanduser().resolve())
 
 
-def stable_project_id(path):
-    normalized = os.path.normcase(canonical_path(path)).encode("utf-8")
-    return hashlib.sha256(normalized).hexdigest()[:16]
+def project_id(path):
+    return hashlib.sha256(os.path.normcase(canonical_path(path)).encode()).hexdigest()[:16]
 
 
-def file_hash(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _read_json(path, default):
-    try:
-        with open(path, encoding="utf-8") as handle:
-            return json.load(handle)
-    except FileNotFoundError:
-        return default
-    except (OSError, ValueError) as exc:
-        raise FleetError(f"cannot read {path}: {exc}") from exc
-
-
-def _atomic_json(path, value):
+def atomic_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
+    descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            json.dump(value, handle, ensure_ascii=False, indent=2, sort_keys=True)
-            handle.write("\n")
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+            json.dump(value, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
         if os.name != "nt":
             os.chmod(path, 0o600)
@@ -86,657 +70,409 @@ def _atomic_json(path, value):
 
 
 class FleetStore:
-    """Persist a private local registry and a hash-chained mutation log."""
+    """Private user-local registry. Project repositories remain the source of governance truth."""
 
     def __init__(self, home=None):
         self.home = Path(home or os.environ.get("VEMO_HOME") or Path.home() / ".vemo").expanduser().resolve()
-        self.registry_path = self.home / "fleet.json"
-        self.audit_path = self.home / "fleet-audit.jsonl"
+        self.registry = self.home / "projects.json"
+        self.audit = self.home / "control-audit.jsonl"
 
     def load(self):
-        data = _read_json(self.registry_path, {"schema_version": SCHEMA_VERSION, "projects": []})
-        if data.get("schema_version") != SCHEMA_VERSION or not isinstance(data.get("projects"), list):
-            raise FleetError(f"unsupported or invalid fleet registry: {self.registry_path}")
-        return data
+        try:
+            value = json.loads(self.registry.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            value = {"schema_version": SCHEMA_VERSION, "projects": []}
+        except (OSError, ValueError) as exc:
+            raise FleetError(f"cannot read registry {self.registry}: {exc}") from exc
+        if (not isinstance(value, dict) or value.get("schema_version") != SCHEMA_VERSION
+                or not isinstance(value.get("projects"), list)):
+            raise FleetError(f"invalid registry: {self.registry}")
+        return value
+
+    def save(self, value):
+        value = {"schema_version": SCHEMA_VERSION,
+                 "projects": sorted(value["projects"], key=lambda row: os.path.normcase(row["path"]))}
+        atomic_json(self.registry, value)
 
     @contextmanager
-    def lock(self, name, timeout=10.0, stale_after=300.0):
-        """Serialize cross-process mutations with a crash-recoverable local lock file."""
+    def lock(self, timeout=5.0, stale_after=300.0):
         self.home.mkdir(parents=True, exist_ok=True)
-        lock_path = self.home / (name + ".lock")
+        path = self.home / "control.lock"
         deadline = time.monotonic() + timeout
         descriptor = None
         while descriptor is None:
             try:
-                descriptor = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(descriptor, f"pid={os.getpid()} created={utc_now()}\n".encode("utf-8"))
+                descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                os.write(descriptor, f"pid={os.getpid()} ts={utc_now()}\n".encode())
             except FileExistsError:
                 try:
-                    if time.time() - lock_path.stat().st_mtime > stale_after:
-                        lock_path.unlink()
+                    if time.time() - path.stat().st_mtime > stale_after:
+                        path.unlink()
                         continue
                 except FileNotFoundError:
                     continue
                 if time.monotonic() >= deadline:
-                    raise FleetError(f"timed out waiting for local fleet lock: {lock_path}")
+                    raise FleetError(f"timed out waiting for registry lock: {path}")
                 time.sleep(0.05)
         try:
             yield
         finally:
             os.close(descriptor)
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
+            path.unlink(missing_ok=True)
 
-    def save(self, data):
-        data["schema_version"] = SCHEMA_VERSION
-        data["projects"] = sorted(data["projects"], key=lambda item: os.path.normcase(item["path"]))
-        _atomic_json(self.registry_path, data)
-
-    def find(self, value, data=None):
-        data = data or self.load()
+    def find(self, value, registry=None):
+        if not value:
+            return None
+        registry = registry or self.load()
         candidate = canonical_path(value)
-        for item in data["projects"]:
-            if item["id"] == value or os.path.normcase(item["path"]) == os.path.normcase(candidate):
-                return item
+        for row in registry["projects"]:
+            if row.get("id") == value or os.path.normcase(row.get("path", "")) == os.path.normcase(candidate):
+                return row
         return None
 
-    def register(self, path, profile, source="manual", managed_files=None):
-        root = canonical_path(path)
-        if not os.path.exists(os.path.join(root, ".git")):
-            raise FleetError(f"not a Git project: {root}")
-        with self.lock("fleet-registry"):
-            data = self.load()
-            project = self.find(root, data)
+    def record(self, event, project=None):
+        self.home.mkdir(parents=True, exist_ok=True)
+        previous = "0" * 64
+        try:
+            with self.audit.open("rb") as stream:
+                lines = [line for line in stream if line.strip()]
+            if lines:
+                previous = json.loads(lines[-1]).get("hash", previous)
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError, TypeError):
+            previous = "invalid"
+        row = {"schema_version": 1, "ts": utc_now(), "event": event,
+               "project": project, "previous": previous}
+        row["hash"] = hashlib.sha256(json.dumps(
+            row, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        with self.audit.open("a", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+    def register(self, path, label=None):
+        root = Path(canonical_path(path))
+        if not (root / ".git").exists():
+            raise FleetError(f"not a Git repository: {root}")
+        with self.lock():
+            registry = self.load()
+            existing = self.find(str(root), registry)
             now = utc_now()
-            created = project is None
-            if created:
-                project = {
-                    "id": stable_project_id(root),
-                    "name": os.path.basename(root) or root,
-                    "path": root,
-                    "registered_at": now,
-                    "framework": {"managed_files": {}, "managed_version": None},
-                }
-                data["projects"].append(project)
-            project["profile"] = profile
-            project["source"] = source
-            project["updated_at"] = now
-            if managed_files is not None:
-                project["framework"] = {
-                    "managed_files": dict(sorted(managed_files.items())),
-                    "managed_version": _framework_version(root),
-                }
-            self.save(data)
-        self.audit("fleet.project.registered" if created else "fleet.project.updated", project["id"], profile)
-        return project, created
+            if existing:
+                existing["label"] = label or existing.get("label") or root.name
+                existing["updated_at"] = now
+                row, event = existing, "project.updated"
+            else:
+                row = {"id": project_id(root), "path": str(root), "label": label or root.name,
+                       "registered_at": now, "updated_at": now}
+                registry["projects"].append(row)
+                event = "project.registered"
+            self.save(registry)
+            self.record(event, row["id"])
+        return row
 
     def unregister(self, value):
-        with self.lock("fleet-registry"):
-            data = self.load()
-            project = self.find(value, data)
-            if not project:
+        with self.lock():
+            registry = self.load()
+            row = self.find(value, registry)
+            if not row:
                 raise FleetError(f"project is not registered: {value}")
-            data["projects"] = [item for item in data["projects"] if item["id"] != project["id"]]
-            self.save(data)
-        self.audit("fleet.project.unregistered", project["id"], project.get("profile"))
-        return project
+            registry["projects"] = [item for item in registry["projects"] if item["id"] != row["id"]]
+            self.save(registry)
+            self.record("project.unregistered", row["id"])
+        return row
 
-    def audit(self, event_name, project_id=None, profile=None, outcome="success", details=None):
-        with self.lock("fleet-audit"):
-            previous = ZERO_HASH
-            if self.audit_path.exists():
-                try:
-                    last = self.audit_path.read_text(encoding="utf-8").splitlines()[-1]
-                    previous = json.loads(last).get("event_hash", ZERO_HASH)
-                except (IndexError, OSError, ValueError):
-                    previous = ZERO_HASH
-            event = {
-                "schema_version": SCHEMA_VERSION,
-                "event_id": str(uuid4()),
-                "timestamp": utc_now(),
-                "event_name": event_name,
-                "event_domain": "vemo.fleet",
-                "outcome": outcome,
-                "actor_type": "local_user",
-                "project_id": project_id,
-                "profile": profile,
-                "previous_hash": previous,
-            }
-            if details:
-                event["details"] = details
-            canonical = json.dumps(event, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-            event["event_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-            self.audit_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.audit_path, "a", encoding="utf-8", newline="\n") as handle:
-                handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
-            if os.name != "nt":
-                os.chmod(self.audit_path, 0o600)
-        return event
-
-    def audit_repair_plan(self):
-        valid, failed_line = self.verify_audit()
-        content = self.audit_path.read_bytes() if self.audit_path.exists() else b""
-        return {
-            "valid": valid,
-            "failed_line": None if valid else failed_line,
-            "current_sha256": hashlib.sha256(content).hexdigest(),
-            "action": "none" if valid else "archive-and-restart",
-        }
-
-    def repair_audit(self):
-        plan = self.audit_repair_plan()
-        if plan["valid"]:
-            return {**plan, "archive": None}
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        archive = self.home / f"fleet-audit.invalid-{stamp}.jsonl"
-        with self.lock("fleet-audit"):
-            if not self.audit_path.exists():
-                raise FleetError("audit log disappeared before recovery")
-            os.replace(self.audit_path, archive)
-        self.audit(
-            "fleet.audit.recovered",
-            details={
-                "archived_file": archive.name,
-                "archived_sha256": plan["current_sha256"],
-                "failed_line": plan["failed_line"],
-            },
-        )
-        return {**plan, "archive": str(archive)}
-
-    def audit_events(self, limit=None):
-        if not self.audit_path.exists():
-            return []
-        events = []
-        for line_number, line in enumerate(self.audit_path.read_text(encoding="utf-8").splitlines(), 1):
+    def audit_status(self):
+        previous, count = "0" * 64, 0
+        try:
+            lines = self.audit.read_text(encoding="utf-8").splitlines()
+        except FileNotFoundError:
+            return {"valid": True, "events": 0}
+        except OSError:
+            return {"valid": False, "events": 0}
+        for line in lines:
+            if not line.strip():
+                continue
+            count += 1
             try:
-                events.append(json.loads(line))
-            except ValueError as exc:
-                raise FleetError(f"invalid audit JSON at line {line_number}: {exc}") from exc
-        return events[-limit:] if limit else events
-
-    def verify_audit(self):
-        previous = ZERO_HASH
-        events = self.audit_events()
-        for index, event in enumerate(events, 1):
-            recorded = event.get("event_hash")
-            body = dict(event)
-            body.pop("event_hash", None)
-            actual = hashlib.sha256(json.dumps(
-                body, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-            ).encode("utf-8")).hexdigest()
-            if event.get("previous_hash") != previous or recorded != actual:
-                return False, index
-            previous = recorded
-        return True, len(events)
+                row = json.loads(line)
+                actual = row.pop("hash")
+                expected = hashlib.sha256(json.dumps(
+                    row, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+                if row.get("previous") != previous or actual != expected:
+                    return {"valid": False, "events": count}
+                previous = actual
+            except (ValueError, TypeError, KeyError):
+                return {"valid": False, "events": count}
+        return {"valid": True, "events": count}
 
 
-def load_profiles(source_root):
-    profiles = {}
-    directory = Path(source_root) / "plugins" / "setup" / "profiles"
-    for path in sorted(directory.glob("*.json")):
-        profile = _read_json(path, {})
-        required = {"schema_version", "id", "display_name", "maturity", "description",
-                    "required_checks", "recommended_checks", "manual_controls", "standards"}
-        if profile.get("schema_version") != SCHEMA_VERSION or not required.issubset(profile):
-            raise FleetError(f"invalid governance profile: {path}")
-        if profile["id"] != path.stem or profile["id"] in profiles:
-            raise FleetError(f"profile id/path mismatch: {path}")
-        profiles[profile["id"]] = profile
-    if DEFAULT_PROFILE not in profiles:
-        raise FleetError(f"missing default profile '{DEFAULT_PROFILE}' in {directory}")
-    return profiles
+def git(root, *args):
+    try:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise FleetError(f"git observation failed for {root}: {exc}") from exc
 
 
 def discover_projects(roots, max_depth=5):
-    """Return canonical Git roots without mutating targets or the fleet registry."""
     found = set()
-    for supplied in roots:
-        start = Path(supplied).expanduser().resolve()
-        if not start.is_dir():
+    for value in roots:
+        root = Path(value).expanduser().resolve()
+        if not root.is_dir():
             continue
-        start_depth = len(start.parts)
-        for current, dirs, _files in os.walk(start):
-            here = Path(current)
-            depth = len(here.parts) - start_depth
-            dirs[:] = [name for name in dirs if name not in SKIP_DIRS and not name.startswith(".")]
-            if (here / ".git").exists():
-                found.add(str(here.resolve()))
+        base_depth = len(root.parts)
+        for directory, names, _files in os.walk(root, followlinks=False):
+            path = Path(directory)
+            depth = len(path.parts) - base_depth
+            names[:] = [name for name in names if name not in SKIP_DIRS and not (path / name).is_symlink()]
+            if (path / ".git").exists():
+                found.add(str(path))
+                if depth:
+                    names[:] = []
             elif depth >= max_depth:
-                dirs[:] = []
+                names[:] = []
     return sorted(found, key=os.path.normcase)
 
 
-def _exists_any(root, paths):
-    return any((Path(root) / item).exists() for item in paths)
-
-
-def _contains(root, relative, needle):
+def read_json(path):
     try:
-        return needle.lower() in (Path(root) / relative).read_text(encoding="utf-8", errors="replace").lower()
-    except OSError:
-        return False
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
-def _tracked(root, relative):
-    process = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", relative], cwd=root,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    return process.returncode == 0
-
-
-def _framework_version(root):
-    path = Path(root) / "vemo.config.yaml"
-    try:
-        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-            if "version:" in line:
-                value = line.split("version:", 1)[1].split("#", 1)[0].strip()
-                return value.strip("'\"")
-    except OSError:
-        pass
-    return None
-
-
-def _release_provenance(root):
-    workflows = Path(root) / ".github" / "workflows"
-    if not workflows.is_dir():
-        return False
-    for path in list(workflows.glob("*.yml")) + list(workflows.glob("*.yaml")):
-        text = path.read_text(encoding="utf-8", errors="replace").lower()
-        if "attest-build-provenance" in text or "artifact attestation" in text:
-            return True
-    return False
-
-
-CHECKS = {
-    "git_repository": ("Git repository", lambda root: (Path(root) / ".git").exists(), "Initialize Git first."),
-    "vemo_config": ("VEMO configuration", lambda root: (Path(root) / "vemo.config.yaml").is_file(), "Run `vemo fleet onboard <path>` and review the plan."),
-    "agents_router": ("Agent entry router", lambda root: (Path(root) / "AGENTS.md").is_file(), "Add the thin AGENTS.md router."),
-    "task_template": ("Machine-readable task template", lambda root: (Path(root) / "tasks" / "_TASK_TEMPLATE.md").is_file(), "Install the VEMO task template."),
-    "scope_guard": ("Scope guard", lambda root: (Path(root) / "enforcement" / "hooks" / "run.py").is_file() and (Path(root) / "enforcement" / "validators" / "task_state.py").is_file(), "Install VEMO enforcement files."),
-    "secret_scan": ("Secret scanning gate", lambda root: _contains(root, "enforcement/validators/task_state.py", "secret"), "Install a VEMO release with the secret diff gate."),
-    "local_hooks": ("Local Git gates", lambda root: (Path(root) / ".git" / "hooks" / "pre-commit").is_file() and (Path(root) / ".git" / "hooks" / "pre-push").is_file(), "Run the project's `vemo init --preset <stack>`."),
-    "ci_workflow": ("Authoritative CI gate", lambda root: (Path(root) / ".github" / "workflows" / "vemo-ci.yml").is_file(), "Install the VEMO workflow and require its check on the protected branch."),
-    "security_policy": ("Security policy", lambda root: _exists_any(root, ("SECURITY.md", ".github/SECURITY.md")), "Add a vulnerability reporting policy appropriate to the product."),
-    "contributing_policy": ("Contribution policy", lambda root: (Path(root) / "CONTRIBUTING.md").is_file(), "Document review, test, and release expectations."),
-    "codeowners": ("Critical-path ownership", lambda root: _exists_any(root, ("CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS")), "Assign owners for governance and release paths."),
-    "dependency_updates": ("Dependency update automation", lambda root: _exists_any(root, (".github/dependabot.yml", ".github/dependabot.yaml")), "Configure dependency update automation or document an equivalent control."),
-    "judge_provenance": ("Judge provenance", lambda root: (Path(root) / ".vemo" / "judge.jsonl").is_file() and _tracked(root, ".vemo/judge.jsonl"), "Track the append-only judge provenance log."),
-    "evidence_receipt": ("Executed verification receipt", lambda root: (Path(root) / ".vemo" / "run" / "receipt.json").is_file(), "Run `vemo verify` for the active task."),
-    "audit_telemetry": ("Local governance telemetry", lambda root: (Path(root) / ".vemo" / "telemetry.jsonl").is_file(), "Run `vemo init` and confirm telemetry is created."),
-    "release_provenance": ("Release artifact provenance", _release_provenance, "Generate and verify artifact attestations in the release workflow."),
-}
-
-
-def assess_project(path, profile):
-    root = canonical_path(path)
-    results = []
-    required = set(profile["required_checks"])
-    recommended = set(profile["recommended_checks"])
-    unknown = (required | recommended) - set(CHECKS)
-    if unknown:
-        raise FleetError(f"profile {profile['id']} uses unknown checks: {', '.join(sorted(unknown))}")
-    for check_id in profile["required_checks"] + profile["recommended_checks"]:
-        title, detector, remediation = CHECKS[check_id]
-        try:
-            passed = bool(detector(root))
-        except (OSError, subprocess.SubprocessError):
-            passed = False
-        results.append({
-            "id": check_id,
-            "title": title,
-            "level": "required" if check_id in required else "recommended",
-            "status": "pass" if passed else "fail",
-            "remediation": None if passed else remediation,
-        })
-    required_rows = [row for row in results if row["level"] == "required"]
-    passed_required = sum(row["status"] == "pass" for row in required_rows)
-    score = round(100 * passed_required / len(required_rows)) if required_rows else 100
-    return {
-        "id": stable_project_id(root),
-        "name": os.path.basename(root) or root,
-        "path": root,
-        "profile": profile["id"],
-        "maturity": profile["maturity"],
-        "framework_version": _framework_version(root),
-        "ready": passed_required == len(required_rows),
-        "score": score,
-        "checks": results,
-        "manual_controls": profile["manual_controls"],
-    }
-
-
-def _managed_sources(source_root, skills_root=None):
-    """Share the portable payload catalog with setup; add explicitly selected skills. @codex-comment"""
-    root = Path(source_root).resolve()
-    files = managed_sources(root)
-    if skills_root:
-        skills_home = Path(skills_root).expanduser().resolve()
-        skills_dir = skills_home / "skills"
-        if not skills_dir.is_dir():
-            raise FleetError(f"not a VEMO_SKILLS home: {skills_home}")
-        names = set()
-        for skill_dir in sorted(skills_dir.glob("*/*")):
-            if not (skill_dir / "SKILL.md").is_file():
-                continue
-            name = skill_dir.name
-            if name in names:
-                raise FleetError(f"duplicate skill name across categories: {name}")
-            names.add(name)
-            for path in sorted(skill_dir.rglob("*")):
-                if (not path.is_file() or "__pycache__" in path.parts
-                        or path.suffix in {".pyc", ".pyo"} or path.name == ".skill-validated.json"):
-                    continue
-                suffix = path.relative_to(skill_dir)
-                relative = str(Path(".claude") / "skills" / name / suffix).replace("\\", "/")
-                files[relative] = path
-    return files
-
-
-def onboard_plan(source_root, target, registered=None, skills_root=None):
-    target = Path(target).expanduser().resolve()
-    if not (target / ".git").exists():
-        raise FleetError(f"not a Git project: {target}")
-    baseline = ((registered or {}).get("framework") or {}).get("managed_files") or {}
-    actions = []
-    for relative, source in _managed_sources(source_root, skills_root).items():
-        destination = target / Path(relative)
-        source_digest = file_hash(source)
-        if not destination.exists():
-            status = "create"
-        elif not destination.is_file():
-            status = "conflict"
-        else:
-            current = file_hash(destination)
-            if current == source_digest:
-                status = "unchanged"
-            elif baseline.get(relative) == current:
-                status = "update"
-            else:
-                status = "conflict"
-        actions.append({
-            "path": relative,
-            "status": status,
-            "source_hash": source_digest,
-            "source": str(source),
-            "destination": str(destination),
-        })
-    return actions
-
-
-def _git_dirty(path):
-    process = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=path, capture_output=True,
-        text=True, encoding="utf-8", errors="replace",
-    )
-    if process.returncode != 0:
-        raise FleetError(f"cannot inspect Git status: {path}")
-    return bool(process.stdout.strip())
-
-
-def apply_onboard(source_root, target, profile, store, skills_root=None):
-    root = canonical_path(target)
-    with store.lock("project-" + stable_project_id(root)):
-        return _apply_onboard_locked(source_root, root, profile, store, skills_root)
-
-
-def _apply_onboard_locked(source_root, root, profile, store, skills_root=None):
-    registered = store.find(root)
-    plan = onboard_plan(source_root, root, registered, skills_root)
-    conflicts = [row["path"] for row in plan if row["status"] == "conflict"]
-    if conflicts:
-        raise FleetError("onboarding blocked by project-owned files: " + ", ".join(conflicts[:8]))
-    if _git_dirty(root):
-        raise FleetError("onboarding blocked: target worktree is dirty; commit or stash its changes first")
-    for row in plan:
-        if row["status"] not in {"create", "update"}:
+def git_state(root):
+    result = git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+    if result.returncode:
+        return {"available": False, "staged": 0, "unstaged": 0, "untracked": 0}
+    staged = unstaged = untracked = 0
+    for item in result.stdout.split("\0"):
+        if not item:
             continue
-        destination = Path(row["destination"])
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(row["source"], destination)
-    managed = {
-        row["path"]: file_hash(row["destination"])
-        for row in plan if Path(row["destination"]).is_file()
-    }
-    project, _created = store.register(root, profile, source="onboard", managed_files=managed)
-    store.audit("fleet.project.onboarded", project["id"], profile)
-    return plan, project
+        state = item[:2]
+        if state == "??":
+            untracked += 1
+        else:
+            staged += state[0] not in {" ", "?"}
+            unstaged += state[1] not in {" ", "?"}
+    return {"available": True, "staged": staged, "unstaged": unstaged,
+            "untracked": untracked, "clean": not (staged or unstaged or untracked)}
 
 
-def launcher_plan(source_root, home=None):
-    store = FleetStore(home)
-    bin_dir = store.home / "bin"
-    python = canonical_path(sys.executable or "python")
-    script = canonical_path(Path(source_root) / "bin" / "vemo")
-    cmd = f'@echo off\r\n"{python}" "{script}" %*\r\n'
-    shell = "#!/usr/bin/env sh\nexec " + shlex.quote(python) + " " + shlex.quote(script) + ' "$@"\n'
-    config = {
-        "schema_version": SCHEMA_VERSION,
-        "source_root": canonical_path(source_root),
-        "python": python,
-        "installed_at": utc_now(),
-    }
-    return {
-        "bin_dir": str(bin_dir),
-        "files": {
-            str(bin_dir / "vemo.cmd"): cmd,
-            str(bin_dir / "vemo"): shell,
-            str(store.home / "config.json"): json.dumps(config, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        },
-    }
+def evidence_rows(root, limit=20):
+    directory = Path(root) / core.EVIDENCE_DIR
+    paths = sorted(directory.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)[:limit] \
+        if directory.is_dir() else []
+    rows = []
+    for path in paths:
+        value = read_json(path)
+        if isinstance(value, dict):
+            rows.append({"file": path.name, "task": value.get("task"), "passed": value.get("passed"),
+                         "critical": value.get("critical"), "ts": value.get("ts"),
+                         "commands": len(value.get("commands", []))})
+    return rows
 
 
-def apply_launcher(source_root, store):
-    plan = launcher_plan(source_root, store.home)
-    for path, content in plan["files"].items():
-        destination = Path(path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(content, encoding="utf-8", newline="")
-        if destination.name == "vemo" and os.name != "nt":
-            os.chmod(destination, 0o700)
-    store.audit("fleet.control-plane.installed")
-    return plan
+@contextmanager
+def without_approval():
+    """A monitor reports fail-closed state and never inherits one project's approval."""
+    saved = {key: os.environ.pop(key) for key in APPROVAL_ENV if key in os.environ}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
 
 
-def report_payload(assessments):
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": utc_now(),
-        "summary": {
-            "projects": len(assessments),
-            "ready": sum(item["ready"] for item in assessments),
-            "not_ready": sum(not item["ready"] for item in assessments),
-        },
-        "projects": assessments,
-    }
+def probe_project(registration, detail=False):
+    root = Path(registration["path"])
+    result = {"id": registration["id"], "label": registration.get("label") or root.name,
+              "path": str(root), "registered_at": registration.get("registered_at"),
+              "updated_at": registration.get("updated_at"), "observed_at": utc_now()}
+    if not root.is_dir():
+        return {**result, "status": "unavailable", "score": 0,
+                "gate": {"decision": "deny", "reason": "project_unavailable"},
+                "controls": [{"id": "path", "status": "fail", "label": "Project path", "detail": "Directory is missing"}]}
+    if not (root / core.POLICY_FILE).is_file():
+        return {**result, "status": "unmanaged", "score": 0, "git": git_state(root),
+                "gate": {"decision": "deny", "reason": "vemo_not_installed"},
+                "controls": [{"id": "policy", "status": "fail", "label": "VEMO policy", "detail": "vemo.json is missing"}]}
+    controls, policy, task = [], None, None
+    try:
+        policy = core.load_policy(root)
+        controls.append({"id": "policy", "status": "pass", "label": "Policy", "detail": "Version 2 contract is valid"})
+    except core.VemoError as exc:
+        controls.append({"id": "policy", "status": "fail", "label": "Policy", "detail": str(exc)})
+    try:
+        task = core.load_task(root)
+        controls.append({"id": "task", "status": "pass", "label": "Task", "detail": task["id"]})
+    except core.VemoError as exc:
+        controls.append({"id": "task", "status": "fail", "label": "Task", "detail": str(exc)})
+    for identifier, label, relative in (
+        ("core", "Governance evaluator", "enforcement/core.py"),
+        ("cli", "VEMO CLI", "bin/vemo"),
+        ("ci", "Server-side workflow", ".github/workflows/vemo-ci.yml"),
+        ("pre_commit", "Pre-commit adapter", ".git/hooks/pre-commit"),
+        ("pre_push", "Pre-push adapter", ".git/hooks/pre-push"),
+    ):
+        present = (root / relative).is_file()
+        controls.append({"id": identifier, "status": "pass" if present else "fail",
+                         "label": label, "detail": relative + (" is present" if present else " is missing")})
+    with without_approval():
+        gate = core.check_merge(root) if policy and task else {"decision": "deny", "reason": "configuration_invalid", "evidence": {}}
+    evidence = evidence_rows(root)
+    latest = evidence[0] if evidence else None
+    evidence_ok = bool(latest and latest.get("passed") and task and latest.get("task") == task["id"])
+    controls.append({"id": "evidence", "status": "pass" if evidence_ok else "warn",
+                     "label": "Latest verification evidence",
+                     "detail": latest.get("ts") if evidence_ok else "No passing evidence for the current task"})
+    required = [row for row in controls if row["status"] == "fail"]
+    status = "ready" if not required and gate["decision"] == "allow" else "attention"
+    score = round(100 * (sum(row["status"] == "pass" for row in controls)
+                         + (gate["decision"] == "allow")) / (len(controls) + 1))
+    try:
+        version = (root / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        version = None
+    return {**result, "status": status, "score": score, "version": version,
+            "gate": gate, "git": git_state(root), "controls": controls,
+            "task": task, "policy": ({"critical_paths": policy["critical_paths"],
+                                       "deny_actions": policy["deny_actions"],
+                                       "plugins": policy["plugins"],
+                                       "verification": {key: len(value) for key, value in policy["verification"].items()}}
+                                      if policy else None),
+            "evidence": evidence if detail else evidence[:1]}
 
 
-def _print_assessment(item):
-    marker = "PASS" if item["ready"] else "GAP"
-    version = item["framework_version"] or "not-installed"
-    print(f"[{marker}] {item['name']}  profile={item['profile']} score={item['score']}% vemo={version}")
-    print(f"       {item['path']}")
-    for row in item["checks"]:
-        if row["status"] == "fail":
-            print(f"       - {row['level']}: {row['title']} -> {row['remediation']}")
+def overview(store):
+    projects = [probe_project(row) for row in store.load()["projects"]]
+    counts = {name: sum(row["status"] == name for row in projects)
+              for name in ("ready", "attention", "unmanaged", "unavailable")}
+    return {"schema_version": SCHEMA_VERSION, "generated_at": utc_now(),
+            "summary": {"projects": len(projects), **counts}, "audit": store.audit_status(),
+            "projects": projects}
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(prog="vemo fleet", description="Govern all local Git projects from one PC.")
-    parser.add_argument("--source-root", default=str(Path(__file__).resolve().parent.parent), help=argparse.SUPPRESS)
-    sub = parser.add_subparsers(dest="command", required=True)
+class DashboardHandler(BaseHTTPRequestHandler):
+    server_version = "VEMOControl/1"
 
-    register = sub.add_parser("register", help="Register one Git project in the private local fleet registry.")
-    register.add_argument("path", nargs="?", default=".")
-    register.add_argument("--profile", default=DEFAULT_PROFILE)
+    def log_message(self, _format, *_args):
+        return
 
-    unregister = sub.add_parser("unregister", help="Remove a project from the registry; never changes the project.")
+    def send_content(self, content_type, data, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_json(self, value, status=200):
+        self.send_content("application/json; charset=utf-8", json.dumps(value, ensure_ascii=False).encode(), status)
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/overview":
+            return self.send_json(overview(self.server.store))
+        if parsed.path == "/api/project":
+            identifier = parse_qs(parsed.query).get("id", [""])[0]
+            row = self.server.store.find(identifier)
+            return self.send_json(probe_project(row, detail=True) if row else {"error": "project_not_found"}, 200 if row else 404)
+        if parsed.path == "/api/health":
+            return self.send_json({"ok": True, "audit": self.server.store.audit_status()})
+        relative = "index.html" if parsed.path in {"", "/"} else parsed.path.lstrip("/")
+        if relative not in {"index.html", "app.js", "style.css"}:
+            return self.send_error(404)
+        path = UI_ROOT / relative
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return self.send_error(404)
+        content_type = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+                        ".css": "text/css; charset=utf-8"}[path.suffix]
+        self.send_content(content_type, data)
+
+
+def serve(store, port=0, open_browser=True):
+    server = HTTPServer(("127.0.0.1", port), DashboardHandler)
+    server.store = store
+    url = f"http://127.0.0.1:{server.server_port}/"
+    print(url, flush=True)
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+
+
+def parser():
+    value = argparse.ArgumentParser(prog="vemo fleet", description="Local VEMO governance control plane")
+    sub = value.add_subparsers(dest="command", required=True)
+    register = sub.add_parser("register", help="Register one Git project; project files are unchanged")
+    register.add_argument("path")
+    register.add_argument("--label")
+    unregister = sub.add_parser("unregister", help="Remove only the user-local registry entry")
     unregister.add_argument("project")
-
-    discover = sub.add_parser("discover", help="Find Git projects without registering or modifying them.")
-    discover.add_argument("roots", nargs="*", default=["."])
+    discover = sub.add_parser("discover", help="Find Git repositories below explicit roots without registering")
+    discover.add_argument("roots", nargs="+")
     discover.add_argument("--max-depth", type=int, default=5)
     discover.add_argument("--json", action="store_true")
-
-    status = sub.add_parser("status", help="Assess all registered projects against their policy profiles.")
+    status = sub.add_parser("status", help="Observe all registered projects without executing project code")
     status.add_argument("--json", action="store_true")
-    status.add_argument("--strict", action="store_true", help="Exit 1 when a required control is missing.")
-
-    onboard = sub.add_parser("onboard", help="Preview or apply VEMO-managed files to one clean Git project.")
-    onboard.add_argument("path")
-    onboard.add_argument("--profile", default=DEFAULT_PROFILE)
-    onboard.add_argument("--skills-root", help="Explicit VEMO_SKILLS home to bind byte-identically.")
-    onboard.add_argument("--apply", action="store_true", help="Apply the displayed plan; default is read-only.")
-    onboard.add_argument("--json", action="store_true")
-
-    install = sub.add_parser("install", help="Preview or install a user-local vemo launcher.")
-    install.add_argument("--apply", action="store_true", help="Write launchers under VEMO_HOME; default is preview.")
-    install.add_argument("--json", action="store_true")
-
-    profiles = sub.add_parser("profiles", help="List progressive governance profiles and their intent.")
-    profiles.add_argument("--json", action="store_true")
-
-    audit = sub.add_parser("audit", help="Read or verify the private hash-chained fleet mutation log.")
-    audit.add_argument("--verify", action="store_true")
-    audit.add_argument("--repair", action="store_true", help="Preview preservation and restart of an invalid chain.")
-    audit.add_argument("--apply", action="store_true", help="Apply audit repair; never deletes the invalid log.")
-    audit.add_argument("--limit", type=int, default=20)
-    audit.add_argument("--json", action="store_true")
-    return parser
+    status.add_argument("--strict", action="store_true")
+    inspect = sub.add_parser("inspect", help="Show one registered project's governance state")
+    inspect.add_argument("project")
+    inspect.add_argument("--json", action="store_true")
+    serve_parser = sub.add_parser("serve", help="Start the loopback-only visual monitoring console")
+    serve_parser.add_argument("--port", type=int, default=0)
+    serve_parser.add_argument("--no-browser", action="store_true")
+    sub.add_parser("audit", help="Verify the user-local registry mutation chain")
+    return value
 
 
 def main(argv=None, home=None):
-    args = build_parser().parse_args(argv)
+    args = parser().parse_args(argv)
     store = FleetStore(home)
-    profiles = load_profiles(args.source_root)
-
     if args.command == "register":
-        if args.profile not in profiles:
-            raise FleetError(f"unknown profile: {args.profile}")
-        project, created = store.register(args.path, args.profile)
-        print(f"{'registered' if created else 'updated'} {project['id']} {project['path']} profile={project['profile']}")
-        return 0
+        print(json.dumps(store.register(args.path, args.label), ensure_ascii=False, indent=2)); return 0
     if args.command == "unregister":
-        project = store.unregister(args.project)
-        print(f"unregistered {project['id']} {project['path']} (project files unchanged)")
-        return 0
+        print(json.dumps(store.unregister(args.project), ensure_ascii=False, indent=2)); return 0
     if args.command == "discover":
-        projects = discover_projects(args.roots, args.max_depth)
-        payload = {"schema_version": SCHEMA_VERSION, "projects": projects, "mutated": False}
-        if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
-        else:
-            print(f"discovered {len(projects)} Git project(s); no changes made")
-            for path in projects:
-                marker = "registered" if store.find(path) else "unregistered"
-                print(f"  [{marker}] {path}")
-        return 0
+        rows = discover_projects(args.roots, args.max_depth)
+        payload = {"projects": [{"path": row, "registered": bool(store.find(row))} for row in rows], "mutated": False}
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else "\n".join(rows)); return 0
     if args.command == "status":
-        registry = store.load()
-        assessments = []
-        for project in registry["projects"]:
-            profile = profiles.get(project.get("profile"))
-            if not profile:
-                raise FleetError(f"project {project['id']} uses missing profile {project.get('profile')}")
-            assessments.append(assess_project(project["path"], profile))
-        payload = report_payload(assessments)
+        payload = overview(store)
         if args.json:
             print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
-            print(f"VEMO Fleet: {payload['summary']['ready']}/{payload['summary']['projects']} project(s) ready")
-            for item in assessments:
-                _print_assessment(item)
-        return 1 if args.strict and payload["summary"]["not_ready"] else 0
-    if args.command == "onboard":
-        if args.profile not in profiles:
-            raise FleetError(f"unknown profile: {args.profile}")
-        registered = store.find(args.path)
-        plan = onboard_plan(args.source_root, args.path, registered, args.skills_root)
-        if args.apply:
-            plan, _project = apply_onboard(
-                args.source_root, args.path, args.profile, store, args.skills_root
-            )
-        payload = {
-            "schema_version": SCHEMA_VERSION,
-            "mode": "apply" if args.apply else "dry-run",
-            "target": canonical_path(args.path),
-            "profile": args.profile,
-            "skills_root": canonical_path(args.skills_root) if args.skills_root else None,
-            "summary": {status: sum(row["status"] == status for row in plan)
-                        for status in ("create", "update", "unchanged", "conflict")},
-            "actions": [{key: row[key] for key in ("path", "status", "source_hash")} for row in plan],
-        }
-        if args.json:
-            print(json.dumps(payload, ensure_ascii=False, indent=2))
-        else:
-            print(f"VEMO onboard {payload['mode']}: {payload['target']} profile={args.profile}")
-            for row in plan:
-                if row["status"] != "unchanged":
-                    print(f"  {row['status']:9} {row['path']}")
-            print("summary:", " ".join(f"{key}={value}" for key, value in payload["summary"].items()))
-            if not args.apply:
-                print("no changes made; re-run with --apply after reviewing conflicts and committing the target")
-            else:
-                print("managed files applied; run the target project's `vemo init --preset <stack>` to install local hooks")
-        return 1 if payload["summary"]["conflict"] else 0
-    if args.command == "install":
-        plan = apply_launcher(args.source_root, store) if args.apply else launcher_plan(args.source_root, store.home)
-        payload = {"schema_version": SCHEMA_VERSION, "mode": "apply" if args.apply else "dry-run", **plan}
-        if args.json:
-            serializable = dict(payload)
-            serializable["files"] = sorted(plan["files"])
-            print(json.dumps(serializable, ensure_ascii=False, indent=2))
-        else:
-            print(f"VEMO fleet install {payload['mode']}")
-            for path in sorted(plan["files"]):
-                print("  write", path)
-            print("launcher directory:", plan["bin_dir"])
-            if not args.apply:
-                print("no changes made; re-run with --apply")
-            else:
-                print("add this directory to PATH once, or invoke vemo.cmd directly on Windows")
+            print(f"VEMO Control Plane: {payload['summary']['ready']}/{payload['summary']['projects']} ready")
+            for row in payload["projects"]:
+                print(f"{row['status']:11} {row['score']:3}% {row['label']}  {row['gate']['reason']}")
+        return 1 if args.strict and payload["summary"]["projects"] != payload["summary"]["ready"] else 0
+    if args.command == "inspect":
+        row = store.find(args.project)
+        if not row:
+            raise FleetError(f"project is not registered: {args.project}")
+        payload = probe_project(row, detail=True)
+        print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else
+              f"{payload['label']}: {payload['status']} {payload['score']}% gate={payload['gate']['reason']}")
         return 0
-    if args.command == "profiles":
-        values = [profiles[key] for key in sorted(profiles, key=lambda key: profiles[key]["maturity"])]
-        if args.json:
-            print(json.dumps({"schema_version": SCHEMA_VERSION, "profiles": values}, ensure_ascii=False, indent=2))
-        else:
-            for profile in values:
-                print(f"{profile['id']:10} level={profile['maturity']} {profile['display_name']}: {profile['description']}")
-        return 0
+    if args.command == "serve":
+        serve(store, args.port, not args.no_browser); return 0
     if args.command == "audit":
-        if args.repair:
-            payload = store.repair_audit() if args.apply else store.audit_repair_plan()
-            if args.json:
-                print(json.dumps(payload, ensure_ascii=False, indent=2))
-            elif payload["valid"]:
-                print("audit chain is already valid; no repair needed")
-            elif args.apply:
-                print(f"invalid audit preserved at {payload['archive']}; recovery chain started")
-            else:
-                print(f"audit repair preview: failed_line={payload['failed_line']} sha256={payload['current_sha256']}")
-                print("no changes made; re-run with --repair --apply to preserve and restart the chain")
-            return 0 if payload["valid"] or args.apply else 1
-        if args.verify:
-            valid, count = store.verify_audit()
-            payload = {"valid": valid, "events_checked": count}
-            print(json.dumps(payload, indent=2) if args.json else f"audit chain: {'valid' if valid else 'INVALID'} ({count} event(s))")
-            return 0 if valid else 1
-        events = store.audit_events(args.limit)
-        if args.json:
-            print(json.dumps({"schema_version": SCHEMA_VERSION, "events": events}, ensure_ascii=False, indent=2))
-        else:
-            for event in events:
-                print(event["timestamp"], event["event_name"], event.get("project_id") or "-")
-        return 0
+        payload = store.audit_status(); print(json.dumps(payload, indent=2)); return 0 if payload["valid"] else 1
     return 2
 
 
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        raise SystemExit(main())
     except FleetError as exc:
         print(f"[vemo fleet] {exc}", file=sys.stderr)
-        sys.exit(2)
+        raise SystemExit(2)

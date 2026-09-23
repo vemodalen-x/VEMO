@@ -7,8 +7,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest import mock
+from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "enforcement"))
@@ -241,13 +243,31 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertFalse((target / ".github/workflows/vemo-ci.yml").exists())
 
     def test_repository_guides_reference_current_cli(self):
-        guides = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md"]
+        guides = [ROOT / "README.md", ROOT / "docs/USAGE.md", ROOT / "docs/INSTALL.md",
+                  ROOT / "docs/PLATFORMS.md", ROOT / "docs/AI-INSTALL.md", ROOT / "docs/EXAMPLES.md"]
         if not all(path.is_file() for path in guides):
             self.skipTest("repository documentation is not part of the core payload")
         retired = re.compile(r"bin/vemo (?:context|tier|report|platform|extensions|doctor|eval|explain|start)")
         for path in guides:
             self.assertIsNone(retired.search(path.read_text(encoding="utf-8")), str(path))
         self.assertIn("plugins/setup/entry.py setup install", guides[2].read_text(encoding="utf-8"))
+
+    def test_delivery_documentation_has_platform_ai_and_examples_navigation(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        install = (ROOT / "docs/INSTALL.md").read_text(encoding="utf-8")
+        platforms = (ROOT / "docs/PLATFORMS.md").read_text(encoding="utf-8")
+        ai_install = (ROOT / "docs/AI-INSTALL.md").read_text(encoding="utf-8")
+        examples = (ROOT / "docs/EXAMPLES.md").read_text(encoding="utf-8")
+        for name in ("PLATFORMS.md", "AI-INSTALL.md", "EXAMPLES.md"):
+            self.assertIn(name, readme)
+        self.assertIn("PLATFORMS.md", install)
+        for platform in ("Linux", "macOS", "Windows", "GitHub Actions", "Claude Code"):
+            self.assertIn(platform, platforms)
+        self.assertIn("--plan-id", ai_install)
+        self.assertIn("VEMO_APPROVED_*", ai_install)
+        self.assertIn("Out-of-scope change", examples)
+        self.assertTrue((ROOT / "plugins/setup/ui/start.command").is_file())
+        self.assertTrue((ROOT / "plugins/setup/ui/start.cmd").is_file())
 
     def test_plugin_manifest_cannot_replace_core_command(self):
         with tempfile.TemporaryDirectory() as td:
@@ -262,12 +282,103 @@ class RepositoryContractTests(unittest.TestCase):
     def test_bundled_plugin_entrypoints_are_runnable(self):
         if not (ROOT / "plugins").is_dir(): self.skipTest("bundled plugins are not part of the core payload")
         manifests = core.plugin_manifests(ROOT)
-        self.assertEqual({"automation", "fleet", "product", "review", "setup", "skills"}, set(manifests))
+        self.assertEqual({"automation", "fleet", "review", "setup", "skills"}, set(manifests))
         for name, manifest in manifests.items():
-            entry = next(iter(manifest["commands"].values()))
-            completed = subprocess.run([sys.executable, str(ROOT / entry[0]), *entry[1:], "--help"],
-                                       cwd=ROOT, capture_output=True, text=True)
-            self.assertEqual(0, completed.returncode, name + ": " + completed.stdout + completed.stderr)
+            for command, entry in manifest["commands"].items():
+                completed = subprocess.run([sys.executable, str(ROOT / entry[0]), *entry[1:], "--help"],
+                                           cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(0, completed.returncode,
+                                 name + ":" + command + ": " + completed.stdout + completed.stderr)
+
+    def test_setup_apply_requires_a_content_bound_preview(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            for action in ("install", "uninstall"):
+                completed = subprocess.run(
+                    [sys.executable, str(ROOT / "plugins/setup/entry.py"), "setup", action,
+                     str(target), "--apply", "--json"],
+                    cwd=ROOT, capture_output=True, text=True)
+                self.assertEqual(2, completed.returncode)
+                self.assertIn("plan_id", completed.stderr)
+
+    def test_setup_preview_id_drives_install_check_and_uninstall(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td)
+            subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            entry = str(ROOT / "plugins/setup/entry.py")
+
+            def setup(*args):
+                return subprocess.run([sys.executable, entry, "setup", *args, "--json"],
+                                      cwd=ROOT, capture_output=True, text=True)
+
+            preview = setup("install", str(target))
+            self.assertEqual(0, preview.returncode, preview.stderr)
+            plan_id = json.loads(preview.stdout)["plan_id"]
+            stale = setup("install", str(target), "--apply", "--plan-id", "0" * 64)
+            self.assertEqual(2, stale.returncode)
+            self.assertIn("重新预览", stale.stderr)
+            applied = setup("install", str(target), "--apply", "--plan-id", plan_id)
+            self.assertEqual(0, applied.returncode, applied.stderr)
+            checked = setup("check", str(target))
+            self.assertEqual(0, checked.returncode, checked.stdout + checked.stderr)
+            self.assertTrue(json.loads(checked.stdout)["ready"])
+            removal = setup("uninstall", str(target))
+            remove_id = json.loads(removal.stdout)["plan_id"]
+            removed = setup("uninstall", str(target), "--apply", "--plan-id", remove_id)
+            self.assertEqual(0, removed.returncode, removed.stderr)
+
+    def test_fleet_registry_probe_and_audit_are_user_local(self):
+        spec = importlib.util.spec_from_file_location("vemo_fleet", ROOT / "plugins/fleet/main.py")
+        fleet = importlib.util.module_from_spec(spec); spec.loader.exec_module(fleet)
+        with tempfile.TemporaryDirectory() as td:
+            home, target = Path(td) / "home", Path(td) / "project"
+            target.mkdir(); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            store = fleet.FleetStore(home)
+            registered = store.register(target, "Fixture")
+            self.assertEqual("Fixture", registered["label"])
+            self.assertFalse((target / "vemo.json").exists())
+            unmanaged = fleet.probe_project(registered, detail=True)
+            self.assertEqual("unmanaged", unmanaged["status"])
+            self.assertTrue(store.audit_status()["valid"])
+            removed = store.unregister(registered["id"])
+            self.assertEqual(registered["id"], removed["id"])
+            self.assertEqual([], store.load()["projects"])
+
+    def test_fleet_discovery_finds_nested_projects_below_a_git_root(self):
+        spec = importlib.util.spec_from_file_location("vemo_fleet_discover", ROOT / "plugins/fleet/main.py")
+        fleet = importlib.util.module_from_spec(spec); spec.loader.exec_module(fleet)
+        with tempfile.TemporaryDirectory() as td:
+            outer, nested = Path(td), Path(td) / "group" / "nested"
+            nested.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q"], cwd=outer, check=True)
+            subprocess.run(["git", "init", "-q"], cwd=nested, check=True)
+            self.assertEqual({str(outer), str(nested)}, set(fleet.discover_projects([outer], 3)))
+
+    def test_fleet_dashboard_serves_overview_and_project_detail(self):
+        spec = importlib.util.spec_from_file_location("vemo_fleet_http", ROOT / "plugins/fleet/main.py")
+        fleet = importlib.util.module_from_spec(spec); spec.loader.exec_module(fleet)
+        with tempfile.TemporaryDirectory() as td:
+            store = fleet.FleetStore(Path(td) / "home")
+            store.register(ROOT, "VEMO")
+            server = fleet.HTTPServer(("127.0.0.1", 0), fleet.DashboardHandler)
+            server.store = store
+            thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+            base = f"http://127.0.0.1:{server.server_port}"
+            try:
+                page = urlopen(base + "/", timeout=5)
+                html = page.read().decode()
+                overview = json.loads(urlopen(base + "/api/overview", timeout=5).read())
+                identifier = overview["projects"][0]["id"]
+                detail = json.loads(urlopen(base + "/api/project?id=" + identifier, timeout=5).read())
+            finally:
+                server.shutdown(); server.server_close(); thread.join(timeout=5)
+            self.assertIn("VEMO Control Plane", html)
+            self.assertIn("default-src 'self'", page.headers["Content-Security-Policy"])
+            self.assertEqual(1, overview["summary"]["projects"])
+            self.assertEqual("VEMO", detail["label"])
+            self.assertIn(detail["gate"]["decision"], {"allow", "deny", "approval_required"})
+            self.assertTrue(any(row["id"] == "policy" for row in detail["controls"]))
 
 
 if __name__ == "__main__": unittest.main()

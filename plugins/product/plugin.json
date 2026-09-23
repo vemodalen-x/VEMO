@@ -1,1 +1,0 @@
-{"version": 1, "name": "product", "commands": {"report": ["plugins/product/main.py", "report"], "platform": ["plugins/product/main.py", "platform"]}}

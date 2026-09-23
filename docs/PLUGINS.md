@@ -5,9 +5,9 @@ commands only after explicit enablement in `vemo.json`.
 
 ```bash
 python3 bin/vemo plugin list
-python3 bin/vemo plugin enable product
+python3 bin/vemo plugin enable fleet
 python3 bin/vemo --help
-python3 bin/vemo plugin disable product
+python3 bin/vemo plugin disable fleet
 ```
 
 A plugin has one data-only manifest:
@@ -31,18 +31,20 @@ Rules are intentionally small:
 - no dependency graph, lifecycle hooks, capability seams, or executable manifest expressions;
 - plugin code is trusted and unsandboxed.
 
-Bundled plugins expose a product report/platform view, Fleet, setup UI/service, skill tooling, optional review
-guides, and automation commands. Their implementation files remain outside the default payload. The former
+Bundled plugins expose a Fleet control plane, setup UI/service, skill tooling, optional review guides, and
+automation commands. Their implementation files remain outside the default payload. The former
 extension-composition subsystem was deleted rather than preserved: plugin discovery itself replaces it.
 
 | Plugin | Commands | Purpose |
 |---|---|---|
 | `setup` | `setup`, `ui` | Transactional install, check, recover, uninstall, and local browser UI |
-| `product` | `report`, `platform` | Read-only local reporting and architecture view |
-| `fleet` | `fleet` | Optional multi-repository inventory tooling |
+| `fleet` | `fleet`, `dashboard` | User-local multi-project governance control plane and read-only visual console |
 | `review` | `judge-guide` | Independent-review guidance; no core policy authority |
 | `skills` | `skill-score`, `skill-audit`, `skill-roster` | Optional skill catalog tooling |
 | `automation` | `auto` | Legacy unattended-mode helper; review carefully before enabling |
 
 Bundled does not mean supported by the core contract. Each plugin owns its compatibility and documentation;
 disabled plugin code is not imported or validated during core startup.
+
+See [CONTROL-PLANE.md](CONTROL-PLANE.md) for the machine-wide registry, single-project inspection model, local
+dashboard, API, security boundaries, and cross-platform launch commands.

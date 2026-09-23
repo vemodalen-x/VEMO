@@ -69,7 +69,7 @@ The setup plugin is optional and transactional. From a VEMO source checkout:
 
 ```bash
 python3 plugins/setup/entry.py setup install /absolute/project --preset python --profile solo --json
-python3 plugins/setup/entry.py setup install /absolute/project --preset python --profile solo --apply --json
+python3 plugins/setup/entry.py setup install /absolute/project --preset python --profile solo --apply --plan-id '<plan-id>' --json
 python3 plugins/setup/entry.py setup check /absolute/project --json
 ```
 
@@ -79,7 +79,7 @@ critical paths and verification commands are explicitly mapped to the 2.0 JSON p
 ```bash
 python3 plugins/setup/entry.py setup recover /absolute/project --apply
 python3 plugins/setup/entry.py setup uninstall /absolute/project --json
-python3 plugins/setup/entry.py setup uninstall /absolute/project --apply
+python3 plugins/setup/entry.py setup uninstall /absolute/project --apply --plan-id '<plan-id>'
 ```
 
 The setup plugin installs the 14-file core payload; it does not install optional plugins or business tests.
@@ -88,13 +88,17 @@ The setup plugin installs the 14-file core payload; it does not install optional
 
 ```bash
 python3 bin/vemo plugin list
-python3 bin/vemo plugin enable product
+python3 bin/vemo plugin enable fleet
 python3 bin/vemo --help
-python3 bin/vemo plugin disable product
+python3 bin/vemo plugin disable fleet
 ```
 
 Plugins are trusted local code, not sandboxes. Keep the default `plugins: []` unless the repository explicitly
 needs a plugin and its command is reviewed.
+
+For workstation-wide governance, register projects with the optional Fleet plugin and start its loopback-only
+dashboard. The registry is user-local and the dashboard is read-only; installation remains a separate setup plugin
+operation. See [CONTROL-PLANE.md](CONTROL-PLANE.md).
 
 ## CI range checks and bootstrap
 
@@ -112,3 +116,5 @@ trusted base evaluator and must be approved through protected repository bootstr
 - setup reports a conflict: use the preview output, resolve the named file, and preview again.
 
 For 1.x conversion, follow [MIGRATION.md](MIGRATION.md). For the manifest contract, see [PLUGINS.md](PLUGINS.md).
+For operating-system and harness boundaries, see [PLATFORMS.md](PLATFORMS.md). Agent-driven setup must follow
+[AI-INSTALL.md](AI-INSTALL.md), and complete command sequences are collected in [EXAMPLES.md](EXAMPLES.md).

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VEMO Control Plane</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">VELOCITY-FIRST GOVERNANCE</span><h1>VEMO Control Plane</h1></div>
+    <div class="actions"><span id="updated">尚未刷新</span><button id="refresh" type="button">刷新状态</button></div>
+  </header>
+  <main>
+    <section class="hero">
+      <div><p class="kicker">本机治理态势</p><h2>所有受管项目，一个可信视图。</h2>
+        <p>只读观察项目内的 Policy、Task、Gate、Verify 与 Evidence；不会执行业务仓库代码。</p></div>
+      <svg viewBox="0 0 360 180" role="img" aria-label="VEMO 五层治理关系">
+        <defs><linearGradient id="g" x1="0" x2="1"><stop stop-color="#54d6c3"/><stop offset="1" stop-color="#79a7ff"/></linearGradient></defs>
+        <path d="M28 90H332" stroke="#263958" stroke-width="2"/><g fill="url(#g)">
+        <circle cx="38" cy="90" r="18"/><circle cx="109" cy="90" r="18"/><circle cx="180" cy="90" r="18"/><circle cx="251" cy="90" r="18"/><circle cx="322" cy="90" r="18"/></g>
+        <g fill="#dce9ff" font-size="12" text-anchor="middle"><text x="38" y="130">Policy</text><text x="109" y="130">Task</text><text x="180" y="130">Gate</text><text x="251" y="130">Verify</text><text x="322" y="130">Evidence</text></g>
+      </svg>
+    </section>
+    <section id="metrics" class="metrics" aria-label="汇总指标"></section>
+    <section class="workspace">
+      <div class="list-panel">
+        <div class="toolbar"><div><h2>治理项目</h2><p id="audit"></p></div>
+          <label><span class="sr-only">筛选项目</span><input id="search" type="search" placeholder="按名称或路径筛选"></label></div>
+        <div id="projects" class="projects" aria-live="polite"></div>
+      </div>
+      <aside id="detail" class="detail" aria-live="polite">
+        <div class="empty"><span>选择一个项目</span><p>查看任务授权、门禁决策、控制项和验证证据。</p></div>
+      </aside>
+    </section>
+  </main>
+  <footer>本地回环服务 · 无外部静态资源 · 管理命令：<code>vemo fleet --help</code></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

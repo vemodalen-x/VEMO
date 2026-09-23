@@ -27,12 +27,22 @@ Do not copy files manually. Use the optional transactional setup plugin:
 ```bash
 python3 plugins/setup/entry.py setup install /absolute/project --json
 # inspect the JSON plan
-python3 plugins/setup/entry.py setup install /absolute/project --apply --json
+python3 plugins/setup/entry.py setup install /absolute/project --apply --plan-id '<plan-id>' --json
 python3 plugins/setup/entry.py setup check /absolute/project --json
 ```
 
-The preview is the approval boundary. The installer preserves unrelated project content, refuses custom
+The preview is the approval boundary, and `--apply` refuses to run without that preview's content-bound `plan_id`.
+The installer preserves unrelated project content, refuses custom
 `core.hooksPath`, rejects symlinked installation paths, records hashes, and rolls back on failed probes.
+Use the exact returned `plan_id` when applying an approved plan. For agent-operated installation, follow
+[AI-INSTALL.md](AI-INSTALL.md) rather than granting the agent approval credentials.
+
+## Platform choices
+
+Linux is the reference environment. On macOS, install Python 3.10+ and Bash 4+ before relying on local hooks. On
+Windows, WSL is the recommended complete environment; native Windows can run the Python core and setup UI, but no
+native PowerShell Git-hook adapter is currently shipped. See [PLATFORMS.md](PLATFORMS.md) for the verified support
+matrix and launch commands.
 
 ## Enable a bundled plugin
 
@@ -59,3 +69,5 @@ VEMO evaluator; approve that one merge through the repository's protected proces
 Preview every upgrade and keep a rollback branch or tag. For 1.x repositories, read [MIGRATION.md](MIGRATION.md);
 VEMO refuses to guess at legacy YAML policy. The setup plugin's uninstall restores only files recorded in its
 install manifest and refuses to remove files changed after installation.
+
+See [EXAMPLES.md](EXAMPLES.md) for bootstrap, critical approval, CI negative-test, recovery, and uninstall flows.
