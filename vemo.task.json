@@ -1,6 +1,6 @@
 {
   "version": 1,
   "id": "T-20260922-complete-framework-usage-and-delivery",
-  "scope": ["AGENTS.md", "README.md", "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "LICENSE", "VERSION", ".gitignore", ".claude/**", "vemo.json", "vemo.task.json", "vemo.task.example.json", "bin/**", "enforcement/**", "plugins/**", "eval/**", "tests/**", "docs/**", "tasks/**", ".vemo/evidence/**", ".github/**"],
+  "scope": ["AGENTS.md", "README.md", "SECURITY.md", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md", "LICENSE", "VERSION", ".gitignore", ".claude/**", "vemo.json", "vemo.task.json", "vemo.task.example.json", "vemo.config.yaml", "bin/**", "enforcement/**", "plugins/**", "eval/**", "tests/**", "docs/**", "tasks/**", ".vemo/evidence/**", ".github/**", "agents/**", "assets/**", "extensions/**", "presets/**", "profiles/**", "skill/**", "specs/**", "ui/**"],
   "risk": "critical"
 }
