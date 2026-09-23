@@ -10,6 +10,7 @@
 - Removed the duplicate Product reporting plugin; Fleet now owns both workstation overview and single-project views.
 - Synchronized installation, security, platform, migration, contribution, examples, and embedded help documentation
   with the optional Fleet control plane and its read-only trust boundary.
+- Hardened POSIX Fleet state permissions and removed machine-specific paths and brittle payload counts from guides.
 - Updated the optional setup UI help and launchers to use current plugin entry points.
 - Made the lightweight installer refuse custom hook paths and conflicting managed files instead of overwriting.
 

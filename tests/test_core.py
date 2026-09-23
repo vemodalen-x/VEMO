@@ -276,8 +276,10 @@ class RepositoryContractTests(unittest.TestCase):
             self.assertIn("CONTROL-PLANE.md", path.read_text(encoding="utf-8"), str(path))
         active = paths + [ROOT / "SECURITY.md", ROOT / "CONTRIBUTING.md", ROOT / "ROADMAP.md",
                           ROOT / "docs/AI-INSTALL.md", ROOT / "docs/EXAMPLES.md",
-                          ROOT / "docs/MIGRATION.md", ROOT / "plugins/setup/ui/help/install.html",
-                          ROOT / "plugins/setup/ui/help/usage.html"]
+                          ROOT / "docs/MIGRATION.md", ROOT / "docs/CONTROL-PLANE.md",
+                          ROOT / "plugins/setup/ui/help/install.html",
+                          ROOT / "plugins/setup/ui/help/usage.html",
+                          ROOT / "plugins/setup/ui/help/design.html"]
         combined = "\n".join(path.read_text(encoding="utf-8") for path in active)
         for stale in ("plugin enable product", "plugin disable product", "plugins/product",
                       "fleet onboard", "fleet profiles", "fleet install"):
@@ -285,6 +287,9 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("plugins/fleet/main.py register", combined)
         self.assertIn("plugins/fleet/main.py serve", combined)
         self.assertNotIn("不安装 Fleet、UI、product", combined)
+        self.assertNotIn("/home/aimer", combined)
+        self.assertNotIn("14-file core payload", combined)
+        self.assertNotIn("14 个文件", combined)
 
     def test_plugin_manifest_cannot_replace_core_command(self):
         with tempfile.TemporaryDirectory() as td:
@@ -358,6 +363,10 @@ class RepositoryContractTests(unittest.TestCase):
             unmanaged = fleet.probe_project(registered, detail=True)
             self.assertEqual("unmanaged", unmanaged["status"])
             self.assertTrue(store.audit_status()["valid"])
+            if os.name != "nt":
+                self.assertEqual(0o700, home.stat().st_mode & 0o777)
+                self.assertEqual(0o600, store.registry.stat().st_mode & 0o777)
+                self.assertEqual(0o600, store.audit.stat().st_mode & 0o777)
             removed = store.unregister(registered["id"])
             self.assertEqual(registered["id"], removed["id"])
             self.assertEqual([], store.load()["projects"])
@@ -371,6 +380,24 @@ class RepositoryContractTests(unittest.TestCase):
             subprocess.run(["git", "init", "-q"], cwd=outer, check=True)
             subprocess.run(["git", "init", "-q"], cwd=nested, check=True)
             self.assertEqual({str(outer), str(nested)}, set(fleet.discover_projects([outer], 3)))
+
+    @unittest.skipIf(os.name == "nt", "symbolic-link behavior is platform specific")
+    def test_fleet_refuses_linked_state_files_before_registry_mutation(self):
+        spec = importlib.util.spec_from_file_location("vemo_fleet_links", ROOT / "plugins/fleet/main.py")
+        fleet = importlib.util.module_from_spec(spec); spec.loader.exec_module(fleet)
+        with tempfile.TemporaryDirectory() as td:
+            home, target = Path(td) / "home", Path(td) / "project"
+            home.mkdir(); target.mkdir(); subprocess.run(["git", "init", "-q"], cwd=target, check=True)
+            destination = Path(td) / "outside-audit"
+            destination.write_text("unchanged\n")
+            (home / "control-audit.jsonl").symlink_to(destination)
+            store = fleet.FleetStore(home)
+            with self.assertRaises(fleet.FleetError):
+                store.audit_status()
+            with self.assertRaises(fleet.FleetError):
+                store.register(target)
+            self.assertFalse(store.registry.exists())
+            self.assertEqual("unchanged\n", destination.read_text())
 
     def test_fleet_dashboard_serves_overview_and_project_detail(self):
         spec = importlib.util.spec_from_file_location("vemo_fleet_http", ROOT / "plugins/fleet/main.py")

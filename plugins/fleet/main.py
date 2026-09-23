@@ -77,7 +77,13 @@ class FleetStore:
         self.registry = self.home / "projects.json"
         self.audit = self.home / "control-audit.jsonl"
 
+    def reject_linked_state_files(self):
+        for path in (self.registry, self.audit):
+            if path.is_symlink():
+                raise FleetError(f"refusing linked Fleet state file: {path}")
+
     def load(self):
+        self.reject_linked_state_files()
         try:
             value = json.loads(self.registry.read_text(encoding="utf-8"))
         except FileNotFoundError:
@@ -94,9 +100,15 @@ class FleetStore:
                  "projects": sorted(value["projects"], key=lambda row: os.path.normcase(row["path"]))}
         atomic_json(self.registry, value)
 
+    def prepare_private_home(self):
+        self.home.mkdir(parents=True, exist_ok=True)
+        if os.name != "nt":
+            os.chmod(self.home, 0o700)
+        self.reject_linked_state_files()
+
     @contextmanager
     def lock(self, timeout=5.0, stale_after=300.0):
-        self.home.mkdir(parents=True, exist_ok=True)
+        self.prepare_private_home()
         path = self.home / "control.lock"
         deadline = time.monotonic() + timeout
         descriptor = None
@@ -146,8 +158,23 @@ class FleetStore:
                "project": project, "previous": previous}
         row["hash"] = hashlib.sha256(json.dumps(
             row, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
-        with self.audit.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = None
+        try:
+            descriptor = os.open(self.audit, flags, 0o600)
+            if os.name != "nt":
+                os.fchmod(descriptor, 0o600)
+            stream = os.fdopen(descriptor, "a", encoding="utf-8", newline="\n")
+            descriptor = None
+            with stream:
+                stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+        except OSError as exc:
+            raise FleetError(f"cannot append audit {self.audit}: {exc}") from exc
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
 
     def register(self, path, label=None):
         root = Path(canonical_path(path))
@@ -182,6 +209,7 @@ class FleetStore:
         return row
 
     def audit_status(self):
+        self.reject_linked_state_files()
         previous, count = "0" * 64, 0
         try:
             lines = self.audit.read_text(encoding="utf-8").splitlines()

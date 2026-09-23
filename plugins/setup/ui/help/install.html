@@ -11,7 +11,7 @@ python3 plugins/setup/entry.py setup check /absolute/project --json</code></pre>
 <p>第一条只预览。检查文件清单和冲突后，把返回的内容绑定 <code>plan_id</code> 传给 <code>--apply</code>；缺少或不匹配时安装器拒绝写入。目标仓库中的旧 <code>vemo.config.yaml</code> 会使预览 fail-closed，必须先显式映射 critical paths 和 verification。</p>
 <h2>图形向导</h2><p>从源码根目录运行：</p><pre><code>python3 plugins/setup/entry.py ui
 # 或运行 plugins/setup/ui/start.command</code></pre><p>Windows 使用 <code>py -3 plugins/setup/entry.py ui</code> 或启动脚本。服务仅监听回环地址，无账号或云服务。</p>
-<h2>安装内容</h2><p>默认核心 payload 是 14 个文件：policy、task 模板、CLI、evaluator、hooks、Git/CI adapters、tests 和 eval runner。不安装 Fleet 控制面、其他插件或业务测试到目标项目。</p>
+<h2>安装内容</h2><p>安装器写入最小仓库核心，并生成目标项目需要的 task、hooks、Claude 和 CI 集成文件；每次预览中的 actions 才是该目标的权威文件清单。不安装 Fleet 控制面、其他插件或业务测试到目标项目。</p>
 <h2>可选本机控制面</h2><p>目标通过 setup check 后，可以从可信 VEMO checkout 运行 <code>python3 plugins/fleet/main.py register /absolute/project</code>，再运行 <code>python3 plugins/fleet/main.py serve</code>。Fleet 只维护本机清单并只读观察项目；注册不等于安装或合规。</p>
 <h2>升级、恢复、卸载</h2><pre><code>python3 plugins/setup/entry.py setup recover /absolute/project --apply
 python3 plugins/setup/entry.py setup uninstall /absolute/project --json

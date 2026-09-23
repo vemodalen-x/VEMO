@@ -82,7 +82,8 @@ python3 plugins/setup/entry.py setup uninstall /absolute/project --json
 python3 plugins/setup/entry.py setup uninstall /absolute/project --apply --plan-id '<plan-id>'
 ```
 
-The setup plugin installs the 14-file core payload; it does not install optional plugins or business tests.
+The setup plugin installs the minimal repository core plus generated adapters and integration files; it does not
+install optional plugins or business tests. Use the preview as the authoritative file list for each target.
 
 ## Optional plugins
 

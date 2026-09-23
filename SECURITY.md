@@ -39,8 +39,8 @@ Fleet is a user-local observer, not a policy authority or remote administration 
   appear as durable compliance;
 - discovery scans only explicit roots without following symlinks, and registration never installs or changes a
   target repository;
-- the registry and hash-chained control audit contain absolute local paths and depend on user-account filesystem
-  permissions for confidentiality and integrity.
+- the registry and hash-chained control audit contain absolute local paths; POSIX mutations set the state directory
+  to `0700` and both files to `0600`, while Windows depends on the current user's filesystem ACLs.
 
 Do not expose the dashboard through a remote listener or use it as a multi-user service. Its health summary is
 operational context only; each repository's Gate and protected CI remain authoritative. See

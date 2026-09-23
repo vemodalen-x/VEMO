@@ -59,7 +59,7 @@ For a first installation into a repository that does not yet contain VEMO, invok
 
 ## Optional workstation control plane
 
-Fleet is not part of the 14-file core payload installed into a target repository. After setup `check` succeeds,
+Fleet is not part of the minimal core payload installed into a target repository. After setup `check` succeeds,
 the trusted VEMO source checkout may register that repository in the current user's local inventory:
 
 ```bash

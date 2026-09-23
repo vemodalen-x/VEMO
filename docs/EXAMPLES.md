@@ -110,10 +110,10 @@ critical path in the default policy and therefore follows the critical approval 
 Run Fleet from a trusted VEMO checkout. Discovery lists candidates but does not register or modify them:
 
 ```bash
-python3 plugins/fleet/main.py discover /home/aimer/Project --max-depth 4 --json
-python3 plugins/fleet/main.py register /home/aimer/Project/VEMO --label VEMO
+python3 plugins/fleet/main.py discover /absolute/workspace --max-depth 4 --json
+python3 plugins/fleet/main.py register /absolute/workspace/project --label ProjectName
 python3 plugins/fleet/main.py status --json
-python3 plugins/fleet/main.py inspect /home/aimer/Project/VEMO --json
+python3 plugins/fleet/main.py inspect /absolute/workspace/project --json
 python3 plugins/fleet/main.py serve
 ```
 
@@ -121,7 +121,7 @@ Open the loopback URL printed by `serve`. A registered project with no `vemo.jso
 not an installation failure because Fleet does not install targets. Remove only the inventory entry with:
 
 ```bash
-python3 plugins/fleet/main.py unregister /home/aimer/Project/VEMO
+python3 plugins/fleet/main.py unregister /absolute/workspace/project
 ```
 
 Unregistering never edits the repository. Fleet acceptance requires that the API and dashboard show the same

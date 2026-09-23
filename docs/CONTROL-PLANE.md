@@ -81,10 +81,10 @@ python3 bin/vemo plugin enable fleet
 Or run its entry point directly without changing core policy:
 
 ```bash
-python3 plugins/fleet/main.py discover /home/aimer/Project --max-depth 4 --json
-python3 plugins/fleet/main.py register /home/aimer/Project/VEMO --label VEMO
+python3 plugins/fleet/main.py discover /absolute/workspace --max-depth 4 --json
+python3 plugins/fleet/main.py register /absolute/workspace/project --label ProjectName
 python3 plugins/fleet/main.py status --json
-python3 plugins/fleet/main.py inspect /home/aimer/Project/VEMO --json
+python3 plugins/fleet/main.py inspect /absolute/workspace/project --json
 python3 plugins/fleet/main.py serve
 ```
 
@@ -122,4 +122,6 @@ The health score is an operational summary, not an authorization decision. Only 
   transient approval as durable compliance.
 - Target code, hooks, and verification commands are never executed.
 - The console has read-only GET endpoints, loopback binding, a restrictive content security policy, and no write API.
-- Filesystem permissions protect the registry. Multi-user or remote service deployment is intentionally unsupported.
+- On POSIX systems, registry mutations set the state directory to `0700` and registry/audit files to `0600`.
+  Windows relies on the current user's filesystem ACLs. Multi-user or remote service deployment is intentionally
+  unsupported.
